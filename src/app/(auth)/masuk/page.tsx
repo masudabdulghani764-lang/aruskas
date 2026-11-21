@@ -7,13 +7,7 @@ import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
 import { Button, Card, Input, SkeletonCard } from "@/components/ui/primitives";
-
-function resolveSafeNext(rawNext: string | null): string {
-  if (!rawNext || !rawNext.startsWith("/") || rawNext.startsWith("//")) {
-    return "/dashboard";
-  }
-  return rawNext;
-}
+import { resolveSafeNext } from "@/lib/navigation";
 
 function MasukForm() {
   const router = useRouter();

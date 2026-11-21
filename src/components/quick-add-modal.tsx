@@ -127,6 +127,7 @@ export function QuickAddModal({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const categoryCacheRef = useRef<Map<string, CategoryOption[]>>(new Map());
+  const walletsReadyRef = useRef(false);
 
   const [txType, setTxType] = useState<QuickAddType>(defaultType);
   const [amountDigits, setAmountDigits] = useState("");
@@ -202,11 +203,22 @@ export function QuickAddModal({
   // Reset form state and fetch active writable wallets whenever modal opens.
   useEffect(() => {
     if (!open) {
+      walletsReadyRef.current = false;
+      setWallets([]);
+      setWalletId("");
+      setTargetWalletId("");
+      setCategoryId("");
+      setLoadingWallets(false);
       return;
     }
 
+    walletsReadyRef.current = false;
     categoryCacheRef.current.clear();
     setCategoriesByOwner({});
+    setWallets([]);
+    setWalletId("");
+    setTargetWalletId("");
+    setCategoryId("");
     setTxType(defaultType);
     setAmountDigits("");
     setTitle("");
@@ -247,6 +259,7 @@ export function QuickAddModal({
         setWalletId(preferred);
         const firstOther = writable.find((w) => w.id !== preferred)?.id ?? "";
         setTargetWalletId(firstOther);
+        walletsReadyRef.current = true;
       })
       .catch((err) => {
         if (!cancelled) {
@@ -268,11 +281,11 @@ export function QuickAddModal({
 
   // Fetch owner categories when source wallet changes (critical for shared wallets).
   useEffect(() => {
-    if (!open || !selectedWallet) {
+    if (!open || loadingWallets || !walletsReadyRef.current || !selectedWallet) {
       return;
     }
     void loadCategoriesForOwner(selectedWallet.ownerId);
-  }, [open, selectedWallet, loadCategoriesForOwner]);
+  }, [open, loadingWallets, selectedWallet, loadCategoriesForOwner]);
 
   // Keep category selection synchronized with current wallet owner and transaction type.
   useEffect(() => {
@@ -468,7 +481,7 @@ export function QuickAddModal({
       description="Saldo dompet diperbarui langsung secara atomik."
       size="md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* 3-Tab Switcher */}
         <div
           role="tablist"

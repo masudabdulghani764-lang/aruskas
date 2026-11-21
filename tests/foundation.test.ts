@@ -20,6 +20,7 @@ import {
   getPreviousMonthYM,
   getTodayISO,
 } from "@/lib/format";
+import { resolveSafeNext } from "@/lib/navigation";
 
 describe("Database Foundation & Schema", () => {
   test("createDb(':memory:') creates all 10 tables and enforces PRAGMA foreign_keys = ON", () => {
@@ -362,5 +363,29 @@ describe("Errors & handleApiError", () => {
     expect(body).toEqual({
       error: "Terjadi kesalahan pada server.",
     });
+  });
+});
+
+describe("Navigation Redirect Sanitization", () => {
+  test("resolveSafeNext preserves valid internal paths and falls back to /dashboard for open redirects", () => {
+    expect(resolveSafeNext("/undangan/abc123")).toBe("/undangan/abc123");
+    expect(resolveSafeNext("/transaksi?type=expense&page=2#atas")).toBe(
+      "/transaksi?type=expense&page=2#atas"
+    );
+    expect(resolveSafeNext("/dashboard")).toBe("/dashboard");
+
+    expect(resolveSafeNext(null)).toBe("/dashboard");
+    expect(resolveSafeNext(undefined)).toBe("/dashboard");
+    expect(resolveSafeNext("")).toBe("/dashboard");
+    expect(resolveSafeNext("/\\evil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("/\\t/evil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("/\tevil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("//evil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("///evil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("https://evil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("https://aruskas.local/dashboard")).toBe("/dashboard");
+    expect(resolveSafeNext(" //evil.com")).toBe("/dashboard");
+    expect(resolveSafeNext("/foo\\bar")).toBe("/dashboard");
+    expect(resolveSafeNext("/a/..//evil.com")).toBe("/dashboard");
   });
 });
