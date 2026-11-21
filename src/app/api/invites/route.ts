@@ -7,7 +7,7 @@ import { listPendingInvitesForEmail } from "@/lib/wallets";
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    const invites = listPendingInvitesForEmail(getDb(), user.email);
+    const invites = await listPendingInvitesForEmail(await getDb(), user.email);
     return NextResponse.json({ invites });
   } catch (err) {
     return handleApiError(err);

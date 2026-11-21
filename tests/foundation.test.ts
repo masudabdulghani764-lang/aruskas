@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "bun:test";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { closeDb, createDb, getDb } from "@/db";
 import {
@@ -26,21 +27,14 @@ import {
 import { resolveSafeNext } from "@/lib/navigation";
 
 describe("Database Foundation & Schema", () => {
-  test("createDb(':memory:') creates all 10 tables and enforces PRAGMA foreign_keys = ON", () => {
-    const { db, sqlite } = createDb(":memory:");
+  test("createDb(':memory:') creates all 13 PostgreSQL tables, enforces foreign keys, and supports 64-bit BIGINT Rupiah amounts", async () => {
+    const { db, close, queryRaw } = await createDb(":memory:");
     try {
-      const fkRow = sqlite.query("PRAGMA foreign_keys;").get() as {
-        foreign_keys: number;
-      };
-      expect(fkRow.foreign_keys).toBe(1);
+      const tableResult = await queryRaw(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
+      );
 
-      const tableRows = sqlite
-        .query(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
-        )
-        .all() as Array<{ name: string }>;
-
-      const tableNames = tableRows.map((row) => row.name);
+      const tableNames = tableResult.rows.map((row) => String(row.table_name));
       expect(tableNames).toEqual([
         "bank_integrations",
         "bank_sync_logs",
@@ -49,6 +43,7 @@ describe("Database Foundation & Schema", () => {
         "recurring_rules",
         "savings_goals",
         "sessions",
+        "transaction_attachments",
         "transactions",
         "users",
         "wallet_invites",
@@ -56,9 +51,9 @@ describe("Database Foundation & Schema", () => {
         "wallets",
       ]);
 
-      expect(() => {
-        db.insert(wallets)
-          .values({
+      await expect(
+        (async () => {
+          await db.insert(wallets).values({
             id: "w-invalid",
             ownerId: "user-does-not-exist",
             name: "Dompet Uji",
@@ -67,215 +62,219 @@ describe("Database Foundation & Schema", () => {
             balance: 0,
             isShared: false,
             createdAt: "2026-11-21T00:00:00.000Z",
-          })
-          .run();
-      }).toThrow();
+          });
+        })()
+      ).rejects.toThrow();
+
+      // Verify 64-bit BIGINT handles Rupiah values above 32-bit int max (> Rp 2,14B)
+      const now = "2026-11-21T00:00:00.000Z";
+      await db.insert(users).values({
+        id: "u-big",
+        name: "Sultan",
+        email: "sultan@example.com",
+        passwordHash: "hash",
+        monthlySavingsTarget: 20,
+        createdAt: now,
+      });
+      await db.insert(wallets).values({
+        id: "w-big",
+        ownerId: "u-big",
+        name: "Rekening Prioritas",
+        type: "bank",
+        initialBalance: 5_000_000_000,
+        balance: 5_000_000_000,
+        isShared: false,
+        createdAt: now,
+      });
+      const [bigWallet] = await db
+        .select()
+        .from(wallets)
+        .where(eq(wallets.id, "w-big"));
+      expect(bigWallet.balance).toBe(5_000_000_000);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
-  test("enforces unique constraints on wallet_members and budgets", () => {
-    const { db, sqlite } = createDb(":memory:");
+  test("enforces unique constraints on wallet_members and budgets", async () => {
+    const { db, close } = await createDb(":memory:");
     try {
       const now = "2026-11-21T00:00:00.000Z";
-      db.insert(users)
-        .values({
-          id: "u1",
-          name: "Budi",
-          email: "budi@example.com",
-          passwordHash: "hash",
-          monthlySavingsTarget: 0,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(users).values({
+        id: "u1",
+        name: "Budi",
+        email: "budi@example.com",
+        passwordHash: "hash",
+        monthlySavingsTarget: 0,
+        createdAt: now,
+      });
 
-      db.insert(wallets)
-        .values({
-          id: "w1",
-          ownerId: "u1",
-          name: "Dompet Utama",
-          type: "cash",
-          initialBalance: 100000,
-          balance: 100000,
-          isShared: false,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(wallets).values({
+        id: "w1",
+        ownerId: "u1",
+        name: "Dompet Utama",
+        type: "cash",
+        initialBalance: 100000,
+        balance: 100000,
+        isShared: false,
+        createdAt: now,
+      });
 
-      db.insert(walletMembers)
-        .values({
-          id: "wm1",
-          walletId: "w1",
-          userId: "u1",
-          role: "owner",
-          createdAt: now,
-        })
-        .run();
+      await db.insert(walletMembers).values({
+        id: "wm1",
+        walletId: "w1",
+        userId: "u1",
+        role: "owner",
+        createdAt: now,
+      });
 
-      expect(() => {
-        db.insert(walletMembers)
-          .values({
+      await expect(
+        (async () => {
+          await db.insert(walletMembers).values({
             id: "wm2",
             walletId: "w1",
             userId: "u1",
             role: "editor",
             createdAt: now,
-          })
-          .run();
-      }).toThrow();
+          });
+        })()
+      ).rejects.toThrow();
 
-      db.insert(categories)
-        .values({
-          id: "c1",
-          userId: "u1",
-          name: "Makan",
-          type: "expense",
-          icon: "utensils",
-          color: "#14532D",
-          isDefault: true,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(categories).values({
+        id: "c1",
+        userId: "u1",
+        name: "Makan",
+        type: "expense",
+        icon: "utensils",
+        color: "#14532D",
+        isDefault: true,
+        createdAt: now,
+      });
 
-      db.insert(budgets)
-        .values({
-          id: "b1",
-          userId: "u1",
-          categoryId: "c1",
-          month: "2026-11",
-          limitAmount: 1000000,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(budgets).values({
+        id: "b1",
+        userId: "u1",
+        categoryId: "c1",
+        month: "2026-11",
+        limitAmount: 1000000,
+        createdAt: now,
+      });
 
-      expect(() => {
-        db.insert(budgets)
-          .values({
+      await expect(
+        (async () => {
+          await db.insert(budgets).values({
             id: "b2",
             userId: "u1",
             categoryId: "c1",
             month: "2026-11",
             limitAmount: 1500000,
             createdAt: now,
-          })
-          .run();
-      }).toThrow();
+          });
+        })()
+      ).rejects.toThrow();
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
-  test("partial unique index on transactions(recurring_rule_id, occurred_at) blocks duplicate non-null pairs while allowing multiple NULLs", () => {
-    const { db, sqlite } = createDb(":memory:");
+  test("partial unique index on transactions(recurring_rule_id, occurred_at) blocks duplicate non-null pairs while allowing multiple NULLs", async () => {
+    const { db, close } = await createDb(":memory:");
     try {
       const now = "2026-11-21T00:00:00.000Z";
-      db.insert(users)
-        .values({
-          id: "u1",
-          name: "Sari",
-          email: "sari@example.com",
-          passwordHash: "hash",
-          monthlySavingsTarget: 0,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(users).values({
+        id: "u1",
+        name: "Sari",
+        email: "sari@example.com",
+        passwordHash: "hash",
+        monthlySavingsTarget: 0,
+        createdAt: now,
+      });
 
-      db.insert(wallets)
-        .values({
-          id: "w1",
-          ownerId: "u1",
-          name: "Bank BCA",
-          type: "bank",
-          initialBalance: 5000000,
-          balance: 5000000,
-          isShared: false,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(wallets).values({
+        id: "w1",
+        ownerId: "u1",
+        name: "Bank BCA",
+        type: "bank",
+        initialBalance: 5000000,
+        balance: 5000000,
+        isShared: false,
+        createdAt: now,
+      });
 
-      db.insert(categories)
-        .values({
-          id: "c1",
-          userId: "u1",
-          name: "Listrik",
-          type: "expense",
-          icon: "zap",
-          color: "#D97706",
-          isDefault: false,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(categories).values({
+        id: "c1",
+        userId: "u1",
+        name: "Listrik",
+        type: "expense",
+        icon: "zap",
+        color: "#D97706",
+        isDefault: false,
+        createdAt: now,
+      });
 
-      db.insert(recurringRules)
-        .values({
-          id: "r1",
-          userId: "u1",
-          walletId: "w1",
-          categoryId: "c1",
-          type: "expense",
-          amount: 350000,
-          title: "Tagihan Listrik",
-          frequency: "monthly",
-          nextRunDate: "2026-11-21",
-          isActive: true,
-          createdAt: now,
-        })
-        .run();
+      await db.insert(recurringRules).values({
+        id: "r1",
+        userId: "u1",
+        walletId: "w1",
+        categoryId: "c1",
+        type: "expense",
+        amount: 350000,
+        title: "Tagihan Listrik",
+        frequency: "monthly",
+        nextRunDate: "2026-11-21",
+        isActive: true,
+        createdAt: now,
+      });
 
       // Multiple NULL recurringRuleId on the same date should succeed
-      db.insert(transactions)
-        .values([
-          {
-            id: "t1",
-            walletId: "w1",
-            categoryId: "c1",
-            userId: "u1",
-            type: "expense",
-            amount: 25000,
-            title: "Kopi Pagi",
-            occurredAt: "2026-11-21",
-            recurringRuleId: null,
-            createdAt: now,
-            updatedAt: now,
-          },
-          {
-            id: "t2",
-            walletId: "w1",
-            categoryId: "c1",
-            userId: "u1",
-            type: "expense",
-            amount: 40000,
-            title: "Makan Siang",
-            occurredAt: "2026-11-21",
-            recurringRuleId: null,
-            createdAt: now,
-            updatedAt: now,
-          },
-        ])
-        .run();
-
-      // First recurring posting succeeds
-      db.insert(transactions)
-        .values({
-          id: "t3",
+      await db.insert(transactions).values([
+        {
+          id: "t1",
           walletId: "w1",
           categoryId: "c1",
           userId: "u1",
           type: "expense",
-          amount: 350000,
-          title: "Tagihan Listrik",
+          amount: 25000,
+          title: "Kopi Pagi",
           occurredAt: "2026-11-21",
-          recurringRuleId: "r1",
+          recurringRuleId: null,
           createdAt: now,
           updatedAt: now,
-        })
-        .run();
+        },
+        {
+          id: "t2",
+          walletId: "w1",
+          categoryId: "c1",
+          userId: "u1",
+          type: "expense",
+          amount: 40000,
+          title: "Makan Siang",
+          occurredAt: "2026-11-21",
+          recurringRuleId: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+
+      // First recurring posting succeeds
+      await db.insert(transactions).values({
+        id: "t3",
+        walletId: "w1",
+        categoryId: "c1",
+        userId: "u1",
+        type: "expense",
+        amount: 350000,
+        title: "Tagihan Listrik",
+        occurredAt: "2026-11-21",
+        recurringRuleId: "r1",
+        createdAt: now,
+        updatedAt: now,
+      });
 
       // Duplicate (recurring_rule_id, occurred_at) must throw
-      expect(() => {
-        db.insert(transactions)
-          .values({
+      await expect(
+        (async () => {
+          await db.insert(transactions).values({
             id: "t4",
             walletId: "w1",
             categoryId: "c1",
@@ -287,38 +286,38 @@ describe("Database Foundation & Schema", () => {
             recurringRuleId: "r1",
             createdAt: now,
             updatedAt: now,
-          })
-          .run();
-      }).toThrow();
+          });
+        })()
+      ).rejects.toThrow();
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
-  test("getDb() closes previous SQLite handle on DATABASE_PATH switch and closeDb() releases locks", () => {
+  test("getDb() closes previous database handle on DATABASE_PATH switch and closeDb() releases locks", async () => {
     const prevDbPath = process.env.DATABASE_PATH;
     const tempDir1 = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-db-sw1-"));
     const tempDir2 = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-db-sw2-"));
     try {
-      process.env.DATABASE_PATH = path.join(tempDir1, "one.db");
-      const db1 = getDb();
-      expect(db1.select().from(users).all()).toEqual([]);
+      process.env.DATABASE_PATH = path.join(tempDir1, "pg1");
+      const db1 = await getDb();
+      expect(await db1.select().from(users)).toEqual([]);
 
       // Switching DATABASE_PATH must close the first handle before opening the second
-      process.env.DATABASE_PATH = path.join(tempDir2, "two.db");
-      const db2 = getDb();
+      process.env.DATABASE_PATH = path.join(tempDir2, "pg2");
+      const db2 = await getDb();
       expect(db2).not.toBe(db1);
-      expect(db2.select().from(users).all()).toEqual([]);
+      expect(await db2.select().from(users)).toEqual([]);
 
-      // Removing tempDir1 succeeds cleanly now that its SQLite handle was closed
+      // Removing tempDir1 succeeds cleanly now that its handle was closed
       fs.rmSync(tempDir1, { recursive: true, force: true });
       expect(fs.existsSync(tempDir1)).toBe(false);
 
-      closeDb();
+      await closeDb();
       fs.rmSync(tempDir2, { recursive: true, force: true });
       expect(fs.existsSync(tempDir2)).toBe(false);
     } finally {
-      closeDb();
+      await closeDb();
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;
       } else {
@@ -327,7 +326,7 @@ describe("Database Foundation & Schema", () => {
       fs.rmSync(tempDir1, { recursive: true, force: true });
       fs.rmSync(tempDir2, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 });
 
 describe("Formatters & CSV Sanitization", () => {

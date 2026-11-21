@@ -16,9 +16,9 @@ export async function POST(request: Request) {
       throw new AppError(403, "Hanya akun demo yang dapat mereset data demo.");
     }
 
-    const db = getDb();
+    const db = await getDb();
     const user = await resetDemoData(db);
-    const { token, expiresAt } = createSession(
+    const { token, expiresAt } = await createSession(
       db,
       user.id,
       request.headers.get("user-agent")

@@ -61,8 +61,8 @@ export async function POST(request: Request) {
     const rawBody = await parseJsonBody(request);
     const parsed = webhookPayloadSchema.parse(rawBody);
 
-    const db = getDb();
-    const result = ingestBcaNotificationByToken(db, rawToken, parsed);
+    const db = await getDb();
+    const result = await ingestBcaNotificationByToken(db, rawToken, parsed);
     return NextResponse.json(result, {
       status: result.status === "imported" ? 201 : 200,
     });

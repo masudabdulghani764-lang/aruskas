@@ -18,9 +18,12 @@ export default async function IntegrasiBcaPage() {
     redirect("/masuk");
   }
 
-  const db = getDb();
-  const { integration, logs } = getBcaIntegration(db, user.id);
-  const writableWallets = listUserWallets(db, user.id).filter(
+  const db = await getDb();
+  const [{ integration, logs }, allWallets] = await Promise.all([
+    getBcaIntegration(db, user.id),
+    listUserWallets(db, user.id),
+  ]);
+  const writableWallets = allWallets.filter(
     (w) => w.role === "owner" || w.role === "editor"
   );
 

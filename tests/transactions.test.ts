@@ -3,8 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { closeDb, createDb, getDb } from "@/db";
-import { categories, recurringRules, transactions, users, wallets } from "@/db/schema";
+import { type AppDb, closeDb, createDb, getDb } from "@/db";
+import {
+  categories,
+  recurringRules,
+  transactionAttachments,
+  transactions,
+  users,
+  wallets,
+} from "@/db/schema";
 import {
   DEMO_PARTNER_EMAIL,
   SESSION_COOKIE_NAME,
@@ -89,38 +96,34 @@ async function expectAppError(
   return appErr;
 }
 
-function getUserCategory(
-  db: ReturnType<typeof createDb>["db"],
+async function getUserCategory(
+  db: AppDb,
   userId: string,
   type: "income" | "expense",
   index = 0
 ) {
-  const rows = db
-    .select()
-    .from(categories)
-    .where(eq(categories.userId, userId))
-    .all()
-    .filter((c) => c.type === type);
+  const rows = (
+    await db.select().from(categories).where(eq(categories.userId, userId))
+  ).filter((c) => c.type === type);
   expect(rows.length).toBeGreaterThan(index);
   return rows[index];
 }
 
-function getWalletBalance(
-  db: ReturnType<typeof createDb>["db"],
+async function getWalletBalance(
+  db: AppDb,
   walletId: string
-): number {
-  const row = db
+): Promise<number> {
+  const [row] = await db
     .select({ balance: wallets.balance })
     .from(wallets)
-    .where(eq(wallets.id, walletId))
-    .get();
+    .where(eq(wallets.id, walletId));
   expect(row).toBeDefined();
   return row!.balance;
 }
 
 describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
   test("atomic balance updates across create, update (amount/type/wallet/target), and delete leave zero balance drift", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const reg = await registerUser(db, {
         name: "Raka",
@@ -128,27 +131,27 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         password: "Password123!",
       });
 
-      const bca = createWallet(db, reg.user.id, {
+      const bca = await createWallet(db, reg.user.id, {
         name: "Bank BCA",
         type: "bank",
         initialBalance: 1_000_000,
       });
-      const tunai = createWallet(db, reg.user.id, {
+      const tunai = await createWallet(db, reg.user.id, {
         name: "Tunai",
         type: "cash",
         initialBalance: 200_000,
       });
-      const tabungan = createWallet(db, reg.user.id, {
+      const tabungan = await createWallet(db, reg.user.id, {
         name: "Tabungan",
         type: "savings",
         initialBalance: 500_000,
       });
 
-      const incomeCat = getUserCategory(db, reg.user.id, "income");
-      const expenseCat = getUserCategory(db, reg.user.id, "expense");
+      const incomeCat = await getUserCategory(db, reg.user.id, "income");
+      const expenseCat = await getUserCategory(db, reg.user.id, "expense");
 
       // 1. Income +500.000 on BCA -> 1.500.000
-      const txIncome = createTransaction(db, reg.user.id, {
+      const txIncome = await createTransaction(db, reg.user.id, {
         walletId: bca.id,
         categoryId: incomeCat.id,
         type: "income",
@@ -158,10 +161,10 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       });
       expect(txIncome.amount).toBe(500_000);
       expect(txIncome.canEdit).toBe(true);
-      expect(getWalletBalance(db, bca.id)).toBe(1_500_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_500_000);
 
       // 2. Expense -150.000 on BCA -> 1.350.000
-      const txExpense = createTransaction(db, reg.user.id, {
+      const txExpense = await createTransaction(db, reg.user.id, {
         walletId: bca.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -169,10 +172,10 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         title: "Belanja Harian",
         occurredAt: "2026-11-02",
       });
-      expect(getWalletBalance(db, bca.id)).toBe(1_350_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_350_000);
 
       // 3. Transfer 300.000 BCA -> Tunai (BCA 1.050.000, Tunai 500.000)
-      const txTransfer = createTransaction(db, reg.user.id, {
+      const txTransfer = await createTransaction(db, reg.user.id, {
         walletId: bca.id,
         targetWalletId: tunai.id,
         categoryId: expenseCat.id, // Must be forced null on transfer
@@ -184,36 +187,36 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       expect(txTransfer.categoryId).toBeNull();
       expect(txTransfer.targetWalletId).toBe(tunai.id);
       expect(txTransfer.counterpartyWalletName).toBe("Tunai");
-      expect(getWalletBalance(db, bca.id)).toBe(1_050_000);
-      expect(getWalletBalance(db, tunai.id)).toBe(500_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_050_000);
+      expect(await getWalletBalance(db, tunai.id)).toBe(500_000);
 
       // 4. Update expense amount 150.000 -> 250.000 (BCA: 950.000)
-      const updatedAmount = updateTransaction(db, txExpense.id, reg.user.id, {
+      const updatedAmount = await updateTransaction(db, txExpense.id, reg.user.id, {
         amount: 250_000,
       });
       expect(updatedAmount.amount).toBe(250_000);
-      expect(getWalletBalance(db, bca.id)).toBe(950_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(950_000);
 
       // 5. Update expense (250k) -> income (250k) on BCA (+500k -> 1.450.000)
-      const updatedType = updateTransaction(db, txExpense.id, reg.user.id, {
+      const updatedType = await updateTransaction(db, txExpense.id, reg.user.id, {
         type: "income",
         categoryId: incomeCat.id,
       });
       expect(updatedType.type).toBe("income");
-      expect(getWalletBalance(db, bca.id)).toBe(1_450_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_450_000);
 
       // 6. Update income wallet from BCA -> Tunai (BCA: 1.200.000, Tunai: 750.000)
-      updateTransaction(db, txExpense.id, reg.user.id, {
+      await updateTransaction(db, txExpense.id, reg.user.id, {
         walletId: tunai.id,
       });
-      expect(getWalletBalance(db, bca.id)).toBe(1_200_000);
-      expect(getWalletBalance(db, tunai.id)).toBe(750_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_200_000);
+      expect(await getWalletBalance(db, tunai.id)).toBe(750_000);
 
       // 7. Update transfer target Tunai -> Tabungan and amount 300k -> 400k
       // BCA: 1.200.000 + 300.000 - 400.000 = 1.100.000
       // Tunai: 750.000 - 300.000 = 450.000
       // Tabungan: 500.000 + 400.000 = 900.000
-      const updatedTransfer = updateTransaction(
+      const updatedTransfer = await updateTransaction(
         db,
         txTransfer.id,
         reg.user.id,
@@ -223,12 +226,12 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         }
       );
       expect(updatedTransfer.targetWalletId).toBe(tabungan.id);
-      expect(getWalletBalance(db, bca.id)).toBe(1_100_000);
-      expect(getWalletBalance(db, tunai.id)).toBe(450_000);
-      expect(getWalletBalance(db, tabungan.id)).toBe(900_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_100_000);
+      expect(await getWalletBalance(db, tunai.id)).toBe(450_000);
+      expect(await getWalletBalance(db, tabungan.id)).toBe(900_000);
 
       // List filtering & summary (transfer excluded from summary income/expense)
-      const listAll = listTransactions(db, reg.user.id, {});
+      const listAll = await listTransactions(db, reg.user.id, {});
       expect(listAll.summary).toEqual({
         income: 750_000,
         expense: 0,
@@ -237,34 +240,34 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       });
       expect(listAll.items).toHaveLength(3);
 
-      const paginated = listTransactions(db, reg.user.id, {
+      const paginated = await listTransactions(db, reg.user.id, {
         limit: 1,
         offset: 1,
       });
       expect(paginated.items).toHaveLength(1);
       expect(paginated.summary.count).toBe(3);
 
-      const searchFiltered = listTransactions(db, reg.user.id, {
+      const searchFiltered = await listTransactions(db, reg.user.id, {
         search: "Bonus",
       });
       expect(searchFiltered.items).toHaveLength(1);
       expect(searchFiltered.items[0].id).toBe(txIncome.id);
 
       // 8. Delete all transactions -> exact initial balances restored
-      deleteTransaction(db, txIncome.id, reg.user.id);
-      deleteTransaction(db, txExpense.id, reg.user.id);
-      deleteTransaction(db, txTransfer.id, reg.user.id);
+      await deleteTransaction(db, txIncome.id, reg.user.id);
+      await deleteTransaction(db, txExpense.id, reg.user.id);
+      await deleteTransaction(db, txTransfer.id, reg.user.id);
 
-      expect(getWalletBalance(db, bca.id)).toBe(1_000_000);
-      expect(getWalletBalance(db, tunai.id)).toBe(200_000);
-      expect(getWalletBalance(db, tabungan.id)).toBe(500_000);
+      expect(await getWalletBalance(db, bca.id)).toBe(1_000_000);
+      expect(await getWalletBalance(db, tunai.id)).toBe(200_000);
+      expect(await getWalletBalance(db, tabungan.id)).toBe(500_000);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("shared wallet RBAC: editor uses owner category, edits/deletes own tx, gets 403 on owner tx; viewer gets 403", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Raka",
@@ -282,13 +285,13 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         password: "Password123!",
       });
 
-      const sharedWallet = createWallet(db, owner.user.id, {
+      const sharedWallet = await createWallet(db, owner.user.id, {
         name: "Kas Rumah Tangga",
         type: "bank",
         initialBalance: 2_000_000,
       });
 
-      const editorInvite = createWalletInvite(
+      const editorInvite = await createWalletInvite(
         db,
         sharedWallet.id,
         owner.user.id,
@@ -297,9 +300,9 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
           role: "editor",
         }
       );
-      acceptWalletInvite(db, editorInvite.token, editor.user);
+      await acceptWalletInvite(db, editorInvite.token, editor.user);
 
-      const viewerInvite = createWalletInvite(
+      const viewerInvite = await createWalletInvite(
         db,
         sharedWallet.id,
         owner.user.id,
@@ -308,11 +311,11 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
           role: "viewer",
         }
       );
-      acceptWalletInvite(db, viewerInvite.token, viewer.user);
+      await acceptWalletInvite(db, viewerInvite.token, viewer.user);
 
-      const ownerExpenseCat = getUserCategory(db, owner.user.id, "expense");
-      const ownerIncomeCat = getUserCategory(db, owner.user.id, "income");
-      const editorExpenseCat = getUserCategory(db, editor.user.id, "expense");
+      const ownerExpenseCat = await getUserCategory(db, owner.user.id, "expense");
+      const ownerIncomeCat = await getUserCategory(db, owner.user.id, "income");
+      const editorExpenseCat = await getUserCategory(db, editor.user.id, "expense");
 
       // Viewer cannot create transaction -> 403
       await expectAppError(
@@ -357,7 +360,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
 
       // Editor creates tx using owner's category -> succeeds
-      const editorTx = createTransaction(db, editor.user.id, {
+      const editorTx = await createTransaction(db, editor.user.id, {
         walletId: sharedWallet.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -366,10 +369,10 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         occurredAt: "2026-11-10",
       });
       expect(editorTx.canEdit).toBe(true);
-      expect(getWalletBalance(db, sharedWallet.id)).toBe(1_880_000);
+      expect(await getWalletBalance(db, sharedWallet.id)).toBe(1_880_000);
 
       // Owner creates tx in shared wallet
-      const ownerTx = createTransaction(db, owner.user.id, {
+      const ownerTx = await createTransaction(db, owner.user.id, {
         walletId: sharedWallet.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -377,10 +380,10 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         title: "Bayar Listrik",
         occurredAt: "2026-11-11",
       });
-      expect(getWalletBalance(db, sharedWallet.id)).toBe(1_680_000);
+      expect(await getWalletBalance(db, sharedWallet.id)).toBe(1_680_000);
 
       // Editor cannot edit or delete owner's tx -> 403
-      const editorList = listTransactions(db, editor.user.id, {
+      const editorList = await listTransactions(db, editor.user.id, {
         walletId: sharedWallet.id,
       });
       const ownerTxForEditor = editorList.items.find(
@@ -409,7 +412,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
 
       // Viewer sees canEdit === false and gets 403 editing/deleting
-      const viewerView = getTransactionById(db, editorTx.id, viewer.user.id);
+      const viewerView = await getTransactionById(db, editorTx.id, viewer.user.id);
       expect(viewerView.canEdit).toBe(false);
       await expectAppError(
         () =>
@@ -422,17 +425,17 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
 
       // Editor CAN edit and delete their own tx
-      const edited = updateTransaction(db, editorTx.id, editor.user.id, {
+      const edited = await updateTransaction(db, editorTx.id, editor.user.id, {
         amount: 100_000,
       });
       expect(edited.amount).toBe(100_000);
-      expect(getWalletBalance(db, sharedWallet.id)).toBe(1_700_000);
+      expect(await getWalletBalance(db, sharedWallet.id)).toBe(1_700_000);
 
-      deleteTransaction(db, editorTx.id, editor.user.id);
-      expect(getWalletBalance(db, sharedWallet.id)).toBe(1_800_000);
+      await deleteTransaction(db, editorTx.id, editor.user.id);
+      expect(await getWalletBalance(db, sharedWallet.id)).toBe(1_800_000);
 
       // Owner CAN delete ownerTx (and could edit/delete editorTx too)
-      const editorTx2 = createTransaction(db, editor.user.id, {
+      const editorTx2 = await createTransaction(db, editor.user.id, {
         walletId: sharedWallet.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -441,18 +444,18 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         occurredAt: "2026-11-12",
       });
       expect(
-        getTransactionById(db, editorTx2.id, owner.user.id).canEdit
+        (await getTransactionById(db, editorTx2.id, owner.user.id)).canEdit
       ).toBe(true);
-      updateTransaction(db, editorTx2.id, owner.user.id, { amount: 60_000 });
-      deleteTransaction(db, editorTx2.id, owner.user.id);
-      expect(getWalletBalance(db, sharedWallet.id)).toBe(1_800_000);
+      await updateTransaction(db, editorTx2.id, owner.user.id, { amount: 60_000 });
+      await deleteTransaction(db, editorTx2.id, owner.user.id);
+      expect(await getWalletBalance(db, sharedWallet.id)).toBe(1_800_000);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("private transfer redaction hides private counterparty wallet names from shared wallet members", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Raka",
@@ -470,25 +473,25 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         password: "Password123!",
       });
 
-      const privateWallet = createWallet(db, owner.user.id, {
+      const privateWallet = await createWallet(db, owner.user.id, {
         name: "BCA Pribadi Raka",
         type: "bank",
         initialBalance: 10_000_000,
       });
-      const sharedWallet = createWallet(db, owner.user.id, {
+      const sharedWallet = await createWallet(db, owner.user.id, {
         name: "Kas Rumah Tangga",
         type: "bank",
         initialBalance: 1_000_000,
       });
 
-      const inv = createWalletInvite(db, sharedWallet.id, owner.user.id, {
+      const inv = await createWalletInvite(db, sharedWallet.id, owner.user.id, {
         email: partner.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, inv.token, partner.user);
+      await acceptWalletInvite(db, inv.token, partner.user);
 
       // Private -> Shared transfer
-      const inboundTransfer = createTransaction(db, owner.user.id, {
+      const inboundTransfer = await createTransaction(db, owner.user.id, {
         walletId: privateWallet.id,
         targetWalletId: sharedWallet.id,
         type: "transfer",
@@ -498,7 +501,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       });
 
       // Shared -> Private transfer
-      const outboundTransfer = createTransaction(db, owner.user.id, {
+      const outboundTransfer = await createTransaction(db, owner.user.id, {
         walletId: sharedWallet.id,
         targetWalletId: privateWallet.id,
         type: "transfer",
@@ -508,7 +511,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       });
 
       // Owner sees real names on both
-      const ownerInbound = getTransactionById(
+      const ownerInbound = await getTransactionById(
         db,
         inboundTransfer.id,
         owner.user.id
@@ -517,7 +520,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       expect(ownerInbound.targetWalletName).toBe("Kas Rumah Tangga");
 
       // Partner sees redacted source on inbound transfer
-      const partnerInbound = getTransactionById(
+      const partnerInbound = await getTransactionById(
         db,
         inboundTransfer.id,
         partner.user.id
@@ -530,7 +533,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       expect(partnerInbound.canEdit).toBe(false);
 
       // Partner sees redacted target on outbound transfer
-      const partnerOutbound = getTransactionById(
+      const partnerOutbound = await getTransactionById(
         db,
         outboundTransfer.id,
         partner.user.id
@@ -544,7 +547,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
 
       // ListTransactions (both unfiltered and filtered by sharedWallet) redacts private side
-      const partnerList = listTransactions(db, partner.user.id, {
+      const partnerList = await listTransactions(db, partner.user.id, {
         walletId: sharedWallet.id,
       });
       expect(partnerList.items).toHaveLength(2);
@@ -569,12 +572,12 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         403
       );
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("Review Focus: rejects invalid amounts (<=0, NaN, decimal) and self/unauthorized transfers without changing balances", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const userA = await registerUser(db, {
         name: "Andi",
@@ -587,29 +590,29 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         password: "Password123!",
       });
 
-      const walletA = createWallet(db, userA.user.id, {
+      const walletA = await createWallet(db, userA.user.id, {
         name: "Dompet Andi",
         type: "bank",
         initialBalance: 1_000_000,
       });
-      const walletBViewer = createWallet(db, userB.user.id, {
+      const walletBViewer = await createWallet(db, userB.user.id, {
         name: "Dompet Siti Viewer",
         type: "bank",
         initialBalance: 500_000,
       });
-      const walletBPrivate = createWallet(db, userB.user.id, {
+      const walletBPrivate = await createWallet(db, userB.user.id, {
         name: "Dompet Siti Rahasia",
         type: "cash",
         initialBalance: 300_000,
       });
 
-      const viewerInv = createWalletInvite(db, walletBViewer.id, userB.user.id, {
+      const viewerInv = await createWalletInvite(db, walletBViewer.id, userB.user.id, {
         email: userA.user.email,
         role: "viewer",
       });
-      acceptWalletInvite(db, viewerInv.token, userA.user);
+      await acceptWalletInvite(db, viewerInv.token, userA.user);
 
-      const catA = getUserCategory(db, userA.user.id, "expense");
+      const catA = await getUserCategory(db, userA.user.id, "expense");
 
       // Invalid amounts: 0, negative, NaN, Infinity, decimal 1500.5
       for (const badAmount of [0, -10000, Number.NaN, Infinity, 1500.5]) {
@@ -627,7 +630,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         );
         expect(err.message).toBe("Nominal harus berupa bilangan bulat lebih dari 0.");
       }
-      expect(getWalletBalance(db, walletA.id)).toBe(1_000_000);
+      expect(await getWalletBalance(db, walletA.id)).toBe(1_000_000);
 
       // Self transfer: walletId === targetWalletId -> 400
       const selfErr = await expectAppError(
@@ -645,7 +648,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       expect(selfErr.message).toBe(
         "Dompet tujuan harus berbeda dari dompet asal."
       );
-      expect(getWalletBalance(db, walletA.id)).toBe(1_000_000);
+      expect(await getWalletBalance(db, walletA.id)).toBe(1_000_000);
 
       // Transfer to wallet where user is only viewer -> 403, neither balance changed
       await expectAppError(
@@ -660,8 +663,8 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
           }),
         403
       );
-      expect(getWalletBalance(db, walletA.id)).toBe(1_000_000);
-      expect(getWalletBalance(db, walletBViewer.id)).toBe(500_000);
+      expect(await getWalletBalance(db, walletA.id)).toBe(1_000_000);
+      expect(await getWalletBalance(db, walletBViewer.id)).toBe(500_000);
 
       // Transfer to non-member wallet -> 403, neither balance changed
       await expectAppError(
@@ -676,10 +679,10 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
           }),
         403
       );
-      expect(getWalletBalance(db, walletA.id)).toBe(1_000_000);
-      expect(getWalletBalance(db, walletBPrivate.id)).toBe(300_000);
+      expect(await getWalletBalance(db, walletA.id)).toBe(1_000_000);
+      expect(await getWalletBalance(db, walletBPrivate.id)).toBe(300_000);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
@@ -798,7 +801,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
     expect(advanceDate("2026-03-31", "monthly")).toBe("2026-04-30");
     expect(advanceDate("2026-12-31", "monthly")).toBe("2027-01-31");
 
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Raka",
@@ -811,19 +814,19 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         password: "Password123!",
       });
 
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "Kas Rutin",
         type: "bank",
         initialBalance: 5_000_000,
       });
-      const inv = createWalletInvite(db, wallet.id, owner.user.id, {
+      const inv = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: editor.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, inv.token, editor.user);
+      await acceptWalletInvite(db, inv.token, editor.user);
 
-      const expenseCat = getUserCategory(db, owner.user.id, "expense");
-      const incomeCat = getUserCategory(db, owner.user.id, "income");
+      const expenseCat = await getUserCategory(db, owner.user.id, "expense");
+      const incomeCat = await getUserCategory(db, owner.user.id, "income");
 
       // Editor cannot create recurring rule on owner's wallet -> 403
       await expectAppError(
@@ -841,7 +844,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
 
       // Owner creates due rule and future rule
-      const dueRule = createRecurringRule(db, owner.user.id, {
+      const dueRule = await createRecurringRule(db, owner.user.id, {
         walletId: wallet.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -850,7 +853,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         frequency: "monthly",
         nextRunDate: "2026-11-15",
       });
-      const futureRule = createRecurringRule(db, owner.user.id, {
+      const futureRule = await createRecurringRule(db, owner.user.id, {
         walletId: wallet.id,
         categoryId: incomeCat.id,
         type: "income",
@@ -860,13 +863,13 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         nextRunDate: "2026-12-01",
       });
 
-      expect(listRecurringRules(db, owner.user.id)).toHaveLength(2);
-      const dueList = listDueRecurringRules(db, owner.user.id, "2026-11-21");
+      expect(await listRecurringRules(db, owner.user.id)).toHaveLength(2);
+      const dueList = await listDueRecurringRules(db, owner.user.id, "2026-11-21");
       expect(dueList).toHaveLength(1);
       expect(dueList[0].id).toBe(dueRule.id);
 
       // Apply with overrideAmount = 500.000
-      const postedTx = applyRecurringRule(
+      const postedTx = await applyRecurringRule(
         db,
         dueRule.id,
         owner.user.id,
@@ -874,45 +877,44 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
       expect(postedTx.amount).toBe(500_000);
       expect(postedTx.occurredAt).toBe("2026-11-15");
-      expect(getWalletBalance(db, wallet.id)).toBe(4_500_000);
+      expect(await getWalletBalance(db, wallet.id)).toBe(4_500_000);
 
       // nextRunDate advanced to 2026-12-15
-      const updatedAfterApply = listRecurringRules(db, owner.user.id).find(
+      const updatedAfterApply = (await listRecurringRules(db, owner.user.id)).find(
         (r) => r.id === dueRule.id
       )!;
       expect(updatedAfterApply.nextRunDate).toBe("2026-12-15");
 
       // Duplicate (recurringRuleId, occurredAt) rejected by partial unique index
       // Simulate resetting nextRunDate back to "2026-11-15" (concurrent double-apply / replay)
-      db.update(recurringRules)
+      await db
+        .update(recurringRules)
         .set({ nextRunDate: "2026-11-15" })
-        .where(eq(recurringRules.id, dueRule.id))
-        .run();
+        .where(eq(recurringRules.id, dueRule.id));
 
       await expectAppError(
         () => applyRecurringRule(db, dueRule.id, owner.user.id),
         409
       );
       // Balance must NOT have drifted on rejected duplicate!
-      expect(getWalletBalance(db, wallet.id)).toBe(4_500_000);
+      expect(await getWalletBalance(db, wallet.id)).toBe(4_500_000);
 
       // Restore nextRunDate to 2026-12-15 and test skipRecurringRule
-      updateRecurringRule(db, dueRule.id, owner.user.id, {
+      await updateRecurringRule(db, dueRule.id, owner.user.id, {
         nextRunDate: "2026-12-15",
       });
-      const skipped = skipRecurringRule(db, dueRule.id, owner.user.id);
+      const skipped = await skipRecurringRule(db, dueRule.id, owner.user.id);
       expect(skipped.nextRunDate).toBe("2027-01-15");
-      expect(getWalletBalance(db, wallet.id)).toBe(4_500_000);
+      expect(await getWalletBalance(db, wallet.id)).toBe(4_500_000);
       expect(
-        db
+        await db
           .select()
           .from(transactions)
           .where(eq(transactions.recurringRuleId, dueRule.id))
-          .all()
       ).toHaveLength(1);
 
       // Inactive rule cannot be skipped -> 400
-      updateRecurringRule(db, dueRule.id, owner.user.id, { isActive: false });
+      await updateRecurringRule(db, dueRule.id, owner.user.id, { isActive: false });
       const inactiveSkipErr = await expectAppError(
         () => skipRecurringRule(db, dueRule.id, owner.user.id),
         400
@@ -921,15 +923,15 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
 
       // Deleting a rule that already posted transactions succeeds cleanly without FK crash
       // while preserving the posted transaction
-      deleteRecurringRule(db, dueRule.id, owner.user.id);
-      expect(listRecurringRules(db, owner.user.id)).toHaveLength(1);
-      const preservedTx = getTransactionById(db, postedTx.id, owner.user.id);
+      await deleteRecurringRule(db, dueRule.id, owner.user.id);
+      expect(await listRecurringRules(db, owner.user.id)).toHaveLength(1);
+      const preservedTx = await getTransactionById(db, postedTx.id, owner.user.id);
       expect(preservedTx.amount).toBe(500_000);
 
       // Clean up futureRule
-      deleteRecurringRule(db, futureRule.id, owner.user.id);
+      await deleteRecurringRule(db, futureRule.id, owner.user.id);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
@@ -938,7 +940,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
     const prevUploadDir = process.env.UPLOAD_DIR;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-tx-api-"));
     const uploadDir = path.join(tempDir, "uploads");
-    process.env.DATABASE_PATH = path.join(tempDir, "test.db");
+    process.env.DATABASE_PATH = `memory://tx-api-${crypto.randomUUID()}`;
     process.env.UPLOAD_DIR = uploadDir;
     mockSessionCookie = undefined;
 
@@ -959,7 +961,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
     }
 
     try {
-      const db = getDb();
+      const db = await getDb();
       const owner = await registerUser(db, {
         name: "Raka",
         email: "raka-api@aruskas.test",
@@ -1073,12 +1075,12 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       mockSessionCookie = owner.token;
 
       // Setup wallet & category
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "Dompet Utama Uji",
         type: "cash",
         initialBalance: 1_000_000,
       });
-      const expenseCat = getUserCategory(db, owner.user.id, "expense");
+      const expenseCat = await getUserCategory(db, owner.user.id, "expense");
 
       // 2. Malformed JSON -> 400
       expect(
@@ -1206,7 +1208,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         { params: Promise.resolve({ id: txId }) }
       );
       expect(patchRes.status).toBe(200);
-      expect(getWalletBalance(db, wallet.id)).toBe(920_000);
+      expect(await getWalletBalance(db, wallet.id)).toBe(920_000);
 
       const listRes = await listTransactionsRoute(
         new Request(
@@ -1228,9 +1230,9 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         { params: Promise.resolve({ id: txId }) }
       );
       expect(delRes.status).toBe(200);
-      expect(getWalletBalance(db, wallet.id)).toBe(1_000_000);
-      // Confirm attachment file on disk is cleaned up after transaction deletion
-      expect(fs.readdirSync(uploadDir)).toHaveLength(0);
+      expect(await getWalletBalance(db, wallet.id)).toBe(1_000_000);
+      // Confirm attachment row in PostgreSQL is cleaned up via ON DELETE CASCADE
+      expect(await db.select().from(transactionAttachments)).toHaveLength(0);
 
       // 4b. Unicode attachment filename -> valid Content-Disposition header (no TypeError) & cleanup on delete
       const pdfBytes = new TextEncoder().encode("%PDF-1.4\nunicode-test");
@@ -1257,7 +1259,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       const unicodeTxId = (
         (await unicodeUploadRes.json()) as { transaction: { id: string } }
       ).transaction.id;
-      expect(fs.readdirSync(uploadDir)).toHaveLength(1);
+      expect(await db.select().from(transactionAttachments)).toHaveLength(1);
 
       const unicodeDlRes = await downloadAttachmentRoute(
         new Request(`http://localhost/api/attachments/${unicodeTxId}`),
@@ -1276,7 +1278,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         { params: Promise.resolve({ id: unicodeTxId }) }
       );
       expect(unicodeDelRes.status).toBe(200);
-      expect(fs.readdirSync(uploadDir)).toHaveLength(0);
+      expect(await db.select().from(transactionAttachments)).toHaveLength(0);
 
       // 5. Recurring routes lifecycle: POST -> apply (no body) -> skip -> PATCH -> DELETE
       const createRuleRes = await createRecurringRoute(
@@ -1302,7 +1304,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         { params: Promise.resolve({ id: ruleId }) }
       );
       expect(applyRes.status).toBe(201);
-      expect(getWalletBalance(db, wallet.id)).toBe(900_000);
+      expect(await getWalletBalance(db, wallet.id)).toBe(900_000);
 
       const skipRes = await skipRecurringRoute(
         new Request(`http://localhost/api/recurring/${ruleId}/skip`, {
@@ -1354,10 +1356,9 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
       expect(badMimeRes.status).toBe(400);
 
-      // Outsider uploads valid PNG to owner's wallet -> 403 and no orphan file left in uploadDir
-      const filesBefore = fs.existsSync(uploadDir)
-        ? fs.readdirSync(uploadDir).length
-        : 0;
+      // Outsider uploads valid PNG to owner's wallet -> 403 and no orphan attachment row left in PostgreSQL
+      const attachmentsBefore = (await db.select().from(transactionAttachments))
+        .length;
       mockSessionCookie = outsider.token;
       const outsiderForm = new FormData();
       outsiderForm.set("walletId", wallet.id);
@@ -1377,10 +1378,9 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         })
       );
       expect(outsiderPostRes.status).toBe(403);
-      const filesAfter = fs.existsSync(uploadDir)
-        ? fs.readdirSync(uploadDir).length
-        : 0;
-      expect(filesAfter).toBe(filesBefore);
+      const attachmentsAfter = (await db.select().from(transactionAttachments))
+        .length;
+      expect(attachmentsAfter).toBe(attachmentsBefore);
 
       // Non-object JSON & invalid calendar date & dueOnly
       mockSessionCookie = owner.token;
@@ -1402,7 +1402,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
       expect(dueOnlyRes.status).toBe(200);
     } finally {
-      closeDb();
+      await closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;
@@ -1423,20 +1423,19 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
   });
 
   test("seeded demo workspace satisfies owner-category rule and redacts Raka private transfers for Nadia", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const demoOwner = await ensureDemoSeeded(db);
-      const partner = db
+      const [partner] = await db
         .select()
         .from(users)
-        .where(eq(users.email, DEMO_PARTNER_EMAIL))
-        .get()!;
+        .where(eq(users.email, DEMO_PARTNER_EMAIL));
 
-      const allWallets = db.select().from(wallets).all();
+      const allWallets = await db.select().from(wallets);
       const walletMap = new Map(allWallets.map((w) => [w.id, w]));
-      const allCats = db.select().from(categories).all();
+      const allCats = await db.select().from(categories);
       const catMap = new Map(allCats.map((c) => [c.id, c]));
-      const allTx = db.select().from(transactions).all();
+      const allTx = await db.select().from(transactions);
 
       for (const tx of allTx) {
         if (tx.type === "transfer") {
@@ -1450,7 +1449,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       }
 
       const kasWallet = allWallets.find((w) => w.name === "Kas Rumah Tangga")!;
-      const partnerKasTx = listTransactions(db, partner.id, {
+      const partnerKasTx = await listTransactions(db, partner.id, {
         walletId: kasWallet.id,
       });
       const inboundFromPrivate = partnerKasTx.items.find(
@@ -1463,10 +1462,10 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
       expect(inboundFromPrivate!.canEdit).toBe(false);
 
-      const ownerList = listTransactions(db, demoOwner.id, {});
+      const ownerList = await listTransactions(db, demoOwner.id, {});
       expect(ownerList.summary.count).toBe(allTx.length);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 });

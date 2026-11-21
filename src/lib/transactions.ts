@@ -10,8 +10,15 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type { AppDb } from "@/db";
-import { categories, transactions, users, walletMembers, wallets } from "@/db/schema";
-import { AppError } from "@/lib/errors";
+import {
+  categories,
+  transactionAttachments,
+  transactions,
+  users,
+  walletMembers,
+  wallets,
+} from "@/db/schema";
+import { AppError, isPgUniqueViolation } from "@/lib/errors";
 import { assertWalletAccess, type WalletRole } from "@/lib/wallets";
 
 export type TransactionType = "income" | "expense" | "transfer";
@@ -58,6 +65,7 @@ export type CreateTransactionInput = {
   attachmentPath?: string | null;
   attachmentName?: string | null;
   attachmentMime?: string | null;
+  attachmentData?: string | null;
   recurringRuleId?: string | null;
 };
 
@@ -117,7 +125,9 @@ export function assertValidIsoDate(isoDate: string): string {
   return trimmed;
 }
 
-function normalizeOptionalText(value: string | null | undefined): string | null {
+function normalizeOptionalText(
+  value: string | null | undefined
+): string | null {
   if (value === undefined || value === null) {
     return null;
   }
@@ -162,21 +172,24 @@ function collectTxDeltas(
   return deltas;
 }
 
-function applyWalletDeltas(db: DbExecutor, deltas: Map<string, number>): void {
+async function applyWalletDeltas(
+  db: DbExecutor,
+  deltas: Map<string, number>
+): Promise<void> {
   for (const [walletId, delta] of deltas.entries()) {
     if (delta === 0) {
       continue;
     }
-    db.update(wallets)
+    await db
+      .update(wallets)
       .set({
         balance: sql`${wallets.balance} + ${delta}`,
       })
-      .where(eq(wallets.id, walletId))
-      .run();
+      .where(eq(wallets.id, walletId));
   }
 }
 
-function validateAndResolveTxFields(
+async function validateAndResolveTxFields(
   db: DbExecutor,
   userId: string,
   input: {
@@ -190,7 +203,7 @@ function validateAndResolveTxFields(
     paymentMethod?: string | null;
     occurredAt: string;
   }
-): {
+): Promise<{
   walletId: string;
   targetWalletId: string | null;
   categoryId: string | null;
@@ -200,7 +213,7 @@ function validateAndResolveTxFields(
   notes: string | null;
   paymentMethod: string | null;
   occurredAt: string;
-} {
+}> {
   const amount = assertPositiveIntAmount(input.amount);
   const title = input.title.trim();
   if (!title) {
@@ -216,7 +229,7 @@ function validateAndResolveTxFields(
     throw new AppError(400, "Tipe transaksi tidak valid.");
   }
 
-  const sourceMembership = assertWalletAccess(
+  const sourceMembership = await assertWalletAccess(
     db as AppDb,
     input.walletId,
     userId,
@@ -233,14 +246,19 @@ function validateAndResolveTxFields(
     if (input.targetWalletId === input.walletId) {
       throw new AppError(400, "Dompet tujuan harus berbeda dari dompet asal.");
     }
-    assertWalletAccess(db as AppDb, input.targetWalletId, userId, "editor");
+    await assertWalletAccess(
+      db as AppDb,
+      input.targetWalletId,
+      userId,
+      "editor"
+    );
     targetWalletId = input.targetWalletId;
     categoryId = null;
   } else {
     if (!input.categoryId) {
       throw new AppError(400, "Kategori tidak valid untuk dompet ini.");
     }
-    const category = db
+    const [category] = await db
       .select({
         id: categories.id,
         userId: categories.userId,
@@ -248,7 +266,7 @@ function validateAndResolveTxFields(
       })
       .from(categories)
       .where(eq(categories.id, input.categoryId))
-      .get();
+      .limit(1);
 
     if (
       !category ||
@@ -274,12 +292,12 @@ function validateAndResolveTxFields(
   };
 }
 
-function buildTransactionViews(
+async function buildTransactionViews(
   db: DbExecutor,
   rows: Array<typeof transactions.$inferSelect>,
   userId: string,
   contextWalletId?: string
-): TransactionView[] {
+): Promise<TransactionView[]> {
   if (rows.length === 0) {
     return [];
   }
@@ -303,28 +321,20 @@ function buildTransactionViews(
   const categoryIds = Array.from(categoryIdSet);
   const userIds = Array.from(userIdSet);
 
-  const walletRows = db
-    .select({ id: wallets.id, name: wallets.name })
-    .from(wallets)
-    .where(inArray(wallets.id, walletIds))
-    .all();
-  const walletNameMap = new Map(walletRows.map((w) => [w.id, w.name]));
-
-  const memberRows = db
-    .select({ walletId: walletMembers.walletId, role: walletMembers.role })
-    .from(walletMembers)
-    .where(
-      and(
-        eq(walletMembers.userId, userId),
-        inArray(walletMembers.walletId, walletIds)
-      )
-    )
-    .all();
-  const membershipMap = new Map<string, WalletRole>(
-    memberRows.map((m) => [m.walletId, m.role])
-  );
-
-  const categoryRows =
+  const [walletRows, memberRows, categoryRows, userRows] = await Promise.all([
+    db
+      .select({ id: wallets.id, name: wallets.name })
+      .from(wallets)
+      .where(inArray(wallets.id, walletIds)),
+    db
+      .select({ walletId: walletMembers.walletId, role: walletMembers.role })
+      .from(walletMembers)
+      .where(
+        and(
+          eq(walletMembers.userId, userId),
+          inArray(walletMembers.walletId, walletIds)
+        )
+      ),
     categoryIds.length > 0
       ? db
           .select({
@@ -335,15 +345,18 @@ function buildTransactionViews(
           })
           .from(categories)
           .where(inArray(categories.id, categoryIds))
-          .all()
-      : [];
-  const categoryMap = new Map(categoryRows.map((c) => [c.id, c]));
+      : Promise.resolve([]),
+    db
+      .select({ id: users.id, name: users.name })
+      .from(users)
+      .where(inArray(users.id, userIds)),
+  ]);
 
-  const userRows = db
-    .select({ id: users.id, name: users.name })
-    .from(users)
-    .where(inArray(users.id, userIds))
-    .all();
+  const walletNameMap = new Map(walletRows.map((w) => [w.id, w.name]));
+  const membershipMap = new Map<string, WalletRole>(
+    memberRows.map((m) => [m.walletId, m.role])
+  );
+  const categoryMap = new Map(categoryRows.map((c) => [c.id, c]));
   const userMap = new Map(userRows.map((u) => [u.id, u.name]));
 
   return rows.map((row) => {
@@ -411,48 +424,45 @@ function buildTransactionViews(
 }
 
 function isRecurringUniqueError(err: unknown): boolean {
-  if (!(err instanceof Error)) {
-    return false;
-  }
-  const msg = err.message.toLowerCase();
-  return msg.includes("unique") && msg.includes("recurring_rule_id");
+  return (
+    isPgUniqueViolation(err, "idx_transactions_recurring_unique") ||
+    isPgUniqueViolation(err, "recurring_rule_id")
+  );
 }
 
 /**
  * Inserts a validated transaction and adjusts wallet balance(s) within the provided
  * transaction/executor context. Used by both `createTransaction` and `applyRecurringRule`.
  */
-export function insertTransactionInExecutor(
+export async function insertTransactionInExecutor(
   tx: DbExecutor,
   userId: string,
   input: CreateTransactionInput
-): TransactionView {
-  const resolved = validateAndResolveTxFields(tx, userId, input);
+): Promise<TransactionView> {
+  const resolved = await validateAndResolveTxFields(tx, userId, input);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
 
   try {
-    tx.insert(transactions)
-      .values({
-        id,
-        walletId: resolved.walletId,
-        targetWalletId: resolved.targetWalletId,
-        categoryId: resolved.categoryId,
-        userId,
-        type: resolved.type,
-        amount: resolved.amount,
-        title: resolved.title,
-        notes: resolved.notes,
-        paymentMethod: resolved.paymentMethod,
-        occurredAt: resolved.occurredAt,
-        attachmentPath: input.attachmentPath ?? null,
-        attachmentName: input.attachmentName ?? null,
-        attachmentMime: input.attachmentMime ?? null,
-        recurringRuleId: input.recurringRuleId ?? null,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await tx.insert(transactions).values({
+      id,
+      walletId: resolved.walletId,
+      targetWalletId: resolved.targetWalletId,
+      categoryId: resolved.categoryId,
+      userId,
+      type: resolved.type,
+      amount: resolved.amount,
+      title: resolved.title,
+      notes: resolved.notes,
+      paymentMethod: resolved.paymentMethod,
+      occurredAt: resolved.occurredAt,
+      attachmentPath: input.attachmentPath ?? null,
+      attachmentName: input.attachmentName ?? null,
+      attachmentMime: input.attachmentMime ?? null,
+      recurringRuleId: input.recurringRuleId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
   } catch (err) {
     if (isRecurringUniqueError(err)) {
       throw new AppError(
@@ -463,50 +473,62 @@ export function insertTransactionInExecutor(
     throw err;
   }
 
-  const deltas = collectTxDeltas(resolved, 1);
-  applyWalletDeltas(tx, deltas);
+  if (input.attachmentData) {
+    await tx.insert(transactionAttachments).values({
+      transactionId: id,
+      data: input.attachmentData,
+      createdAt: now,
+    });
+  }
 
-  const inserted = tx
+  const deltas = collectTxDeltas(resolved, 1);
+  await applyWalletDeltas(tx, deltas);
+
+  const [inserted] = await tx
     .select()
     .from(transactions)
     .where(eq(transactions.id, id))
-    .get()!;
+    .limit(1);
 
-  return buildTransactionViews(tx, [inserted], userId)[0];
+  const views = await buildTransactionViews(tx, [inserted!], userId);
+  return views[0];
 }
 
 /**
  * Creates a transaction and atomically updates affected wallet balance(s).
  */
-export function createTransaction(
+export async function createTransaction(
   db: AppDb,
   userId: string,
   input: CreateTransactionInput
-): TransactionView {
-  return db.transaction((tx) => insertTransactionInExecutor(tx, userId, input));
+): Promise<TransactionView> {
+  return db.transaction(async (tx) =>
+    insertTransactionInExecutor(tx as unknown as DbExecutor, userId, input)
+  );
 }
 
 /**
  * Updates an existing transaction and atomically reconciles old and new wallet balances.
  */
-export function updateTransaction(
+export async function updateTransaction(
   db: AppDb,
   txId: string,
   userId: string,
   input: UpdateTransactionInput
-): TransactionView {
-  return db.transaction((tx) => {
-    const existing = tx
+): Promise<TransactionView> {
+  return db.transaction(async (tx) => {
+    const txExec = tx as unknown as DbExecutor;
+    const [existing] = await tx
       .select()
       .from(transactions)
       .where(eq(transactions.id, txId))
-      .get();
+      .limit(1);
 
     if (!existing) {
       throw new AppError(404, "Transaksi tidak ditemukan.");
     }
 
-    const existingMembership = assertWalletAccess(
+    const existingMembership = await assertWalletAccess(
       tx as unknown as AppDb,
       existing.walletId,
       userId,
@@ -534,7 +556,7 @@ export function updateTransaction(
           ? input.categoryId
           : existing.categoryId;
 
-    const resolved = validateAndResolveTxFields(tx, userId, {
+    const resolved = await validateAndResolveTxFields(txExec, userId, {
       walletId: nextWalletId,
       targetWalletId: nextTargetWalletId,
       categoryId: nextCategoryId,
@@ -552,10 +574,11 @@ export function updateTransaction(
     const now = new Date().toISOString();
     const deltas = collectTxDeltas(existing, -1);
     collectTxDeltas(resolved, 1, deltas);
-    applyWalletDeltas(tx, deltas);
+    await applyWalletDeltas(txExec, deltas);
 
     try {
-      tx.update(transactions)
+      await tx
+        .update(transactions)
         .set({
           walletId: resolved.walletId,
           targetWalletId: resolved.targetWalletId,
@@ -580,8 +603,7 @@ export function updateTransaction(
               : existing.attachmentMime,
           updatedAt: now,
         })
-        .where(eq(transactions.id, txId))
-        .run();
+        .where(eq(transactions.id, txId));
     } catch (err) {
       if (isRecurringUniqueError(err)) {
         throw new AppError(
@@ -592,13 +614,27 @@ export function updateTransaction(
       throw err;
     }
 
-    const updated = tx
+    if (input.attachmentData !== undefined) {
+      await tx
+        .delete(transactionAttachments)
+        .where(eq(transactionAttachments.transactionId, txId));
+      if (input.attachmentData) {
+        await tx.insert(transactionAttachments).values({
+          transactionId: txId,
+          data: input.attachmentData,
+          createdAt: now,
+        });
+      }
+    }
+
+    const [updated] = await tx
       .select()
       .from(transactions)
       .where(eq(transactions.id, txId))
-      .get()!;
+      .limit(1);
 
-    return buildTransactionViews(tx, [updated], userId)[0];
+    const views = await buildTransactionViews(txExec, [updated!], userId);
+    return views[0];
   });
 }
 
@@ -606,23 +642,24 @@ export function updateTransaction(
  * Deletes a transaction and atomically reverses its wallet balance impact.
  * Returns the deleted attachment relative path (if any) for post-commit cleanup.
  */
-export function deleteTransaction(
+export async function deleteTransaction(
   db: AppDb,
   txId: string,
   userId: string
-): { attachmentPath: string | null } {
-  return db.transaction((tx) => {
-    const existing = tx
+): Promise<{ attachmentPath: string | null }> {
+  return db.transaction(async (tx) => {
+    const txExec = tx as unknown as DbExecutor;
+    const [existing] = await tx
       .select()
       .from(transactions)
       .where(eq(transactions.id, txId))
-      .get();
+      .limit(1);
 
     if (!existing) {
       throw new AppError(404, "Transaksi tidak ditemukan.");
     }
 
-    const membership = assertWalletAccess(
+    const membership = await assertWalletAccess(
       tx as unknown as AppDb,
       existing.walletId,
       userId,
@@ -636,8 +673,8 @@ export function deleteTransaction(
     }
 
     const deltas = collectTxDeltas(existing, -1);
-    applyWalletDeltas(tx, deltas);
-    tx.delete(transactions).where(eq(transactions.id, txId)).run();
+    await applyWalletDeltas(txExec, deltas);
+    await tx.delete(transactions).where(eq(transactions.id, txId));
 
     return { attachmentPath: existing.attachmentPath ?? null };
   });
@@ -647,16 +684,16 @@ export function deleteTransaction(
  * Returns a single transaction view if the user has at least viewer access on
  * either the source or target wallet, redacting any private counterparty wallet name.
  */
-export function getTransactionById(
+export async function getTransactionById(
   db: AppDb,
   txId: string,
   userId: string
-): TransactionView {
-  const row = db
+): Promise<TransactionView> {
+  const [row] = await db
     .select()
     .from(transactions)
     .where(eq(transactions.id, txId))
-    .get();
+    .limit(1);
 
   if (!row) {
     throw new AppError(404, "Transaksi tidak ditemukan.");
@@ -666,7 +703,7 @@ export function getTransactionById(
     ? [row.walletId, row.targetWalletId]
     : [row.walletId];
 
-  const membership = db
+  const [membership] = await db
     .select({ id: walletMembers.id })
     .from(walletMembers)
     .where(
@@ -675,31 +712,32 @@ export function getTransactionById(
         inArray(walletMembers.walletId, walletScope)
       )
     )
-    .get();
+    .limit(1);
 
   if (!membership) {
     throw new AppError(403, "Anda tidak memiliki akses ke transaksi ini.");
   }
 
-  return buildTransactionViews(db, [row], userId)[0];
+  const views = await buildTransactionViews(db, [row], userId);
+  return views[0];
 }
 
 /**
  * Lists transactions visible to the user with dynamic filters, private transfer
  * redaction, and non-transfer summary totals.
  */
-export function listTransactions(
+export async function listTransactions(
   db: AppDb,
   userId: string,
   filters: TransactionFilter
-): {
+): Promise<{
   items: TransactionView[];
   summary: { income: number; expense: number; net: number; count: number };
-} {
+}> {
   const conditions: SQL[] = [];
 
   if (filters.walletId) {
-    assertWalletAccess(db, filters.walletId, userId, "viewer");
+    await assertWalletAccess(db, filters.walletId, userId, "viewer");
     conditions.push(
       or(
         eq(transactions.walletId, filters.walletId),
@@ -707,11 +745,10 @@ export function listTransactions(
       )!
     );
   } else {
-    const memberWallets = db
+    const memberWallets = await db
       .select({ walletId: walletMembers.walletId })
       .from(walletMembers)
-      .where(eq(walletMembers.userId, userId))
-      .all();
+      .where(eq(walletMembers.userId, userId));
 
     if (memberWallets.length === 0) {
       return {
@@ -742,7 +779,10 @@ export function listTransactions(
     conditions.push(eq(transactions.categoryId, filters.categoryId));
   }
   if (filters.search && filters.search.trim()) {
-    const escaped = filters.search.trim().toLowerCase().replace(/[\\%_]/g, "\\$&");
+    const escaped = filters.search
+      .trim()
+      .toLowerCase()
+      .replace(/[\\%_]/g, "\\$&");
     const pattern = `%${escaped}%`;
     conditions.push(
       sql`(lower(${transactions.title}) LIKE ${pattern} ESCAPE '\\' OR lower(coalesce(${transactions.notes}, '')) LIKE ${pattern} ESCAPE '\\')`
@@ -751,39 +791,40 @@ export function listTransactions(
 
   const whereClause = and(...conditions);
 
-  const summaryRow = db
-    .select({
-      income: sql<number>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
-      expense: sql<number>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
-      count: sql<number>`count(*)`,
-    })
-    .from(transactions)
-    .where(whereClause)
-    .get();
-
-  const income = Number(summaryRow?.income ?? 0);
-  const expense = Number(summaryRow?.expense ?? 0);
-  const count = Number(summaryRow?.count ?? 0);
-
   const baseQuery = db
     .select()
     .from(transactions)
     .where(whereClause)
     .orderBy(desc(transactions.occurredAt), desc(transactions.createdAt));
 
-  let rows: Array<typeof transactions.$inferSelect>;
-  if (filters.limit !== undefined && filters.offset !== undefined) {
-    rows = baseQuery.limit(filters.limit).offset(filters.offset).all();
-  } else if (filters.limit !== undefined) {
-    rows = baseQuery.limit(filters.limit).all();
-  } else if (filters.offset !== undefined) {
-    rows = baseQuery.limit(-1).offset(filters.offset).all();
-  } else {
-    rows = baseQuery.all();
-  }
+  const rowsPromise =
+    filters.limit !== undefined && filters.offset !== undefined
+      ? baseQuery.limit(filters.limit).offset(filters.offset)
+      : filters.limit !== undefined
+        ? baseQuery.limit(filters.limit)
+        : filters.offset !== undefined
+          ? baseQuery.offset(filters.offset)
+          : baseQuery;
+
+  const [summaryRows, rows] = await Promise.all([
+    db
+      .select({
+        income: sql<number>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
+        expense: sql<number>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
+        count: sql<number>`count(*)`,
+      })
+      .from(transactions)
+      .where(whereClause),
+    rowsPromise,
+  ]);
+
+  const summaryRow = summaryRows[0];
+  const income = Number(summaryRow?.income ?? 0);
+  const expense = Number(summaryRow?.expense ?? 0);
+  const count = Number(summaryRow?.count ?? 0);
 
   return {
-    items: buildTransactionViews(db, rows, userId, filters.walletId),
+    items: await buildTransactionViews(db, rows, userId, filters.walletId),
     summary: {
       income,
       expense,

@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const parsed = passwordSchema.parse(body);
 
     await changePassword(
-      getDb(),
+      await getDb(),
       currentUser.id,
       parsed.currentPassword,
       parsed.newPassword

@@ -10,7 +10,10 @@ import {
   getPreviousMonthYM,
   getTodayISO,
 } from "@/lib/format";
-import { listDueRecurringRules, type RecurringRuleView } from "@/lib/recurring";
+import {
+  listDueRecurringRules,
+  type RecurringRuleView,
+} from "@/lib/recurring";
 import {
   assertValidIsoDate,
   listTransactions,
@@ -198,15 +201,15 @@ function computeSavingRate(income: number, expense: number): number {
   return Math.round(((income - expense) / income) * 1000) / 10;
 }
 
-function partitionUserWallets(
+async function partitionUserWallets(
   db: AppDb,
   userId: string,
   scope: ReportScope
-): {
+): Promise<{
   activeWallets: WalletWithRole[];
   watchedWallets: WalletWithRole[];
-} {
-  const allWallets = listUserWallets(db, userId);
+}> {
+  const allWallets = await listUserWallets(db, userId);
   const watchedWallets = allWallets.filter((w) => w.role === "viewer");
   const editableWallets = allWallets.filter(
     (w) => w.role === "owner" || w.role === "editor"
@@ -250,17 +253,17 @@ function computeWalletSetMovement(
   return movement;
 }
 
-function getPriorMovementForWalletSet(
+async function getPriorMovementForWalletSet(
   db: AppDb,
   walletIds: string[],
   selectedSet: Set<string>,
   beforeDateIso: string
-): number {
+): Promise<number> {
   if (walletIds.length === 0) {
     return 0;
   }
 
-  const rows = db
+  const rows = await db
     .select({
       type: transactions.type,
       walletId: transactions.walletId,
@@ -276,8 +279,7 @@ function getPriorMovementForWalletSet(
           inArray(transactions.targetWalletId, walletIds)
         )
       )
-    )
-    .all();
+    );
 
   return computeWalletSetMovement(rows, selectedSet);
 }
@@ -383,19 +385,19 @@ function buildCategoryBreakdown(
  * Computes the complete dashboard aggregation for the authenticated user,
  * partitioning watched (viewer) wallets out of all cashflow & balance metrics.
  */
-export function getDashboardSummary(
+export async function getDashboardSummary(
   db: AppDb,
   userId: string,
   userEmail: string,
   opts?: { scope?: ReportScope; todayIso?: string }
-): DashboardSummary {
+): Promise<DashboardSummary> {
   const scope = validateScope(opts?.scope);
   const todayIso = opts?.todayIso
     ? assertValidIsoDate(opts.todayIso)
     : getTodayISO();
   const month = todayIso.slice(0, 7);
 
-  const { activeWallets, watchedWallets } = partitionUserWallets(
+  const { activeWallets, watchedWallets } = await partitionUserWallets(
     db,
     userId,
     scope
@@ -411,33 +413,81 @@ export function getDashboardSummary(
     cursor = getPreviousMonthYM(cursor);
   }
   const oldestMonth = months[0];
+  const monthStartIso = `${month}-01`;
+  const monthEndIso = `${month}-31`;
+
+  const [
+    monthlyRows,
+    priorMovement,
+    currentMonthRows,
+    monthlyBudgets,
+    recentTxRes,
+    dueRecurring,
+    pendingInvites,
+  ] = await Promise.all([
+    activeWalletIds.length > 0
+      ? db
+          .select({
+            month: sql<string>`substr(${transactions.occurredAt}, 1, 7)`,
+            income: sql<number>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
+            expense: sql<number>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
+          })
+          .from(transactions)
+          .where(
+            and(
+              inArray(transactions.walletId, activeWalletIds),
+              inArray(transactions.type, ["income", "expense"]),
+              gte(transactions.occurredAt, `${oldestMonth}-01`),
+              lte(transactions.occurredAt, monthEndIso)
+            )
+          )
+          .groupBy(sql`substr(${transactions.occurredAt}, 1, 7)`)
+      : Promise.resolve([]),
+    activeWalletIds.length > 0
+      ? getPriorMovementForWalletSet(
+          db,
+          activeWalletIds,
+          activeSet,
+          monthStartIso
+        )
+      : Promise.resolve(0),
+    activeWalletIds.length > 0
+      ? db
+          .select({
+            type: transactions.type,
+            walletId: transactions.walletId,
+            targetWalletId: transactions.targetWalletId,
+            amount: transactions.amount,
+          })
+          .from(transactions)
+          .where(
+            and(
+              gte(transactions.occurredAt, monthStartIso),
+              lte(transactions.occurredAt, monthEndIso),
+              or(
+                inArray(transactions.walletId, activeWalletIds),
+                inArray(transactions.targetWalletId, activeWalletIds)
+              )
+            )
+          )
+      : Promise.resolve([]),
+    listMonthlyBudgets(db, userId, month),
+    activeWalletIds.length > 0
+      ? listTransactions(db, userId, {})
+      : Promise.resolve({
+          items: [] as TransactionView[],
+          summary: { income: 0, expense: 0, net: 0, count: 0 },
+        }),
+    listDueRecurringRules(db, userId, todayIso),
+    listPendingInvitesForEmail(db, userEmail),
+  ]);
 
   const monthlyMap = new Map<string, { income: number; expense: number }>();
-  if (activeWalletIds.length > 0) {
-    const monthlyRows = db
-      .select({
-        month: sql<string>`substr(${transactions.occurredAt}, 1, 7)`,
-        income: sql<number>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
-        expense: sql<number>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
-      })
-      .from(transactions)
-      .where(
-        and(
-          inArray(transactions.walletId, activeWalletIds),
-          inArray(transactions.type, ["income", "expense"]),
-          gte(transactions.occurredAt, `${oldestMonth}-01`),
-          lte(transactions.occurredAt, `${month}-31`)
-        )
-      )
-      .groupBy(sql`substr(${transactions.occurredAt}, 1, 7)`)
-      .all();
-
-    for (const row of monthlyRows) {
-      monthlyMap.set(row.month, {
-        income: Number(row.income),
-        expense: Number(row.expense),
-      });
-    }
+  for (const row of monthlyRows) {
+    monthlyMap.set(row.month, {
+      income: Number(row.income),
+      expense: Number(row.expense),
+    });
   }
 
   const monthlySeries = months.map((ym) => {
@@ -462,40 +512,13 @@ export function getDashboardSummary(
 
   let balanceGrowthPct: number | null = null;
   if (activeWalletIds.length > 0) {
-    const monthStartIso = `${month}-01`;
-    const monthEndIso = `${month}-31`;
     const initialSum = activeWallets.reduce(
       (sum, w) => sum + w.initialBalance,
       0
     );
-    const priorMovement = getPriorMovementForWalletSet(
-      db,
-      activeWalletIds,
-      activeSet,
-      monthStartIso
-    );
     const startOfMonthBalance = initialSum + priorMovement;
 
     if (startOfMonthBalance > 0) {
-      const currentMonthRows = db
-        .select({
-          type: transactions.type,
-          walletId: transactions.walletId,
-          targetWalletId: transactions.targetWalletId,
-          amount: transactions.amount,
-        })
-        .from(transactions)
-        .where(
-          and(
-            gte(transactions.occurredAt, monthStartIso),
-            lte(transactions.occurredAt, monthEndIso),
-            or(
-              inArray(transactions.walletId, activeWalletIds),
-              inArray(transactions.targetWalletId, activeWalletIds)
-            )
-          )
-        )
-        .all();
       const currentMonthMovement = computeWalletSetMovement(
         currentMonthRows,
         activeSet
@@ -509,23 +532,17 @@ export function getDashboardSummary(
     }
   }
 
-  const topBudgets = listMonthlyBudgets(db, userId, month)
+  const topBudgets = monthlyBudgets
     .sort((a, b) => b.percentage - a.percentage || b.spentAmount - a.spentAmount)
     .slice(0, 5);
 
-  const recentTransactions =
-    activeWalletIds.length > 0
-      ? listTransactions(db, userId, {})
-          .items.filter(
-            (tx) =>
-              activeSet.has(tx.walletId) ||
-              (tx.targetWalletId !== null && activeSet.has(tx.targetWalletId))
-          )
-          .slice(0, 8)
-      : [];
-
-  const dueRecurring = listDueRecurringRules(db, userId, todayIso);
-  const pendingInvites = listPendingInvitesForEmail(db, userEmail);
+  const recentTransactions = recentTxRes.items
+    .filter(
+      (tx) =>
+        activeSet.has(tx.walletId) ||
+        (tx.targetWalletId !== null && activeSet.has(tx.targetWalletId))
+    )
+    .slice(0, 8);
 
   return {
     scope,
@@ -552,7 +569,7 @@ export function getDashboardSummary(
  * or across the user's active wallets (`owner`/`editor`, honoring `scope`), excluding
  * internal transfers from income/expense while reconciling opening -> closing balance.
  */
-export function getFinancialReport(
+export async function getFinancialReport(
   db: AppDb,
   userId: string,
   query: {
@@ -561,7 +578,7 @@ export function getFinancialReport(
     walletId?: string;
     scope?: ReportScope;
   }
-): FinancialReport {
+): Promise<FinancialReport> {
   const from = assertValidIsoDate(query.from);
   const to = assertValidIsoDate(query.to);
   if (from > to) {
@@ -570,14 +587,22 @@ export function getFinancialReport(
   const scope = validateScope(query.scope);
 
   const isSingleWallet = Boolean(query.walletId?.trim());
-  let selectedWalletRecords: Array<{ id: string; name: string; initialBalance: number }> =
-    [];
+  let selectedWalletRecords: Array<{
+    id: string;
+    name: string;
+    initialBalance: number;
+  }> = [];
   let resolvedWalletId: string | null = null;
   let resolvedWalletName: string | null = null;
 
   if (isSingleWallet) {
     const targetWalletId = query.walletId!.trim();
-    const { wallet } = assertWalletAccess(db, targetWalletId, userId, "viewer");
+    const { wallet } = await assertWalletAccess(
+      db,
+      targetWalletId,
+      userId,
+      "viewer"
+    );
     selectedWalletRecords = [
       {
         id: wallet.id,
@@ -588,7 +613,7 @@ export function getFinancialReport(
     resolvedWalletId = wallet.id;
     resolvedWalletName = wallet.name;
   } else {
-    const { activeWallets } = partitionUserWallets(db, userId, scope);
+    const { activeWallets } = await partitionUserWallets(db, userId, scope);
     selectedWalletRecords = activeWallets.map((w) => ({
       id: w.id,
       name: w.name,
@@ -603,28 +628,31 @@ export function getFinancialReport(
     (sum, w) => sum + w.initialBalance,
     0
   );
-  const priorMovement = getPriorMovementForWalletSet(
-    db,
-    selectedWalletIds,
-    selectedSet,
-    from
-  );
-  const openingBalance = sumInitialBalance + priorMovement;
 
-  const reportTransactions: TransactionView[] =
+  const [priorMovement, rawTxRes] = await Promise.all([
+    getPriorMovementForWalletSet(db, selectedWalletIds, selectedSet, from),
     selectedWalletIds.length === 0
-      ? []
+      ? Promise.resolve({
+          items: [] as TransactionView[],
+          summary: { income: 0, expense: 0, net: 0, count: 0 },
+        })
       : isSingleWallet
         ? listTransactions(db, userId, {
             from,
             to,
             walletId: resolvedWalletId!,
-          }).items
-        : listTransactions(db, userId, { from, to }).items.filter(
-            (tx) =>
-              selectedSet.has(tx.walletId) ||
-              (tx.targetWalletId !== null && selectedSet.has(tx.targetWalletId))
-          );
+          })
+        : listTransactions(db, userId, { from, to }),
+  ]);
+
+  const openingBalance = sumInitialBalance + priorMovement;
+  const reportTransactions: TransactionView[] = isSingleWallet
+    ? rawTxRes.items
+    : rawTxRes.items.filter(
+        (tx) =>
+          selectedSet.has(tx.walletId) ||
+          (tx.targetWalletId !== null && selectedSet.has(tx.targetWalletId))
+      );
 
   let totalIncome = 0;
   let totalExpense = 0;

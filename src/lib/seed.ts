@@ -1,6 +1,8 @@
 import { eq, inArray, or } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import {
+  bankIntegrations,
+  bankSyncLogs,
   budgets,
   categories,
   recurringRules,
@@ -94,22 +96,23 @@ export const DEFAULT_CATEGORIES: ReadonlyArray<{
 /**
  * Inserts the 12 default Indonesian income/expense categories for a user.
  */
-export function seedDefaultCategoriesForUser(db: AppDb, userId: string): void {
+export async function seedDefaultCategoriesForUser(
+  db: AppDb,
+  userId: string
+): Promise<void> {
   const now = new Date().toISOString();
-  db.insert(categories)
-    .values(
-      DEFAULT_CATEGORIES.map((cat) => ({
-        id: crypto.randomUUID(),
-        userId,
-        name: cat.name,
-        type: cat.type,
-        icon: cat.icon,
-        color: cat.color,
-        isDefault: true,
-        createdAt: now,
-      }))
-    )
-    .run();
+  await db.insert(categories).values(
+    DEFAULT_CATEGORIES.map((cat) => ({
+      id: crypto.randomUUID(),
+      userId,
+      name: cat.name,
+      type: cat.type,
+      icon: cat.icon,
+      color: cat.color,
+      isDefault: true,
+      createdAt: now,
+    }))
+  );
 }
 
 function getMonthDateISO(
@@ -148,11 +151,11 @@ function addDaysISO(baseDate: Date, deltaDays: number): string {
  * current-month budgets, 3 savings goals, and 3 recurring rules (>=1 due).
  */
 export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
-  const existing = db
+  const [existing] = await db
     .select()
     .from(users)
     .where(eq(users.email, DEMO_EMAIL))
-    .get();
+    .limit(1);
   if (existing) {
     return toSafeUser(existing);
   }
@@ -170,12 +173,12 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
   );
   const nextMonthFirstISO = getTodayISO(nextMonthFirst);
 
-  return db.transaction((tx) => {
-    const insideExisting = tx
+  return db.transaction(async (tx) => {
+    const [insideExisting] = await tx
       .select()
       .from(users)
       .where(eq(users.email, DEMO_EMAIL))
-      .get();
+      .limit(1);
     if (insideExisting) {
       return toSafeUser(insideExisting);
     }
@@ -183,40 +186,32 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
     const demoUserId = crypto.randomUUID();
     const partnerUserId = crypto.randomUUID();
 
-    tx.insert(users)
-      .values([
-        {
-          id: demoUserId,
-          name: "Raka Pratama",
-          email: DEMO_EMAIL,
-          passwordHash: demoPasswordHash,
-          monthlySavingsTarget: 25,
-          createdAt: nowIso,
-        },
-        {
-          id: partnerUserId,
-          name: "Nadia Pratama",
-          email: DEMO_PARTNER_EMAIL,
-          passwordHash: demoPasswordHash,
-          monthlySavingsTarget: 20,
-          createdAt: nowIso,
-        },
-      ])
-      .run();
+    await tx.insert(users).values([
+      {
+        id: demoUserId,
+        name: "Raka Pratama",
+        email: DEMO_EMAIL,
+        passwordHash: demoPasswordHash,
+        monthlySavingsTarget: 25,
+        createdAt: nowIso,
+      },
+      {
+        id: partnerUserId,
+        name: "Nadia Pratama",
+        email: DEMO_PARTNER_EMAIL,
+        passwordHash: demoPasswordHash,
+        monthlySavingsTarget: 20,
+        createdAt: nowIso,
+      },
+    ]);
 
-    seedDefaultCategoriesForUser(tx as unknown as AppDb, demoUserId);
-    seedDefaultCategoriesForUser(tx as unknown as AppDb, partnerUserId);
+    await seedDefaultCategoriesForUser(tx as unknown as AppDb, demoUserId);
+    await seedDefaultCategoriesForUser(tx as unknown as AppDb, partnerUserId);
 
-    const demoCats = tx
-      .select()
-      .from(categories)
-      .where(eq(categories.userId, demoUserId))
-      .all();
-    const partnerCats = tx
-      .select()
-      .from(categories)
-      .where(eq(categories.userId, partnerUserId))
-      .all();
+    const [demoCats, partnerCats] = await Promise.all([
+      tx.select().from(categories).where(eq(categories.userId, demoUserId)),
+      tx.select().from(categories).where(eq(categories.userId, partnerUserId)),
+    ]);
 
     const demoCatByName = new Map(demoCats.map((c) => [c.name, c.id]));
     const partnerCatByName = new Map(partnerCats.map((c) => [c.name, c.id]));
@@ -473,76 +468,72 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
     }
 
     // Insert wallets with exact reconciled balances
-    tx.insert(wallets)
-      .values(
-        walletDefs.map((w) => ({
-          id: w.id,
-          ownerId: w.ownerId,
-          name: w.name,
-          type: w.type,
-          initialBalance: w.initialBalance,
-          balance: balanceMap.get(w.id) ?? w.initialBalance,
-          isShared: w.isShared,
-          createdAt: nowIso,
-        }))
-      )
-      .run();
+    await tx.insert(wallets).values(
+      walletDefs.map((w) => ({
+        id: w.id,
+        ownerId: w.ownerId,
+        name: w.name,
+        type: w.type,
+        initialBalance: w.initialBalance,
+        balance: balanceMap.get(w.id) ?? w.initialBalance,
+        isShared: w.isShared,
+        createdAt: nowIso,
+      }))
+    );
 
-    tx.insert(walletMembers)
-      .values([
-        {
-          id: crypto.randomUUID(),
-          walletId: bcaId,
-          userId: demoUserId,
-          role: "owner",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          walletId: tunaiId,
-          userId: demoUserId,
-          role: "owner",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          walletId: gopayId,
-          userId: demoUserId,
-          role: "owner",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          walletId: kasId,
-          userId: demoUserId,
-          role: "owner",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          walletId: kasId,
-          userId: partnerUserId,
-          role: "editor",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          walletId: nadiaSavingsId,
-          userId: partnerUserId,
-          role: "owner",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          walletId: nadiaSavingsId,
-          userId: demoUserId,
-          role: "viewer",
-          createdAt: nowIso,
-        },
-      ])
-      .run();
+    await tx.insert(walletMembers).values([
+      {
+        id: crypto.randomUUID(),
+        walletId: bcaId,
+        userId: demoUserId,
+        role: "owner",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        walletId: tunaiId,
+        userId: demoUserId,
+        role: "owner",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        walletId: gopayId,
+        userId: demoUserId,
+        role: "owner",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        walletId: kasId,
+        userId: demoUserId,
+        role: "owner",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        walletId: kasId,
+        userId: partnerUserId,
+        role: "editor",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        walletId: nadiaSavingsId,
+        userId: partnerUserId,
+        role: "owner",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        walletId: nadiaSavingsId,
+        userId: demoUserId,
+        role: "viewer",
+        createdAt: nowIso,
+      },
+    ]);
 
-    tx.insert(transactions).values(txRows).run();
+    await tx.insert(transactions).values(txRows);
 
     const budgetConfigs: Array<[string, number]> = [
       ["Makanan & Minuman", 2_500_000],
@@ -552,100 +543,94 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
       ["Hiburan & Gaya Hidup", 1_000_000],
     ];
 
-    tx.insert(budgets)
-      .values(
-        budgetConfigs.map(([catName, limitAmount]) => ({
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          categoryId: demoCatByName.get(catName)!,
-          month: currentMonth,
-          limitAmount,
-          createdAt: nowIso,
-        }))
-      )
-      .run();
+    await tx.insert(budgets).values(
+      budgetConfigs.map(([catName, limitAmount]) => ({
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        categoryId: demoCatByName.get(catName)!,
+        month: currentMonth,
+        limitAmount,
+        createdAt: nowIso,
+      }))
+    );
 
-    tx.insert(savingsGoals)
-      .values([
-        {
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          walletId: bcaId,
-          name: "Dana Darurat",
-          targetAmount: 60_000_000,
-          currentAmount: 38_500_000,
-          deadline: `${nowDate.getFullYear() + 1}-12-31`,
-          notes: "Cadangan 6 bulan biaya hidup keluarga",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          walletId: bcaId,
-          name: "Pendidikan Anak",
-          targetAmount: 40_000_000,
-          currentAmount: 16_000_000,
-          deadline: `${nowDate.getFullYear() + 3}-06-30`,
-          notes: "Persiapan uang pangkal sekolah dasar",
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          walletId: kasId,
-          name: "Liburan Keluarga",
-          targetAmount: 15_000_000,
-          currentAmount: 9_200_000,
-          deadline: `${nowDate.getFullYear() + 1}-06-15`,
-          notes: "Rencana liburan akhir semester ke Yogyakarta",
-          createdAt: nowIso,
-        },
-      ])
-      .run();
+    await tx.insert(savingsGoals).values([
+      {
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        walletId: bcaId,
+        name: "Dana Darurat",
+        targetAmount: 60_000_000,
+        currentAmount: 38_500_000,
+        deadline: `${nowDate.getFullYear() + 1}-12-31`,
+        notes: "Cadangan 6 bulan biaya hidup keluarga",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        walletId: bcaId,
+        name: "Pendidikan Anak",
+        targetAmount: 40_000_000,
+        currentAmount: 16_000_000,
+        deadline: `${nowDate.getFullYear() + 3}-06-30`,
+        notes: "Persiapan uang pangkal sekolah dasar",
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        walletId: kasId,
+        name: "Liburan Keluarga",
+        targetAmount: 15_000_000,
+        currentAmount: 9_200_000,
+        deadline: `${nowDate.getFullYear() + 1}-06-15`,
+        notes: "Rencana liburan akhir semester ke Yogyakarta",
+        createdAt: nowIso,
+      },
+    ]);
 
-    tx.insert(recurringRules)
-      .values([
-        {
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          walletId: kasId,
-          categoryId: demoCatByName.get("Tagihan & Utilitas")!,
-          type: "expense",
-          amount: 450_000,
-          title: "Tagihan Internet & WiFi Rumah",
-          frequency: "monthly",
-          nextRunDate: yesterdayISO,
-          isActive: true,
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          walletId: kasId,
-          categoryId: demoCatByName.get("Tagihan & Utilitas")!,
-          type: "expense",
-          amount: 650_000,
-          title: "Tagihan Listrik PLN",
-          frequency: "monthly",
-          nextRunDate: todayISO,
-          isActive: true,
-          createdAt: nowIso,
-        },
-        {
-          id: crypto.randomUUID(),
-          userId: demoUserId,
-          walletId: bcaId,
-          categoryId: demoCatByName.get("Gaji")!,
-          type: "income",
-          amount: 14_500_000,
-          title: "Gaji Bulanan",
-          frequency: "monthly",
-          nextRunDate: nextMonthFirstISO,
-          isActive: true,
-          createdAt: nowIso,
-        },
-      ])
-      .run();
+    await tx.insert(recurringRules).values([
+      {
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        walletId: kasId,
+        categoryId: demoCatByName.get("Tagihan & Utilitas")!,
+        type: "expense",
+        amount: 450_000,
+        title: "Tagihan Internet & WiFi Rumah",
+        frequency: "monthly",
+        nextRunDate: yesterdayISO,
+        isActive: true,
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        walletId: kasId,
+        categoryId: demoCatByName.get("Tagihan & Utilitas")!,
+        type: "expense",
+        amount: 650_000,
+        title: "Tagihan Listrik PLN",
+        frequency: "monthly",
+        nextRunDate: todayISO,
+        isActive: true,
+        createdAt: nowIso,
+      },
+      {
+        id: crypto.randomUUID(),
+        userId: demoUserId,
+        walletId: bcaId,
+        categoryId: demoCatByName.get("Gaji")!,
+        type: "income",
+        amount: 14_500_000,
+        title: "Gaji Bulanan",
+        frequency: "monthly",
+        nextRunDate: nextMonthFirstISO,
+        isActive: true,
+        createdAt: nowIso,
+      },
+    ]);
 
     return toSafeUser({
       id: demoUserId,
@@ -661,94 +646,99 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
  * Deletes all demo & partner user data cleanly and re-seeds the fresh baseline.
  */
 export async function resetDemoData(db: AppDb): Promise<SafeUser> {
-  db.transaction((tx) => {
-    const demoUsers = tx
+  await db.transaction(async (tx) => {
+    const demoUsers = await tx
       .select({ id: users.id })
       .from(users)
-      .where(inArray(users.email, [DEMO_EMAIL, DEMO_PARTNER_EMAIL]))
-      .all();
+      .where(inArray(users.email, [DEMO_EMAIL, DEMO_PARTNER_EMAIL]));
 
     if (demoUsers.length === 0) {
       return;
     }
 
     const demoUserIds = demoUsers.map((u) => u.id);
-    const ownedWallets = tx
+    const ownedWallets = await tx
       .select({ id: wallets.id })
       .from(wallets)
-      .where(inArray(wallets.ownerId, demoUserIds))
-      .all();
+      .where(inArray(wallets.ownerId, demoUserIds));
     const ownedWalletIds = ownedWallets.map((w) => w.id);
 
+    await tx
+      .delete(bankSyncLogs)
+      .where(inArray(bankSyncLogs.userId, demoUserIds));
+    await tx
+      .delete(bankIntegrations)
+      .where(inArray(bankIntegrations.userId, demoUserIds));
+
     if (ownedWalletIds.length > 0) {
-      tx.delete(transactions)
+      await tx
+        .delete(transactions)
         .where(
           or(
             inArray(transactions.userId, demoUserIds),
             inArray(transactions.walletId, ownedWalletIds),
             inArray(transactions.targetWalletId, ownedWalletIds)
           )
-        )
-        .run();
+        );
 
-      tx.delete(savingsGoals)
+      await tx
+        .delete(savingsGoals)
         .where(
           or(
             inArray(savingsGoals.userId, demoUserIds),
             inArray(savingsGoals.walletId, ownedWalletIds)
           )
-        )
-        .run();
+        );
 
-      tx.delete(recurringRules)
+      await tx
+        .delete(recurringRules)
         .where(
           or(
             inArray(recurringRules.userId, demoUserIds),
             inArray(recurringRules.walletId, ownedWalletIds)
           )
-        )
-        .run();
+        );
 
-      tx.delete(walletInvites)
+      await tx
+        .delete(walletInvites)
         .where(
           or(
             inArray(walletInvites.createdBy, demoUserIds),
             inArray(walletInvites.walletId, ownedWalletIds)
           )
-        )
-        .run();
+        );
 
-      tx.delete(walletMembers)
+      await tx
+        .delete(walletMembers)
         .where(
           or(
             inArray(walletMembers.userId, demoUserIds),
             inArray(walletMembers.walletId, ownedWalletIds)
           )
-        )
-        .run();
+        );
     } else {
-      tx.delete(transactions)
-        .where(inArray(transactions.userId, demoUserIds))
-        .run();
-      tx.delete(savingsGoals)
-        .where(inArray(savingsGoals.userId, demoUserIds))
-        .run();
-      tx.delete(recurringRules)
-        .where(inArray(recurringRules.userId, demoUserIds))
-        .run();
-      tx.delete(walletInvites)
-        .where(inArray(walletInvites.createdBy, demoUserIds))
-        .run();
-      tx.delete(walletMembers)
-        .where(inArray(walletMembers.userId, demoUserIds))
-        .run();
+      await tx
+        .delete(transactions)
+        .where(inArray(transactions.userId, demoUserIds));
+      await tx
+        .delete(savingsGoals)
+        .where(inArray(savingsGoals.userId, demoUserIds));
+      await tx
+        .delete(recurringRules)
+        .where(inArray(recurringRules.userId, demoUserIds));
+      await tx
+        .delete(walletInvites)
+        .where(inArray(walletInvites.createdBy, demoUserIds));
+      await tx
+        .delete(walletMembers)
+        .where(inArray(walletMembers.userId, demoUserIds));
     }
 
-    tx.delete(budgets).where(inArray(budgets.userId, demoUserIds)).run();
-    tx.delete(wallets).where(inArray(wallets.ownerId, demoUserIds)).run();
-    tx.delete(categories).where(inArray(categories.userId, demoUserIds)).run();
-    tx.delete(sessions).where(inArray(sessions.userId, demoUserIds)).run();
-    tx.delete(users).where(inArray(users.id, demoUserIds)).run();
+    await tx.delete(budgets).where(inArray(budgets.userId, demoUserIds));
+    await tx.delete(wallets).where(inArray(wallets.ownerId, demoUserIds));
+    await tx.delete(categories).where(inArray(categories.userId, demoUserIds));
+    await tx.delete(sessions).where(inArray(sessions.userId, demoUserIds));
+    await tx.delete(users).where(inArray(users.id, demoUserIds));
   });
 
   return ensureDemoSeeded(db);

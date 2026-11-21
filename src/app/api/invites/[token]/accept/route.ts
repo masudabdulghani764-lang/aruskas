@@ -12,7 +12,7 @@ export async function POST(
     const user = await requireCurrentUser();
     const { token } = await context.params;
 
-    const result = acceptWalletInvite(getDb(), token, user);
+    const result = await acceptWalletInvite(await getDb(), token, user);
     return NextResponse.json(result);
   } catch (err) {
     return handleApiError(err);

@@ -72,7 +72,7 @@ export async function GET(request: Request) {
       ownerId: optParam(searchParams.get("ownerId")),
     });
 
-    const categories = listCategories(getDb(), user.id, parsed);
+    const categories = await listCategories(await getDb(), user.id, parsed);
     return NextResponse.json({ categories });
   } catch (err) {
     return handleApiError(err);
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = createCategorySchema.parse(body);
 
-    const category = createCategory(getDb(), user.id, parsed);
+    const category = await createCategory(await getDb(), user.id, parsed);
     return NextResponse.json({ category }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

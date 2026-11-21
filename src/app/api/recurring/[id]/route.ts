@@ -74,7 +74,7 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const parsed = updateRecurringSchema.parse(body);
 
-    const rule = updateRecurringRule(getDb(), id, user.id, parsed);
+    const rule = await updateRecurringRule(await getDb(), id, user.id, parsed);
     return NextResponse.json({ rule });
   } catch (err) {
     return handleApiError(err);
@@ -89,7 +89,7 @@ export async function DELETE(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    deleteRecurringRule(getDb(), id, user.id);
+    await deleteRecurringRule(await getDb(), id, user.id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return handleApiError(err);

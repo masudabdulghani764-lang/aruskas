@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { closeDb, createDb, getDb } from "@/db";
+import { type AppDb, closeDb, createDb, getDb } from "@/db";
 import { categories, transactions, wallets } from "@/db/schema";
 import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import {
@@ -86,22 +86,21 @@ async function expectAppError(
   return appErr;
 }
 
-function getWalletBalance(
-  db: ReturnType<typeof createDb>["db"],
+async function getWalletBalance(
+  db: AppDb,
   walletId: string
-): number {
-  const row = db
+): Promise<number> {
+  const [row] = await db
     .select({ balance: wallets.balance })
     .from(wallets)
-    .where(eq(wallets.id, walletId))
-    .get();
+    .where(eq(wallets.id, walletId));
   expect(row).toBeDefined();
   return row!.balance;
 }
 
 describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
   test("categories: list (with type & shared ownerId guard), create, update, and Review Focus 409 delete guard", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Raka",
@@ -119,28 +118,28 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         password: "Password123!",
       });
 
-      const sharedWallet = createWallet(db, owner.user.id, {
+      const sharedWallet = await createWallet(db, owner.user.id, {
         name: "Kas Bersama",
         type: "bank",
         initialBalance: 1_000_000,
       });
-      const invite = createWalletInvite(db, sharedWallet.id, owner.user.id, {
+      const invite = await createWalletInvite(db, sharedWallet.id, owner.user.id, {
         email: partner.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, invite.token, partner.user);
+      await acceptWalletInvite(db, invite.token, partner.user);
 
       // Default categories seeded: 5 income + 7 expense = 12
-      const allOwnerCats = listCategories(db, owner.user.id);
+      const allOwnerCats = await listCategories(db, owner.user.id);
       expect(allOwnerCats).toHaveLength(12);
-      const expenseCats = listCategories(db, owner.user.id, {
+      const expenseCats = await listCategories(db, owner.user.id, {
         type: "expense",
       });
       expect(expenseCats).toHaveLength(7);
       expect(expenseCats.every((c) => c.type === "expense")).toBe(true);
 
       // Shared wallet partner can read owner's categories via ownerId
-      const partnerViewingOwnerCats = listCategories(db, partner.user.id, {
+      const partnerViewingOwnerCats = await listCategories(db, partner.user.id, {
         ownerId: owner.user.id,
         type: "expense",
       });
@@ -159,7 +158,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Create custom category with defaults and explicit values
-      const customA = createCategory(db, owner.user.id, {
+      const customA = await createCategory(db, owner.user.id, {
         name: "  Langganan Cloud  ",
         type: "expense",
       });
@@ -169,7 +168,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(customA.icon.length).toBeGreaterThan(0);
       expect(customA.color.length).toBeGreaterThan(0);
 
-      const customB = createCategory(db, owner.user.id, {
+      const customB = await createCategory(db, owner.user.id, {
         name: "Royalti Buku",
         type: "income",
         icon: "BookOpen",
@@ -189,7 +188,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Update category
-      const updated = updateCategory(db, owner.user.id, customA.id, {
+      const updated = await updateCategory(db, owner.user.id, customA.id, {
         name: "Cloud & Domain",
         color: "#0284c7",
       });
@@ -214,7 +213,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Review Focus: Deleting category referenced by a transaction throws AppError(409) mentioning usage count
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: sharedWallet.id,
         categoryId: customA.id,
         type: "expense",
@@ -232,12 +231,12 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Also referenced by budget and recurring rule -> total count = 3
-      upsertBudget(db, owner.user.id, {
+      await upsertBudget(db, owner.user.id, {
         categoryId: customA.id,
         month: "2026-11",
         limitAmount: 500_000,
       });
-      createRecurringRule(db, owner.user.id, {
+      await createRecurringRule(db, owner.user.id, {
         walletId: sharedWallet.id,
         categoryId: customA.id,
         type: "expense",
@@ -256,16 +255,16 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Deleting unreferenced category succeeds cleanly
-      deleteCategory(db, owner.user.id, customB.id);
-      const afterDelete = listCategories(db, owner.user.id);
+      await deleteCategory(db, owner.user.id, customB.id);
+      const afterDelete = await listCategories(db, owner.user.id);
       expect(afterDelete.some((c) => c.id === customB.id)).toBe(false);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("budgets: realization across owned wallets only (ignores transfer & viewer wallets), thresholds (<80%, 80-100%, >100%), upsert & copy idempotency", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const user = await registerUser(db, {
         name: "Raka",
@@ -278,59 +277,59 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         password: "Password123!",
       });
 
-      const personalWallet = createWallet(db, user.user.id, {
+      const personalWallet = await createWallet(db, user.user.id, {
         name: "BCA Pribadi",
         type: "bank",
         initialBalance: 10_000_000,
       });
-      const sharedOwnedWallet = createWallet(db, user.user.id, {
+      const sharedOwnedWallet = await createWallet(db, user.user.id, {
         name: "Kas Keluarga",
         type: "cash",
         initialBalance: 5_000_000,
       });
-      const partnerWallet = createWallet(db, partner.user.id, {
+      const partnerWallet = await createWallet(db, partner.user.id, {
         name: "Tabungan Nadia",
         type: "bank",
         initialBalance: 5_000_000,
       });
 
       // Partner is editor on user's sharedOwnedWallet
-      const invPartner = createWalletInvite(
+      const invPartner = await createWalletInvite(
         db,
         sharedOwnedWallet.id,
         user.user.id,
         { email: partner.user.email, role: "editor" }
       );
-      acceptWalletInvite(db, invPartner.token, partner.user);
+      await acceptWalletInvite(db, invPartner.token, partner.user);
 
       // User is viewer on partnerWallet
-      const invViewer = createWalletInvite(
+      const invViewer = await createWalletInvite(
         db,
         partnerWallet.id,
         partner.user.id,
         { email: user.user.email, role: "viewer" }
       );
-      acceptWalletInvite(db, invViewer.token, user.user);
+      await acceptWalletInvite(db, invViewer.token, user.user);
 
       // Also test editor on someone else's wallet (not owned by user) -> must still be excluded
-      const partnerWalletEditor = createWallet(db, partner.user.id, {
+      const partnerWalletEditor = await createWallet(db, partner.user.id, {
         name: "Proyek Nadia",
         type: "bank",
         initialBalance: 2_000_000,
       });
-      const invEditorOther = createWalletInvite(
+      const invEditorOther = await createWalletInvite(
         db,
         partnerWalletEditor.id,
         partner.user.id,
         { email: user.user.email, role: "editor" }
       );
-      acceptWalletInvite(db, invEditorOther.token, user.user);
+      await acceptWalletInvite(db, invEditorOther.token, user.user);
 
-      const expenseCats = listCategories(db, user.user.id, { type: "expense" });
-      const incomeCat = listCategories(db, user.user.id, { type: "income" })[0];
-      const partnerExpenseCat = listCategories(db, partner.user.id, {
+      const expenseCats = await listCategories(db, user.user.id, { type: "expense" });
+      const incomeCat = (await listCategories(db, user.user.id, { type: "income" }))[0];
+      const partnerExpenseCat = (await listCategories(db, partner.user.id, {
         type: "expense",
-      })[0];
+      }))[0];
 
       const catSafe = expenseCats[0];
       const catWarn80 = expenseCats[1];
@@ -376,29 +375,29 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Upsert budgets in 2026-11 (plus update existing limit via upsert)
-      upsertBudget(db, user.user.id, {
+      await upsertBudget(db, user.user.id, {
         categoryId: catSafe.id,
         month: "2026-11",
         limitAmount: 500_000,
       });
-      const upsertedSafe = upsertBudget(db, user.user.id, {
+      const upsertedSafe = await upsertBudget(db, user.user.id, {
         categoryId: catSafe.id,
         month: "2026-11",
         limitAmount: 1_000_000,
       });
       expect(upsertedSafe.limitAmount).toBe(1_000_000);
 
-      upsertBudget(db, user.user.id, {
+      await upsertBudget(db, user.user.id, {
         categoryId: catWarn80.id,
         month: "2026-11",
         limitAmount: 1_000_000,
       });
-      upsertBudget(db, user.user.id, {
+      await upsertBudget(db, user.user.id, {
         categoryId: catWarn100.id,
         month: "2026-11",
         limitAmount: 1_000_000,
       });
-      upsertBudget(db, user.user.id, {
+      await upsertBudget(db, user.user.id, {
         categoryId: catExceeded.id,
         month: "2026-11",
         limitAmount: 1_000_000,
@@ -406,7 +405,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
 
       // Expenses in 2026-11:
       // 1. catSafe: 799.000 in personalWallet (79.9% -> "safe", NOT rounded up to 80!)
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: personalWallet.id,
         categoryId: catSafe.id,
         type: "expense",
@@ -416,7 +415,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       });
 
       // Also expense in another month (2026-10) -> must NOT count toward 2026-11
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: personalWallet.id,
         categoryId: catSafe.id,
         type: "expense",
@@ -426,7 +425,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       });
 
       // Transfer -> must NOT count
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: personalWallet.id,
         targetWalletId: sharedOwnedWallet.id,
         type: "transfer",
@@ -436,7 +435,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       });
 
       // Viewer wallet expense by partner -> must NOT count in user's budget
-      createTransaction(db, partner.user.id, {
+      await createTransaction(db, partner.user.id, {
         walletId: partnerWallet.id,
         categoryId: partnerExpenseCat.id,
         type: "expense",
@@ -445,23 +444,21 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         occurredAt: "2026-11-07",
       });
       // Even if partner somehow logged using user's category on partner's own wallet (impossible via API, simulate raw DB row to verify wallets.ownerId filter!)
-      db.insert(transactions)
-        .values({
-          id: crypto.randomUUID(),
-          walletId: partnerWallet.id,
-          categoryId: catSafe.id,
-          userId: partner.user.id,
-          type: "expense",
-          amount: 500_000,
-          title: "Viewer Wallet Expense",
-          occurredAt: "2026-11-08",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-        .run();
+      await db.insert(transactions).values({
+        id: crypto.randomUUID(),
+        walletId: partnerWallet.id,
+        categoryId: catSafe.id,
+        userId: partner.user.id,
+        type: "expense",
+        amount: 500_000,
+        title: "Viewer Wallet Expense",
+        occurredAt: "2026-11-08",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
       // 2. catWarn80: 500.000 by user in personal + 300.000 by partner in sharedOwnedWallet = 800.000 (80% -> "warning")
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: personalWallet.id,
         categoryId: catWarn80.id,
         type: "expense",
@@ -469,7 +466,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         title: "Bensin",
         occurredAt: "2026-11-09",
       });
-      createTransaction(db, partner.user.id, {
+      await createTransaction(db, partner.user.id, {
         walletId: sharedOwnedWallet.id,
         categoryId: catWarn80.id,
         type: "expense",
@@ -479,7 +476,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       });
 
       // 3. catWarn100: exactly 1.000.000 (100% -> "warning")
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: sharedOwnedWallet.id,
         categoryId: catWarn100.id,
         type: "expense",
@@ -489,7 +486,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       });
 
       // 4. catExceeded: 1.000.100 (>100% -> "exceeded")
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: personalWallet.id,
         categoryId: catExceeded.id,
         type: "expense",
@@ -498,7 +495,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         occurredAt: "2026-11-12",
       });
 
-      const progress = listMonthlyBudgets(db, user.user.id, "2026-11");
+      const progress = await listMonthlyBudgets(db, user.user.id, "2026-11");
       expect(progress).toHaveLength(4);
 
       const safeView = progress.find((b) => b.categoryId === catSafe.id)!;
@@ -526,27 +523,27 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(exceededView.status).toBe("exceeded");
 
       // Copy budgets from 2026-11 to 2026-12 when 2026-12 already has 1 override
-      upsertBudget(db, user.user.id, {
+      await upsertBudget(db, user.user.id, {
         categoryId: catSafe.id,
         month: "2026-12",
         limitAmount: 1_500_000,
       });
 
-      const firstCopy = copyBudgetsFromPreviousMonth(
+      const firstCopy = await copyBudgetsFromPreviousMonth(
         db,
         user.user.id,
         "2026-12"
       );
       expect(firstCopy).toEqual({ copiedCount: 3 });
 
-      const decBudgets = listMonthlyBudgets(db, user.user.id, "2026-12");
+      const decBudgets = await listMonthlyBudgets(db, user.user.id, "2026-12");
       expect(decBudgets).toHaveLength(4);
       expect(
         decBudgets.find((b) => b.categoryId === catSafe.id)!.limitAmount
       ).toBe(1_500_000);
 
       // Idempotent second call copies 0
-      const secondCopy = copyBudgetsFromPreviousMonth(
+      const secondCopy = await copyBudgetsFromPreviousMonth(
         db,
         user.user.id,
         "2026-12"
@@ -554,7 +551,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(secondCopy).toEqual({ copiedCount: 0 });
 
       // Year-boundary copy: 2026-12 -> 2027-01
-      const janCopy = copyBudgetsFromPreviousMonth(db, user.user.id, "2027-01");
+      const janCopy = await copyBudgetsFromPreviousMonth(db, user.user.id, "2027-01");
       expect(janCopy).toEqual({ copiedCount: 4 });
 
       // Delete budget ownership & removal
@@ -566,15 +563,15 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         () => deleteBudget(db, user.user.id, "budget-missing"),
         404
       );
-      deleteBudget(db, user.user.id, safeView.id);
-      expect(listMonthlyBudgets(db, user.user.id, "2026-11")).toHaveLength(3);
+      await deleteBudget(db, user.user.id, safeView.id);
+      expect(await listMonthlyBudgets(db, user.user.id, "2026-11")).toHaveLength(3);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("savings goals: CRUD + dual-mode deposit (wallet_transfer linked transfer, unlinked/same-wallet expense category, virtual, and atomic rollback)", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const user = await registerUser(db, {
         name: "Raka",
@@ -587,28 +584,28 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         password: "Password123!",
       });
 
-      const checkingWallet = createWallet(db, user.user.id, {
+      const checkingWallet = await createWallet(db, user.user.id, {
         name: "BCA Utama",
         type: "bank",
         initialBalance: 10_000_000,
       });
-      const savingsWallet = createWallet(db, user.user.id, {
+      const savingsWallet = await createWallet(db, user.user.id, {
         name: "Tabungan Pendidikan",
         type: "savings",
         initialBalance: 2_000_000,
       });
-      const partnerViewerWallet = createWallet(db, partner.user.id, {
+      const partnerViewerWallet = await createWallet(db, partner.user.id, {
         name: "Dompet Nadia",
         type: "savings",
         initialBalance: 3_000_000,
       });
-      const viewerInv = createWalletInvite(
+      const viewerInv = await createWalletInvite(
         db,
         partnerViewerWallet.id,
         partner.user.id,
         { email: user.user.email, role: "viewer" }
       );
-      acceptWalletInvite(db, viewerInv.token, user.user);
+      await acceptWalletInvite(db, viewerInv.token, user.user);
 
       // Cannot link goal to wallet where user only has viewer access -> 403
       await expectAppError(
@@ -622,7 +619,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
 
       // Create linked goal & unlinked goal
-      const linkedGoal = createSavingsGoal(db, user.user.id, {
+      const linkedGoal = await createSavingsGoal(db, user.user.id, {
         name: "Dana Darurat",
         targetAmount: 10_000_000,
         currentAmount: 2_000_000,
@@ -634,7 +631,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(linkedGoal.remainingAmount).toBe(8_000_000);
       expect(linkedGoal.percentage).toBe(20);
 
-      const unlinkedGoal = createSavingsGoal(db, user.user.id, {
+      const unlinkedGoal = await createSavingsGoal(db, user.user.id, {
         name: "Laptop Kerja",
         targetAmount: 8_000_000,
       });
@@ -642,10 +639,10 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(unlinkedGoal.walletName).toBeNull();
       expect(unlinkedGoal.currentAmount).toBe(0);
 
-      expect(listSavingsGoals(db, user.user.id)).toHaveLength(2);
+      expect(await listSavingsGoals(db, user.user.id)).toHaveLength(2);
 
       // Mode 1: wallet_transfer on linkedGoal (source != goal.walletId)
-      const afterLinkedTransfer = depositToSavingsGoal(
+      const afterLinkedTransfer = await depositToSavingsGoal(
         db,
         user.user.id,
         linkedGoal.id,
@@ -659,10 +656,10 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
       expect(afterLinkedTransfer.currentAmount).toBe(3_500_000);
       expect(afterLinkedTransfer.remainingAmount).toBe(6_500_000);
-      expect(getWalletBalance(db, checkingWallet.id)).toBe(8_500_000);
-      expect(getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
+      expect(await getWalletBalance(db, checkingWallet.id)).toBe(8_500_000);
+      expect(await getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
 
-      const txAfterLinked = listTransactions(db, user.user.id, {});
+      const txAfterLinked = await listTransactions(db, user.user.id, {});
       expect(txAfterLinked.items).toHaveLength(1);
       expect(txAfterLinked.items[0].type).toBe("transfer");
       expect(txAfterLinked.items[0].title).toBe("Setoran Target: Dana Darurat");
@@ -670,7 +667,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(txAfterLinked.items[0].targetWalletId).toBe(savingsWallet.id);
 
       // Mode 2: wallet_transfer on unlinkedGoal -> creates/reuses "Tabungan & Investasi" expense category & expense tx
-      const afterUnlinkedTransfer = depositToSavingsGoal(
+      const afterUnlinkedTransfer = await depositToSavingsGoal(
         db,
         user.user.id,
         unlinkedGoal.id,
@@ -682,10 +679,10 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         }
       );
       expect(afterUnlinkedTransfer.currentAmount).toBe(1_000_000);
-      expect(getWalletBalance(db, checkingWallet.id)).toBe(7_500_000);
+      expect(await getWalletBalance(db, checkingWallet.id)).toBe(7_500_000);
 
       // Second deposit on same-wallet goal (goal.walletId === sourceWalletId) must reuse existing "Tabungan & Investasi"
-      const updatedGoalSameWallet = updateSavingsGoal(
+      const updatedGoalSameWallet = await updateSavingsGoal(
         db,
         user.user.id,
         unlinkedGoal.id,
@@ -693,7 +690,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
       expect(updatedGoalSameWallet.walletId).toBe(checkingWallet.id);
 
-      const afterSameWalletDeposit = depositToSavingsGoal(
+      const afterSameWalletDeposit = await depositToSavingsGoal(
         db,
         user.user.id,
         unlinkedGoal.id,
@@ -705,18 +702,18 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         }
       );
       expect(afterSameWalletDeposit.currentAmount).toBe(1_500_000);
-      expect(getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
+      expect(await getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
 
-      const savingsCats = db
-        .select()
-        .from(categories)
-        .where(eq(categories.userId, user.user.id))
-        .all()
-        .filter((c) => c.name === "Tabungan & Investasi");
+      const savingsCats = (
+        await db
+          .select()
+          .from(categories)
+          .where(eq(categories.userId, user.user.id))
+      ).filter((c) => c.name === "Tabungan & Investasi");
       expect(savingsCats).toHaveLength(1);
       expect(savingsCats[0].type).toBe("expense");
 
-      const allTx = listTransactions(db, user.user.id, {});
+      const allTx = await listTransactions(db, user.user.id, {});
       expect(allTx.items).toHaveLength(3);
       const expenseDeposits = allTx.items.filter((t) => t.type === "expense");
       expect(expenseDeposits).toHaveLength(2);
@@ -724,7 +721,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       expect(expenseDeposits[0].categoryId).toBe(savingsCats[0].id);
 
       // Mode 3: virtual deposit updates currentAmount ONLY without changing any wallet or creating transaction
-      const afterVirtual = depositToSavingsGoal(
+      const afterVirtual = await depositToSavingsGoal(
         db,
         user.user.id,
         linkedGoal.id,
@@ -734,9 +731,9 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         }
       );
       expect(afterVirtual.currentAmount).toBe(4_000_000);
-      expect(getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
-      expect(getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
-      expect(listTransactions(db, user.user.id, {}).items).toHaveLength(3);
+      expect(await getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
+      expect(await getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
+      expect((await listTransactions(db, user.user.id, {})).items).toHaveLength(3);
 
       // Validation & authorization checks
       await expectAppError(
@@ -782,27 +779,27 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         400
       );
       // Balances unchanged on rejected deposits
-      expect(getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
-      expect(getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
+      expect(await getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
+      expect(await getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
 
       // Atomic rollback: goal linked to shared editor wallet, then access is revoked before deposit -> 403 & zero drift
-      const sharedSavings = createWallet(db, partner.user.id, {
+      const sharedSavings = await createWallet(db, partner.user.id, {
         name: "Tabungan Bersama Nadia",
         type: "savings",
         initialBalance: 1_000_000,
       });
-      const edInv = createWalletInvite(db, sharedSavings.id, partner.user.id, {
+      const edInv = await createWalletInvite(db, sharedSavings.id, partner.user.id, {
         email: user.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, edInv.token, user.user);
+      await acceptWalletInvite(db, edInv.token, user.user);
 
-      const sharedGoal = createSavingsGoal(db, user.user.id, {
+      const sharedGoal = await createSavingsGoal(db, user.user.id, {
         name: "Liburan Bersama",
         targetAmount: 5_000_000,
         walletId: sharedSavings.id,
       });
-      removeWalletMember(db, sharedSavings.id, partner.user.id, user.user.id);
+      await removeWalletMember(db, sharedSavings.id, partner.user.id, user.user.id);
 
       await expectAppError(
         () =>
@@ -813,16 +810,16 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
           }),
         403
       );
-      expect(getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
-      expect(getWalletBalance(db, sharedSavings.id)).toBe(1_000_000);
+      expect(await getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
+      expect(await getWalletBalance(db, sharedSavings.id)).toBe(1_000_000);
       expect(
-        listSavingsGoals(db, user.user.id).find((g) => g.id === sharedGoal.id)!
+        (await listSavingsGoals(db, user.user.id)).find((g) => g.id === sharedGoal.id)!
           .currentAmount
       ).toBe(0);
-      deleteSavingsGoal(db, user.user.id, sharedGoal.id);
+      await deleteSavingsGoal(db, user.user.id, sharedGoal.id);
 
       // Update & delete goal
-      const patched = updateSavingsGoal(db, user.user.id, linkedGoal.id, {
+      const patched = await updateSavingsGoal(db, user.user.id, linkedGoal.id, {
         targetAmount: 3_000_000,
         notes: null,
       });
@@ -833,17 +830,17 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         () => deleteSavingsGoal(db, partner.user.id, linkedGoal.id),
         403
       );
-      deleteSavingsGoal(db, user.user.id, unlinkedGoal.id);
-      expect(listSavingsGoals(db, user.user.id)).toHaveLength(1);
+      await deleteSavingsGoal(db, user.user.id, unlinkedGoal.id);
+      expect(await listSavingsGoals(db, user.user.id)).toHaveLength(1);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("API route handlers enforce 401, 400 malformed JSON, Indonesian Zod errors (no English leakage), and full HTTP lifecycle", async () => {
     const prevDbPath = process.env.DATABASE_PATH;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-plan-api-"));
-    process.env.DATABASE_PATH = path.join(tempDir, "test.db");
+    process.env.DATABASE_PATH = `memory://plan-api-${crypto.randomUUID()}`;
     mockSessionCookie = undefined;
 
     function jsonReq(url: string, method: string, body: unknown): Request {
@@ -863,7 +860,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
     }
 
     try {
-      const db = getDb();
+      const db = await getDb();
       const owner = await registerUser(db, {
         name: "Raka",
         email: "raka-plan-api@aruskas.test",
@@ -972,21 +969,21 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       // Authenticate as owner
       mockSessionCookie = owner.token;
 
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "BCA Uji",
         type: "bank",
         initialBalance: 5_000_000,
       });
-      const savings = createWallet(db, owner.user.id, {
+      const savings = await createWallet(db, owner.user.id, {
         name: "Tabungan Uji",
         type: "savings",
         initialBalance: 1_000_000,
       });
-      const sharedInvite = createWalletInvite(db, wallet.id, owner.user.id, {
+      const sharedInvite = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: partner.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, sharedInvite.token, partner.user);
+      await acceptWalletInvite(db, sharedInvite.token, partner.user);
 
       // 2. Malformed & non-object JSON -> 400
       expect(
@@ -1205,8 +1202,8 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
         { params: Promise.resolve({ id: goalId }) }
       );
       expect(depositWalletRes.status).toBe(200);
-      expect(getWalletBalance(db, wallet.id)).toBe(4_000_000);
-      expect(getWalletBalance(db, savings.id)).toBe(2_000_000);
+      expect(await getWalletBalance(db, wallet.id)).toBe(4_000_000);
+      expect(await getWalletBalance(db, savings.id)).toBe(2_000_000);
 
       const depositVirtualRes = await depositGoalRoute(
         jsonReq(`http://localhost/api/goals/${goalId}/deposit`, "POST", {
@@ -1265,7 +1262,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
       expect(invalidDeadlineRes.status).toBe(400);
     } finally {
-      closeDb();
+      await closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

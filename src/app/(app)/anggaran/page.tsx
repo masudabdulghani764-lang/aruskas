@@ -21,14 +21,15 @@ export default async function AnggaranPage() {
     redirect("/masuk");
   }
 
-  const db = getDb();
+  const db = await getDb();
   const initialMonth = getCurrentMonthYM();
-  const initialBudgets = listMonthlyBudgets(db, user.id, initialMonth);
-  const initialGoals = listSavingsGoals(db, user.id);
-  const initialExpenseCategories = listCategories(db, user.id, {
-    type: "expense",
-  });
-  const initialWallets = listUserWallets(db, user.id);
+  const [initialBudgets, initialGoals, initialExpenseCategories, initialWallets] =
+    await Promise.all([
+      listMonthlyBudgets(db, user.id, initialMonth),
+      listSavingsGoals(db, user.id),
+      listCategories(db, user.id, { type: "expense" }),
+      listUserWallets(db, user.id),
+    ]);
 
   return (
     <BudgetsGoalsClient

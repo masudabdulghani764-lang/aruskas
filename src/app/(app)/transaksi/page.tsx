@@ -37,24 +37,28 @@ export default async function TransaksiPage({
   const initialTab =
     resolvedParams.tab === "recurring" ? "recurring" : "history";
 
-  const db = getDb();
+  const db = await getDb();
   const currentYM = getCurrentMonthYM();
   const initialFrom = `${currentYM}-01`;
   const initialTo = getMonthEndISO(currentYM);
 
-  const initialWallets = listUserWallets(db, user.id);
-  const initialCategories = listCategories(db, user.id).map((c) => ({
+  const [initialWallets, rawCategories, initialTx, initialRules] =
+    await Promise.all([
+      listUserWallets(db, user.id),
+      listCategories(db, user.id),
+      listTransactions(db, user.id, {
+        from: initialFrom,
+        to: initialTo,
+      }),
+      listRecurringRules(db, user.id),
+    ]);
+  const initialCategories = rawCategories.map((c) => ({
     id: c.id,
     userId: c.userId,
     name: c.name,
     type: c.type,
     color: c.color,
   }));
-  const initialTx = listTransactions(db, user.id, {
-    from: initialFrom,
-    to: initialTo,
-  });
-  const initialRules = listRecurringRules(db, user.id);
 
   return (
     <TransactionsClient

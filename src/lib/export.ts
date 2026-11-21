@@ -62,10 +62,10 @@ export function buildTransactionsCsv(rows: TransactionView[]): string {
 /**
  * Builds a complete, credential-free JSON backup snapshot for the authenticated user.
  */
-export function buildUserBackupJson(
+export async function buildUserBackupJson(
   db: AppDb,
   user: SafeUser
-): {
+): Promise<{
   exportedAt: string;
   user: SafeUser;
   wallets: WalletWithRole[];
@@ -74,33 +74,40 @@ export function buildUserBackupJson(
   budgets: BudgetProgressView[];
   savingsGoals: SavingsGoalView[];
   recurringRules: RecurringRuleView[];
-} {
-  const wallets = listUserWallets(db, user.id, { includeArchived: true });
-  const userCategories = listCategories(db, user.id);
-  const transactions = listTransactions(db, user.id, {}).items;
+}> {
+  const [
+    userWallets,
+    userCategories,
+    txResult,
+    budgetMonthRows,
+    userGoals,
+    userRecurring,
+  ] = await Promise.all([
+    listUserWallets(db, user.id, { includeArchived: true }),
+    listCategories(db, user.id),
+    listTransactions(db, user.id, {}),
+    db
+      .selectDistinct({ month: budgets.month })
+      .from(budgets)
+      .where(eq(budgets.userId, user.id))
+      .orderBy(desc(budgets.month)),
+    listSavingsGoals(db, user.id),
+    listRecurringRules(db, user.id),
+  ]);
 
-  const budgetMonthRows = db
-    .selectDistinct({ month: budgets.month })
-    .from(budgets)
-    .where(eq(budgets.userId, user.id))
-    .orderBy(desc(budgets.month))
-    .all();
-
-  const userBudgets = budgetMonthRows.flatMap((row) =>
-    listMonthlyBudgets(db, user.id, row.month)
+  const budgetGroups = await Promise.all(
+    budgetMonthRows.map((row) => listMonthlyBudgets(db, user.id, row.month))
   );
-
-  const savingsGoals = listSavingsGoals(db, user.id);
-  const recurringRules = listRecurringRules(db, user.id);
+  const userBudgets = budgetGroups.flat();
 
   return {
     exportedAt: new Date().toISOString(),
     user,
-    wallets,
+    wallets: userWallets,
     categories: userCategories,
-    transactions,
+    transactions: txResult.items,
     budgets: userBudgets,
-    savingsGoals,
-    recurringRules,
+    savingsGoals: userGoals,
+    recurringRules: userRecurring,
   };
 }

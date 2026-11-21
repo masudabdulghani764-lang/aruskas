@@ -17,6 +17,60 @@ export class AppError extends Error {
 }
 
 /**
+ * Detects PostgreSQL unique constraint violations (SQLSTATE 23505), inspecting
+ * both top-level and Drizzle-wrapped `.cause` errors, optionally matching a constraint hint.
+ */
+export function isPgUniqueViolation(
+  err: unknown,
+  constraintHint?: string
+): boolean {
+  if (!err || typeof err !== "object") {
+    return false;
+  }
+
+  const candidates = [
+    err as Record<string, unknown>,
+    ((err as Record<string, unknown>).cause ?? null) as Record<
+      string,
+      unknown
+    > | null,
+  ].filter(Boolean) as Record<string, unknown>[];
+
+  let isUnique = false;
+  let haystack = "";
+
+  for (const item of candidates) {
+    if (item.code === "23505") {
+      isUnique = true;
+    }
+    if (typeof item.constraint === "string") {
+      haystack += ` ${item.constraint.toLowerCase()}`;
+    }
+    if (typeof item.detail === "string") {
+      haystack += ` ${item.detail.toLowerCase()}`;
+    }
+    if (typeof item.message === "string") {
+      const msgLower = item.message.toLowerCase();
+      haystack += ` ${msgLower}`;
+      if (
+        msgLower.includes("duplicate key value violates unique constraint") ||
+        msgLower.includes("unique constraint failed")
+      ) {
+        isUnique = true;
+      }
+    }
+  }
+
+  if (!isUnique) {
+    return false;
+  }
+  if (!constraintHint) {
+    return true;
+  }
+  return haystack.includes(constraintHint.toLowerCase());
+}
+
+/**
  * Converts domain, Zod validation, or unexpected errors into standardized
  * Indonesian JSON HTTP responses.
  */

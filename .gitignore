@@ -5,7 +5,9 @@ data/
 bin/
 AGENTS.md
 .superpowers/
+.vercel/
 .env
+.env*
 .env*.local
 *.tsbuildinfo
 next-env.d.ts

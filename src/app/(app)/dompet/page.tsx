@@ -17,9 +17,11 @@ export default async function DompetPage() {
     redirect("/masuk");
   }
 
-  const db = getDb();
-  const initialWallets = listUserWallets(db, user.id, { includeArchived: true });
-  const initialInvites = listPendingInvitesForEmail(db, user.email);
+  const db = await getDb();
+  const [initialWallets, initialInvites] = await Promise.all([
+    listUserWallets(db, user.id, { includeArchived: true }),
+    listPendingInvitesForEmail(db, user.email),
+  ]);
 
   return (
     <WalletsClient

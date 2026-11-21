@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { closeDb, createDb, getDb } from "@/db";
+import { type AppDb, closeDb, createDb, getDb } from "@/db";
 import { walletInvites, walletMembers, wallets } from "@/db/schema";
 import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import { AppError } from "@/lib/errors";
@@ -64,7 +64,7 @@ async function expectAppError(
 
 describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
   test("createWallet sets balance === initialBalance, creates owner row in wallet_members, and validates initialBalance", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const reg = await registerUser(db, {
         name: "Budi Santoso",
@@ -72,7 +72,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         password: "Password123!",
       });
 
-      const created = createWallet(db, reg.user.id, {
+      const created = await createWallet(db, reg.user.id, {
         name: "  Tabungan Keluarga  ",
         type: "savings",
         initialBalance: 2500000,
@@ -95,11 +95,10 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         role: "owner",
       });
 
-      const memberRow = db
+      const memberRow = await db
         .select()
         .from(walletMembers)
-        .where(eq(walletMembers.walletId, created.id))
-        .all();
+        .where(eq(walletMembers.walletId, created.id));
       expect(memberRow).toHaveLength(1);
       expect(memberRow[0].userId).toBe(reg.user.id);
       expect(memberRow[0].role).toBe("owner");
@@ -134,12 +133,12 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         400
       );
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("assertWalletAccess enforces permission matrix (404 missing, 403 non-member, viewer < editor < owner)", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Pemilik",
@@ -162,23 +161,23 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         password: "Password123!",
       });
 
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "Dompet Bersama",
         type: "bank",
         initialBalance: 1000000,
       });
 
-      const editorInvite = createWalletInvite(db, wallet.id, owner.user.id, {
+      const editorInvite = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: editor.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, editorInvite.token, editor.user);
+      await acceptWalletInvite(db, editorInvite.token, editor.user);
 
-      const viewerInvite = createWalletInvite(db, wallet.id, owner.user.id, {
+      const viewerInvite = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: viewer.user.email,
         role: "viewer",
       });
-      acceptWalletInvite(db, viewerInvite.token, viewer.user);
+      await acceptWalletInvite(db, viewerInvite.token, viewer.user);
 
       // Missing wallet -> 404
       await expectAppError(
@@ -194,7 +193,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
 
       // Viewer passes viewer, fails editor & owner
       expect(
-        assertWalletAccess(db, wallet.id, viewer.user.id, "viewer").role
+        (await assertWalletAccess(db, wallet.id, viewer.user.id, "viewer")).role
       ).toBe("viewer");
       await expectAppError(
         () => assertWalletAccess(db, wallet.id, viewer.user.id, "editor"),
@@ -207,10 +206,10 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
 
       // Editor passes viewer & editor, fails owner
       expect(
-        assertWalletAccess(db, wallet.id, editor.user.id, "viewer").role
+        (await assertWalletAccess(db, wallet.id, editor.user.id, "viewer")).role
       ).toBe("editor");
       expect(
-        assertWalletAccess(db, wallet.id, editor.user.id, "editor").role
+        (await assertWalletAccess(db, wallet.id, editor.user.id, "editor")).role
       ).toBe("editor");
       await expectAppError(
         () => assertWalletAccess(db, wallet.id, editor.user.id, "owner"),
@@ -219,21 +218,21 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
 
       // Owner passes all
       expect(
-        assertWalletAccess(db, wallet.id, owner.user.id, "viewer").role
+        (await assertWalletAccess(db, wallet.id, owner.user.id, "viewer")).role
       ).toBe("owner");
       expect(
-        assertWalletAccess(db, wallet.id, owner.user.id, "editor").role
+        (await assertWalletAccess(db, wallet.id, owner.user.id, "editor")).role
       ).toBe("owner");
       expect(
-        assertWalletAccess(db, wallet.id, owner.user.id, "owner").role
+        (await assertWalletAccess(db, wallet.id, owner.user.id, "owner")).role
       ).toBe("owner");
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("updateWallet and listUserWallets handle owner-only updates and archive filtering", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Siti",
@@ -246,17 +245,17 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         password: "Password123!",
       });
 
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "GoPay Rumah",
         type: "ewallet",
         initialBalance: 500000,
       });
 
-      const inv = createWalletInvite(db, wallet.id, owner.user.id, {
+      const inv = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: editor.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, inv.token, editor.user);
+      await acceptWalletInvite(db, inv.token, editor.user);
 
       // Editor cannot update wallet
       await expectAppError(
@@ -267,7 +266,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         403
       );
 
-      const updated = updateWallet(db, wallet.id, owner.user.id, {
+      const updated = await updateWallet(db, wallet.id, owner.user.id, {
         name: "GoPay Keluarga",
         type: "bank",
         archived: true,
@@ -276,27 +275,27 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       expect(updated.type).toBe("bank");
       expect(updated.archivedAt).not.toBeNull();
 
-      const activeOnly = listUserWallets(db, owner.user.id);
+      const activeOnly = await listUserWallets(db, owner.user.id);
       expect(activeOnly.some((w) => w.id === wallet.id)).toBe(false);
 
-      const withArchived = listUserWallets(db, owner.user.id, {
+      const withArchived = await listUserWallets(db, owner.user.id, {
         includeArchived: true,
       });
       const found = withArchived.find((w) => w.id === wallet.id);
       expect(found).toBeDefined();
       expect(found!.archivedAt).not.toBeNull();
 
-      const unarchived = updateWallet(db, wallet.id, owner.user.id, {
+      const unarchived = await updateWallet(db, wallet.id, owner.user.id, {
         archived: false,
       });
       expect(unarchived.archivedAt).toBeNull();
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("invitation flow: email targeting, pending invites list, wrong-user 403, self-invite 400, existing member 409, and accept sets isShared", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const userA = await registerUser(db, {
         name: "Andi",
@@ -314,7 +313,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         password: "Password123!",
       });
 
-      const wallet = createWallet(db, userA.user.id, {
+      const wallet = await createWallet(db, userA.user.id, {
         name: "Belanja Bulanan",
         type: "bank",
         initialBalance: 3000000,
@@ -331,7 +330,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
 
       // Owner invites User B by email (uppercase should normalize to lowercase)
-      const invite = createWalletInvite(db, wallet.id, userA.user.id, {
+      const invite = await createWalletInvite(db, wallet.id, userA.user.id, {
         email: "  DEWI@ArusKas.test ",
         role: "editor",
       });
@@ -341,16 +340,16 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       expect(invite.acceptedAt).toBeNull();
 
       // Pending invites for B shows the invite; C sees none
-      const pendingB = listPendingInvitesForEmail(db, userB.user.email);
+      const pendingB = await listPendingInvitesForEmail(db, userB.user.email);
       expect(pendingB).toHaveLength(1);
       expect(pendingB[0].token).toBe(invite.token);
       expect(pendingB[0].walletName).toBe("Belanja Bulanan");
       expect(pendingB[0].inviterName).toBe("Andi");
 
-      expect(listPendingInvitesForEmail(db, userC.user.email)).toHaveLength(0);
+      expect(await listPendingInvitesForEmail(db, userC.user.email)).toHaveLength(0);
 
       // Public preview works
-      const preview = getInviteByToken(db, invite.token);
+      const preview = await getInviteByToken(db, invite.token);
       expect(preview.walletName).toBe("Belanja Bulanan");
       expect(preview.email).toBe("dewi@aruskas.test");
 
@@ -361,10 +360,10 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
 
       // Invite is still pending for B after C's failed attempt
-      expect(listPendingInvitesForEmail(db, userB.user.email)).toHaveLength(1);
+      expect(await listPendingInvitesForEmail(db, userB.user.email)).toHaveLength(1);
 
       // User B accepts -> joins wallet & isShared === true
-      const accepted = acceptWalletInvite(db, invite.token, userB.user);
+      const accepted = await acceptWalletInvite(db, invite.token, userB.user);
       expect(accepted).toEqual({
         walletId: wallet.id,
         walletName: "Belanja Bulanan",
@@ -372,17 +371,16 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       });
 
       // Pending invites for B is now empty
-      expect(listPendingInvitesForEmail(db, userB.user.email)).toHaveLength(0);
+      expect(await listPendingInvitesForEmail(db, userB.user.email)).toHaveLength(0);
 
       // Wallet isShared is now true and members include A & B
-      const dbWallet = db
+      const [dbWallet] = await db
         .select()
         .from(wallets)
-        .where(eq(wallets.id, wallet.id))
-        .get();
+        .where(eq(wallets.id, wallet.id));
       expect(dbWallet!.isShared).toBe(true);
 
-      const bWallets = listUserWallets(db, userB.user.id);
+      const bWallets = await listUserWallets(db, userB.user.id);
       const sharedWallet = bWallets.find((w) => w.id === wallet.id);
       expect(sharedWallet).toBeDefined();
       expect(sharedWallet!.role).toBe("editor");
@@ -399,7 +397,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
 
       // listWalletInvites (owner only) shows invite with acceptedAt set
-      const ownerInvites = listWalletInvites(db, wallet.id, userA.user.id);
+      const ownerInvites = await listWalletInvites(db, wallet.id, userA.user.id);
       expect(ownerInvites).toHaveLength(1);
       expect(ownerInvites[0].acceptedAt).not.toBeNull();
 
@@ -408,12 +406,12 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         403
       );
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("Review Focus: reusing an accepted invite token throws 410 and does not duplicate wallet_members; expired invite (>7 days) throws 410", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Pemilik Utama",
@@ -431,18 +429,18 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         password: "Password123!",
       });
 
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "Dompet Liburan",
         type: "savings",
         initialBalance: 4000000,
       });
 
       // Open invite (email: null) accepted once by partner
-      const openInvite = createWalletInvite(db, wallet.id, owner.user.id, {
+      const openInvite = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: null,
         role: "viewer",
       });
-      acceptWalletInvite(db, openInvite.token, partner.user);
+      await acceptWalletInvite(db, openInvite.token, partner.user);
 
       // Reusing same token (by partner OR by another user) must throw AppError(410)
       await expectAppError(
@@ -459,25 +457,24 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
 
       // Verify wallet_members was not duplicated (only owner + partner)
-      const members = db
+      const members = await db
         .select()
         .from(walletMembers)
-        .where(eq(walletMembers.walletId, wallet.id))
-        .all();
+        .where(eq(walletMembers.walletId, wallet.id));
       expect(members).toHaveLength(2);
 
       // Expired invite (>7 days old) throws AppError(410)
-      const expiredInvite = createWalletInvite(db, wallet.id, owner.user.id, {
+      const expiredInvite = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: thirdUser.user.email,
         role: "editor",
       });
       const eightDaysAgo = new Date(
         Date.now() - 8 * 24 * 60 * 60 * 1000
       ).toISOString();
-      db.update(walletInvites)
+      await db
+        .update(walletInvites)
         .set({ expiresAt: eightDaysAgo })
-        .where(eq(walletInvites.id, expiredInvite.id))
-        .run();
+        .where(eq(walletInvites.id, expiredInvite.id));
 
       await expectAppError(
         () => getInviteByToken(db, expiredInvite.token),
@@ -487,7 +484,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         () => acceptWalletInvite(db, expiredInvite.token, thirdUser.user),
         410
       );
-      expect(listPendingInvitesForEmail(db, thirdUser.user.email)).toHaveLength(
+      expect(await listPendingInvitesForEmail(db, thirdUser.user.email)).toHaveLength(
         0
       );
 
@@ -497,12 +494,12 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         404
       );
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("removeWalletMember works for owner, rejects removing self (400), and resets isShared to false when only owner remains", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Owner",
@@ -520,23 +517,23 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         password: "Password123!",
       });
 
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "Dompet Keluarga",
         type: "bank",
         initialBalance: 1500000,
       });
 
-      const inv1 = createWalletInvite(db, wallet.id, owner.user.id, {
+      const inv1 = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: member1.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, inv1.token, member1.user);
+      await acceptWalletInvite(db, inv1.token, member1.user);
 
-      const inv2 = createWalletInvite(db, wallet.id, owner.user.id, {
+      const inv2 = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: member2.user.email,
         role: "viewer",
       });
-      acceptWalletInvite(db, inv2.token, member2.user);
+      await acceptWalletInvite(db, inv2.token, member2.user);
 
       // Non-owner cannot remove members -> 403
       await expectAppError(
@@ -552,32 +549,29 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
 
       // Remove member1: member2 still remains, so isShared stays true
-      removeWalletMember(db, wallet.id, owner.user.id, member1.user.id);
-      const afterFirstRemoval = db
+      await removeWalletMember(db, wallet.id, owner.user.id, member1.user.id);
+      const [afterFirstRemoval] = await db
         .select()
         .from(wallets)
-        .where(eq(wallets.id, wallet.id))
-        .get();
+        .where(eq(wallets.id, wallet.id));
       expect(afterFirstRemoval!.isShared).toBe(true);
 
       // Remove member2: only owner remains, so isShared resets to false
-      removeWalletMember(db, wallet.id, owner.user.id, member2.user.id);
-      const afterSecondRemoval = db
+      await removeWalletMember(db, wallet.id, owner.user.id, member2.user.id);
+      const [afterSecondRemoval] = await db
         .select()
         .from(wallets)
-        .where(eq(wallets.id, wallet.id))
-        .get();
+        .where(eq(wallets.id, wallet.id));
       expect(afterSecondRemoval!.isShared).toBe(false);
 
-      const remainingMembers = db
+      const remainingMembers = await db
         .select()
         .from(walletMembers)
-        .where(eq(walletMembers.walletId, wallet.id))
-        .all();
+        .where(eq(walletMembers.walletId, wallet.id));
       expect(remainingMembers).toHaveLength(1);
       expect(remainingMembers[0].userId).toBe(owner.user.id);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
@@ -588,11 +582,10 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
 
     const prevDbPath = process.env.DATABASE_PATH;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-invite-"));
-    const tempDbPath = path.join(tempDir, "test.db");
-    process.env.DATABASE_PATH = tempDbPath;
+    process.env.DATABASE_PATH = `memory://wallets-invite-${crypto.randomUUID()}`;
 
     try {
-      const db = getDb();
+      const db = await getDb();
       const owner = await registerUser(db, {
         name: "Hendra",
         email: "hendra@aruskas.test",
@@ -603,12 +596,12 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         email: "maya@aruskas.test",
         password: "Password123!",
       });
-      const wallet = createWallet(db, owner.user.id, {
+      const wallet = await createWallet(db, owner.user.id, {
         name: "Dompet Rumah",
         type: "bank",
         initialBalance: 2000000,
       });
-      const invite = createWalletInvite(db, wallet.id, owner.user.id, {
+      const invite = await createWalletInvite(db, wallet.id, owner.user.id, {
         email: "maya@aruskas.test",
         role: "editor",
       });
@@ -639,7 +632,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       expect(okJson.invite.emailMasked).toBe("ma***@aruskas.test");
       expect(okJson.invite.requiresSpecificEmail).toBe(true);
 
-      acceptWalletInvite(db, invite.token, partner.user);
+      await acceptWalletInvite(db, invite.token, partner.user);
 
       const usedRes = await getInvitePreviewRoute(
         new Request(`http://localhost/api/invites/${invite.token}`),
@@ -647,7 +640,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
       expect(usedRes.status).toBe(410);
     } finally {
-      closeDb();
+      await closeDb();
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;
       } else {
@@ -664,8 +657,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
   test("authenticated route handlers enforce 401, 400 malformed JSON, Indonesian Zod validation errors, and full HTTP lifecycle", async () => {
     const prevDbPath = process.env.DATABASE_PATH;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-routes-"));
-    const tempDbPath = path.join(tempDir, "test.db");
-    process.env.DATABASE_PATH = tempDbPath;
+    process.env.DATABASE_PATH = `memory://wallets-routes-${crypto.randomUUID()}`;
     mockSessionCookie = undefined;
 
     function jsonRequest(
@@ -689,7 +681,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
     }
 
     try {
-      const db = getDb();
+      const db = await getDb();
       const owner = await registerUser(db, {
         name: "Rama",
         email: "rama@aruskas.test",
@@ -1057,7 +1049,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       expect(removeRes.status).toBe(200);
       expect(await removeRes.json()).toEqual({ ok: true });
     } finally {
-      closeDb();
+      await closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

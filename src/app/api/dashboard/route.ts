@@ -10,9 +10,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const scope = parseDashboardScopeQuery(searchParams);
 
-    const summary = getDashboardSummary(getDb(), user.id, user.email, {
-      scope,
-    });
+    const summary = await getDashboardSummary(
+      await getDb(),
+      user.id,
+      user.email,
+      {
+        scope,
+      }
+    );
     return NextResponse.json(summary);
   } catch (err) {
     return handleApiError(err);

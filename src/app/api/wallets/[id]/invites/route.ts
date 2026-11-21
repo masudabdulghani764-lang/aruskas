@@ -39,7 +39,7 @@ export async function GET(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    const invites = listWalletInvites(getDb(), id, user.id);
+    const invites = await listWalletInvites(await getDb(), id, user.id);
     return NextResponse.json({ invites });
   } catch (err) {
     return handleApiError(err);
@@ -56,7 +56,7 @@ export async function POST(
     const body = await parseJsonBody(request);
     const parsed = createInviteSchema.parse(body);
 
-    const invite = createWalletInvite(getDb(), id, user.id, {
+    const invite = await createWalletInvite(await getDb(), id, user.id, {
       email: parsed.email ? parsed.email : null,
       role: parsed.role,
     });

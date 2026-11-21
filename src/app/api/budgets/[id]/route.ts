@@ -12,7 +12,7 @@ export async function DELETE(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    deleteBudget(getDb(), user.id, id);
+    await deleteBudget(await getDb(), user.id, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return handleApiError(err);

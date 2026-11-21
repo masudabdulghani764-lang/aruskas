@@ -1,82 +1,138 @@
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { Database } from "bun:sqlite";
-import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { attachDatabasePool } from "@vercel/functions";
+import { drizzle as drizzleNodePg } from "drizzle-orm/node-postgres";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { Pool } from "pg";
 import { initSchema } from "./migrate";
 import * as schema from "./schema";
 
-export type AppDb = BunSQLiteDatabase<typeof schema>;
+export type AppDb = PgDatabase<PgQueryResultHKT, typeof schema>;
+
+export type CreatedDb = {
+  db: AppDb;
+  close: () => Promise<void>;
+  queryRaw: (sql: string) => Promise<{ rows: Record<string, unknown>[] }>;
+};
+
+function isPostgresUrl(value: string): boolean {
+  return value.startsWith("postgres://") || value.startsWith("postgresql://");
+}
+
+function resolveConnectionTarget(): string {
+  const overridePath = process.env.DATABASE_PATH?.trim();
+  if (overridePath) {
+    return overridePath;
+  }
+  const envUrl =
+    process.env.DATABASE_URL?.trim() ||
+    process.env.POSTGRES_URL?.trim() ||
+    "";
+  if (envUrl) {
+    return envUrl;
+  }
+  return path.join(process.cwd(), "data", "aruskas-pglite");
+}
 
 /**
- * Creates a Bun SQLite + Drizzle database instance, enabling foreign keys,
- * WAL mode for file-backed databases, and initializing the schema.
+ * Creates a PostgreSQL + Drizzle database instance.
+ * - For `postgres://` / `postgresql://` URLs: uses `pg.Pool` (Neon / Postgres) with
+ *   Vercel Fluid Compute `attachDatabasePool`.
+ * - For `":memory:"` or local filesystem paths (tests / offline dev): uses embedded
+ *   PostgreSQL via `@electric-sql/pglite` so unit tests run against real Postgres.
  */
-export function createDb(dbPath = ":memory:"): {
-  db: AppDb;
-  sqlite: Database;
-} {
-  if (dbPath !== ":memory:") {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+export async function createDb(target = ":memory:"): Promise<CreatedDb> {
+  if (isPostgresUrl(target)) {
+    const pool = new Pool({
+      connectionString: target,
+      max: 10,
+      idleTimeoutMillis: 20_000,
+      connectionTimeoutMillis: 15_000,
+    });
+
+    if (process.env.VERCEL) {
+      attachDatabasePool(pool);
+    }
+
+    await initSchema(pool);
+    const db = drizzleNodePg(pool, { schema }) as unknown as AppDb;
+
+    return {
+      db,
+      close: async () => {
+        await pool.end();
+      },
+      queryRaw: async (sql: string) => {
+        const res = await pool.query(sql);
+        return { rows: res.rows as Record<string, unknown>[] };
+      },
+    };
   }
 
-  const sqlite = new Database(dbPath);
-  sqlite.exec("PRAGMA foreign_keys = ON;");
-  if (dbPath !== ":memory:") {
-    sqlite.exec("PRAGMA journal_mode = WAL;");
-    sqlite.exec("PRAGMA busy_timeout = 5000;");
-  }
+  const [{ PGlite }, { drizzle: drizzlePglite }] = await Promise.all([
+    import("@electric-sql/pglite"),
+    import("drizzle-orm/pglite"),
+  ]);
 
-  initSchema(sqlite);
-  const db = drizzle(sqlite, { schema });
-  return { db, sqlite };
+  const pglite =
+    target === ":memory:" || target.startsWith("memory://")
+      ? new PGlite()
+      : new PGlite(target);
+  await initSchema(pglite);
+  const db = drizzlePglite(pglite, { schema }) as unknown as AppDb;
+
+  return {
+    db,
+    close: async () => {
+      await pglite.close();
+    },
+    queryRaw: async (sql: string) => {
+      const res = await pglite.query(sql);
+      return { rows: res.rows as Record<string, unknown>[] };
+    },
+  };
 }
 
 const globalForDb = globalThis as unknown as {
-  __aruskasDb?: AppDb;
-  __aruskasSqlite?: Database;
-  __aruskasDbPath?: string;
+  __aruskasDbPromise?: Promise<CreatedDb>;
+  __aruskasDbTarget?: string;
 };
 
 /**
- * Safely closes the cached singleton SQLite database handle if open.
+ * Safely closes the cached singleton database pool/instance if open.
  */
-export function closeDb(): void {
-  const sqlite = globalForDb.__aruskasSqlite;
-  if (sqlite) {
+export async function closeDb(): Promise<void> {
+  const existing = globalForDb.__aruskasDbPromise;
+  globalForDb.__aruskasDbPromise = undefined;
+  globalForDb.__aruskasDbTarget = undefined;
+
+  if (existing) {
     try {
-      sqlite.close(true);
+      const created = await existing;
+      await created.close();
     } catch {
-      try {
-        sqlite.close();
-      } catch {
-        // Ignore errors if already closed
-      }
+      // Ignore cleanup errors
     }
   }
-  globalForDb.__aruskasDb = undefined;
-  globalForDb.__aruskasSqlite = undefined;
-  globalForDb.__aruskasDbPath = undefined;
 }
 
 /**
- * Returns the lazy singleton database instance for the configured DATABASE_PATH
- * or default `data/aruskas.db`.
+ * Returns the lazy singleton PostgreSQL database instance for `DATABASE_URL`
+ * (Neon Postgres on Vercel and local `.env.local`), initializing the schema once
+ * per process lifetime.
  */
-export function getDb(): AppDb {
-  const defaultDir = process.env.VERCEL
-    ? os.tmpdir()
-    : path.join(process.cwd(), "data");
-  const dbPath =
-    process.env.DATABASE_PATH ?? path.join(defaultDir, "aruskas.db");
+export async function getDb(): Promise<AppDb> {
+  const target = resolveConnectionTarget();
 
-  if (!globalForDb.__aruskasDb || globalForDb.__aruskasDbPath !== dbPath) {
-    closeDb();
-    const { db, sqlite } = createDb(dbPath);
-    globalForDb.__aruskasDb = db;
-    globalForDb.__aruskasSqlite = sqlite;
-    globalForDb.__aruskasDbPath = dbPath;
+  if (!globalForDb.__aruskasDbPromise || globalForDb.__aruskasDbTarget !== target) {
+    await closeDb();
+    globalForDb.__aruskasDbTarget = target;
+    globalForDb.__aruskasDbPromise = createDb(target).catch((err) => {
+      globalForDb.__aruskasDbPromise = undefined;
+      globalForDb.__aruskasDbTarget = undefined;
+      throw err;
+    });
   }
 
-  return globalForDb.__aruskasDb;
+  const created = await globalForDb.__aruskasDbPromise;
+  return created.db;
 }

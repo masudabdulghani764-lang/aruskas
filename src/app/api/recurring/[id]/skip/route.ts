@@ -12,7 +12,7 @@ export async function POST(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    const rule = skipRecurringRule(getDb(), id, user.id);
+    const rule = await skipRecurringRule(await getDb(), id, user.id);
     return NextResponse.json({ rule });
   } catch (err) {
     return handleApiError(err);

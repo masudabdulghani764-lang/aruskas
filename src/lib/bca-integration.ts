@@ -14,7 +14,7 @@ import {
   suggestBcaCategoryId,
   type ParsedBcaEntry,
 } from "@/lib/bca-parser";
-import { AppError } from "@/lib/errors";
+import { AppError, isPgUniqueViolation } from "@/lib/errors";
 import {
   assertValidIsoDate,
   insertTransactionInExecutor,
@@ -89,51 +89,49 @@ function toIntegrationView(
   };
 }
 
-export function getBcaIntegration(
+export async function getBcaIntegration(
   db: AppDb,
   userId: string
-): { integration: BcaIntegrationView | null; logs: BcaSyncLogView[] } {
-  const row = db
-    .select()
-    .from(bankIntegrations)
-    .where(
-      and(
-        eq(bankIntegrations.userId, userId),
-        eq(bankIntegrations.provider, "bca")
+): Promise<{ integration: BcaIntegrationView | null; logs: BcaSyncLogView[] }> {
+  const [[row], rawLogs] = await Promise.all([
+    db
+      .select()
+      .from(bankIntegrations)
+      .where(
+        and(
+          eq(bankIntegrations.userId, userId),
+          eq(bankIntegrations.provider, "bca")
+        )
       )
-    )
-    .get();
+      .limit(1),
+    db
+      .select()
+      .from(bankSyncLogs)
+      .where(eq(bankSyncLogs.userId, userId))
+      .orderBy(desc(bankSyncLogs.createdAt))
+      .limit(25),
+  ]);
 
-  let integration: BcaIntegrationView | null = null;
+  const walletIdSet = new Set<string>(rawLogs.map((l) => l.walletId));
   if (row) {
-    const w = db
-      .select({ name: wallets.name })
-      .from(wallets)
-      .where(eq(wallets.id, row.walletId))
-      .get();
-    integration = toIntegrationView(row, w?.name ?? "Dompet BCA");
+    walletIdSet.add(row.walletId);
   }
+  const walletIds = Array.from(walletIdSet);
 
-  const rawLogs = db
-    .select()
-    .from(bankSyncLogs)
-    .where(eq(bankSyncLogs.userId, userId))
-    .orderBy(desc(bankSyncLogs.createdAt))
-    .limit(25)
-    .all();
-
-  const walletIds = Array.from(new Set(rawLogs.map((l) => l.walletId)));
   const walletNameMap = new Map<string, string>();
   if (walletIds.length > 0) {
-    const ws = db
+    const ws = await db
       .select({ id: wallets.id, name: wallets.name })
       .from(wallets)
-      .where(inArray(wallets.id, walletIds))
-      .all();
+      .where(inArray(wallets.id, walletIds));
     for (const w of ws) {
       walletNameMap.set(w.id, w.name);
     }
   }
+
+  const integration: BcaIntegrationView | null = row
+    ? toIntegrationView(row, walletNameMap.get(row.walletId) ?? "Dompet BCA")
+    : null;
 
   const logs: BcaSyncLogView[] = rawLogs.map((l) => ({
     id: l.id,
@@ -150,7 +148,7 @@ export function getBcaIntegration(
   return { integration, logs };
 }
 
-export function upsertBcaIntegration(
+export async function upsertBcaIntegration(
   db: AppDb,
   userId: string,
   input: {
@@ -158,14 +156,22 @@ export function upsertBcaIntegration(
     isActive?: boolean;
     autoCategorize?: boolean;
   }
-): { integration: BcaIntegrationView; rawToken: string | null } {
-  const membership = assertWalletAccess(db, input.walletId, userId, "editor");
+): Promise<{ integration: BcaIntegrationView; rawToken: string | null }> {
+  const membership = await assertWalletAccess(
+    db,
+    input.walletId,
+    userId,
+    "editor"
+  );
   if (membership.wallet.archivedAt) {
-    throw new AppError(400, "Dompet yang diarsipkan tidak dapat dijadikan target integrasi BCA.");
+    throw new AppError(
+      400,
+      "Dompet yang diarsipkan tidak dapat dijadikan target integrasi BCA."
+    );
   }
 
   const now = new Date().toISOString();
-  const existing = db
+  const [existing] = await db
     .select()
     .from(bankIntegrations)
     .where(
@@ -174,12 +180,13 @@ export function upsertBcaIntegration(
         eq(bankIntegrations.provider, "bca")
       )
     )
-    .get();
+    .limit(1);
 
   if (existing) {
     const nextIsActive = input.isActive ?? existing.isActive;
     const nextAutoCat = input.autoCategorize ?? existing.autoCategorize;
-    db.update(bankIntegrations)
+    const [updated] = await db
+      .update(bankIntegrations)
       .set({
         walletId: input.walletId,
         isActive: nextIsActive,
@@ -187,22 +194,18 @@ export function upsertBcaIntegration(
         updatedAt: now,
       })
       .where(eq(bankIntegrations.id, existing.id))
-      .run();
+      .returning();
 
-    const updated = db
-      .select()
-      .from(bankIntegrations)
-      .where(eq(bankIntegrations.id, existing.id))
-      .get()!;
     return {
-      integration: toIntegrationView(updated, membership.wallet.name),
+      integration: toIntegrationView(updated!, membership.wallet.name),
       rawToken: null,
     };
   }
 
   const generated = generateWebhookToken();
   const id = crypto.randomUUID();
-  db.insert(bankIntegrations)
+  const [created] = await db
+    .insert(bankIntegrations)
     .values({
       id,
       userId,
@@ -216,25 +219,19 @@ export function upsertBcaIntegration(
       createdAt: now,
       updatedAt: now,
     })
-    .run();
-
-  const created = db
-    .select()
-    .from(bankIntegrations)
-    .where(eq(bankIntegrations.id, id))
-    .get()!;
+    .returning();
 
   return {
-    integration: toIntegrationView(created, membership.wallet.name),
+    integration: toIntegrationView(created!, membership.wallet.name),
     rawToken: generated.rawToken,
   };
 }
 
-export function rotateBcaWebhookToken(
+export async function rotateBcaWebhookToken(
   db: AppDb,
   userId: string
-): { integration: BcaIntegrationView; rawToken: string } {
-  const existing = db
+): Promise<{ integration: BcaIntegrationView; rawToken: string }> {
+  const [existing] = await db
     .select()
     .from(bankIntegrations)
     .where(
@@ -243,7 +240,7 @@ export function rotateBcaWebhookToken(
         eq(bankIntegrations.provider, "bca")
       )
     )
-    .get();
+    .limit(1);
 
   if (!existing) {
     throw new AppError(
@@ -255,41 +252,36 @@ export function rotateBcaWebhookToken(
   const generated = generateWebhookToken();
   const now = new Date().toISOString();
 
-  db.update(bankIntegrations)
+  const [updated] = await db
+    .update(bankIntegrations)
     .set({
       webhookTokenHash: generated.tokenHash,
       tokenPrefix: generated.tokenPrefix,
       updatedAt: now,
     })
     .where(eq(bankIntegrations.id, existing.id))
-    .run();
+    .returning();
 
-  const updated = db
-    .select()
-    .from(bankIntegrations)
-    .where(eq(bankIntegrations.id, existing.id))
-    .get()!;
-  const w = db
+  const [w] = await db
     .select({ name: wallets.name })
     .from(wallets)
-    .where(eq(wallets.id, updated.walletId))
-    .get();
+    .where(eq(wallets.id, updated!.walletId))
+    .limit(1);
 
   return {
-    integration: toIntegrationView(updated, w?.name ?? "Dompet BCA"),
+    integration: toIntegrationView(updated!, w?.name ?? "Dompet BCA"),
     rawToken: generated.rawToken,
   };
 }
 
 function isDedupeUniqueError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
   return (
-    msg.includes("idx_bank_sync_dedupe") ||
-    (msg.includes("UNIQUE constraint failed") && msg.includes("bank_sync_logs"))
+    isPgUniqueViolation(err, "idx_bank_sync_dedupe") ||
+    isPgUniqueViolation(err, "bank_sync_logs")
   );
 }
 
-function recordParsedEntryForWallet(
+async function recordParsedEntryForWallet(
   db: AppDb,
   params: {
     userId: string;
@@ -301,24 +293,24 @@ function recordParsedEntryForWallet(
     rawSnippet: string;
     overrideCategoryId?: string;
   }
-):
+): Promise<
   | { status: "imported"; transaction: TransactionView }
-  | { status: "duplicate"; message: string } {
-  const membership = assertWalletAccess(
+  | { status: "duplicate"; message: string }
+> {
+  const membership = await assertWalletAccess(
     db,
     params.walletId,
     params.userId,
     "editor"
   );
-  const ownerCategories = db
+  const ownerCategories = await db
     .select({
       id: categories.id,
       name: categories.name,
       type: categories.type,
     })
     .from(categories)
-    .where(eq(categories.userId, membership.wallet.ownerId))
-    .all();
+    .where(eq(categories.userId, membership.wallet.ownerId));
 
   let categoryId = params.overrideCategoryId;
   if (!categoryId) {
@@ -333,7 +325,10 @@ function recordParsedEntryForWallet(
         (c) => c.type === params.entry.type
       );
       if (sameType.length === 0) {
-        throw new AppError(400, "Tidak ada kategori yang sesuai pada dompet tujuan.");
+        throw new AppError(
+          400,
+          "Tidak ada kategori yang sesuai pada dompet tujuan."
+        );
       }
       categoryId =
         sameType.find((c) => c.name.toLowerCase().includes("lain"))?.id ??
@@ -345,8 +340,8 @@ function recordParsedEntryForWallet(
   const now = new Date().toISOString();
   const snippet = params.rawSnippet.replace(/\s+/g, " ").trim().slice(0, 220);
 
-  return db.transaction((tx) => {
-    const existingDup = tx
+  return db.transaction(async (tx) => {
+    const [existingDup] = await tx
       .select({ id: bankSyncLogs.id })
       .from(bankSyncLogs)
       .where(
@@ -356,57 +351,57 @@ function recordParsedEntryForWallet(
           eq(bankSyncLogs.status, "imported")
         )
       )
-      .get();
+      .limit(1);
 
     if (existingDup) {
-      tx.insert(bankSyncLogs)
-        .values({
-          id: crypto.randomUUID(),
-          userId: params.userId,
-          integrationId: params.integrationId,
-          walletId: params.walletId,
-          source: params.source,
-          dedupeHash,
-          transactionId: null,
-          status: "duplicate",
-          rawSnippet: snippet,
-          errorMessage: "Transaksi serupa sudah pernah tercatat (anti-duplikat).",
-          createdAt: now,
-        })
-        .run();
+      await tx.insert(bankSyncLogs).values({
+        id: crypto.randomUUID(),
+        userId: params.userId,
+        integrationId: params.integrationId,
+        walletId: params.walletId,
+        source: params.source,
+        dedupeHash,
+        transactionId: null,
+        status: "duplicate",
+        rawSnippet: snippet,
+        errorMessage: "Transaksi serupa sudah pernah tercatat (anti-duplikat).",
+        createdAt: now,
+      });
       return {
         status: "duplicate" as const,
         message: "Transaksi serupa sudah pernah tercatat sebelumnya.",
       };
     }
 
-    const createdTx = insertTransactionInExecutor(tx, params.userId, {
-      walletId: params.walletId,
-      categoryId,
-      type: params.entry.type,
-      amount: params.entry.amount,
-      title: params.entry.title,
-      notes: params.entry.notes,
-      paymentMethod: params.entry.paymentMethod,
-      occurredAt: params.entry.occurredAt,
-    });
+    const createdTx = await insertTransactionInExecutor(
+      tx as unknown as AppDb,
+      params.userId,
+      {
+        walletId: params.walletId,
+        categoryId,
+        type: params.entry.type,
+        amount: params.entry.amount,
+        title: params.entry.title,
+        notes: params.entry.notes,
+        paymentMethod: params.entry.paymentMethod,
+        occurredAt: params.entry.occurredAt,
+      }
+    );
 
     try {
-      tx.insert(bankSyncLogs)
-        .values({
-          id: crypto.randomUUID(),
-          userId: params.userId,
-          integrationId: params.integrationId,
-          walletId: params.walletId,
-          source: params.source,
-          dedupeHash,
-          transactionId: createdTx.id,
-          status: "imported",
-          rawSnippet: snippet,
-          errorMessage: null,
-          createdAt: now,
-        })
-        .run();
+      await tx.insert(bankSyncLogs).values({
+        id: crypto.randomUUID(),
+        userId: params.userId,
+        integrationId: params.integrationId,
+        walletId: params.walletId,
+        source: params.source,
+        dedupeHash,
+        transactionId: createdTx.id,
+        status: "imported",
+        rawSnippet: snippet,
+        errorMessage: null,
+        createdAt: now,
+      });
     } catch (err) {
       if (isDedupeUniqueError(err)) {
         throw new AppError(409, "Transaksi serupa sedang diproses.");
@@ -415,10 +410,10 @@ function recordParsedEntryForWallet(
     }
 
     if (params.integrationId) {
-      tx.update(bankIntegrations)
+      await tx
+        .update(bankIntegrations)
         .set({ lastSyncedAt: now, updatedAt: now })
-        .where(eq(bankIntegrations.id, params.integrationId))
-        .run();
+        .where(eq(bankIntegrations.id, params.integrationId));
     }
 
     return { status: "imported" as const, transaction: createdTx };
@@ -429,7 +424,7 @@ function recordParsedEntryForWallet(
  * Ingests a real-time BCA email/push notification authenticated via the user's
  * per-integration webhook secret token.
  */
-export function ingestBcaNotificationByToken(
+export async function ingestBcaNotificationByToken(
   db: AppDb,
   rawToken: string,
   payload: {
@@ -439,20 +434,21 @@ export function ingestBcaNotificationByToken(
     occurredAt?: string;
     externalId?: string;
   }
-):
+): Promise<
   | { status: "imported"; transaction: TransactionView }
-  | { status: "duplicate"; message: string } {
+  | { status: "duplicate"; message: string }
+> {
   const trimmedToken = rawToken.trim();
   if (!trimmedToken) {
     throw new AppError(401, "Token webhook BCA tidak ditemukan.");
   }
 
   const tokenHash = hashWebhookToken(trimmedToken);
-  const integration = db
+  const [integration] = await db
     .select()
     .from(bankIntegrations)
     .where(eq(bankIntegrations.webhookTokenHash, tokenHash))
-    .get();
+    .limit(1);
 
   if (!integration) {
     throw new AppError(401, "Token webhook BCA tidak valid.");
@@ -479,22 +475,20 @@ export function ingestBcaNotificationByToken(
     .slice(0, 220);
 
   if (!parsed) {
-    db.insert(bankSyncLogs)
-      .values({
-        id: crypto.randomUUID(),
-        userId: integration.userId,
-        integrationId: integration.id,
-        walletId: integration.walletId,
-        source,
-        dedupeHash: crypto.randomUUID(),
-        transactionId: null,
-        status: "failed",
-        rawSnippet: snippet || "(pesan kosong)",
-        errorMessage:
-          "Format notifikasi BCA tidak dikenali (nominal atau arah masuk/keluar tidak ditemukan).",
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    await db.insert(bankSyncLogs).values({
+      id: crypto.randomUUID(),
+      userId: integration.userId,
+      integrationId: integration.id,
+      walletId: integration.walletId,
+      source,
+      dedupeHash: crypto.randomUUID(),
+      transactionId: null,
+      status: "failed",
+      rawSnippet: snippet || "(pesan kosong)",
+      errorMessage:
+        "Format notifikasi BCA tidak dikenali (nominal atau arah masuk/keluar tidak ditemukan).",
+      createdAt: new Date().toISOString(),
+    });
 
     throw new AppError(
       422,
@@ -516,7 +510,7 @@ export function ingestBcaNotificationByToken(
 /**
  * Authenticated UI simulator: preview or immediately record a pasted BCA notification.
  */
-export function simulateBcaNotification(
+export async function simulateBcaNotification(
   db: AppDb,
   userId: string,
   input: {
@@ -525,15 +519,15 @@ export function simulateBcaNotification(
     walletId?: string;
     commit?: boolean;
   }
-): {
+): Promise<{
   parsed: ParsedBcaEntry;
   suggestedCategoryId: string;
   suggestedCategoryName: string;
   result?:
     | { status: "imported"; transaction: TransactionView }
     | { status: "duplicate"; message: string };
-} {
-  const integration = db
+}> {
+  const [integration] = await db
     .select()
     .from(bankIntegrations)
     .where(
@@ -542,7 +536,7 @@ export function simulateBcaNotification(
         eq(bankIntegrations.provider, "bca")
       )
     )
-    .get();
+    .limit(1);
 
   const targetWalletId = input.walletId ?? integration?.walletId;
   if (!targetWalletId) {
@@ -552,7 +546,12 @@ export function simulateBcaNotification(
     );
   }
 
-  const membership = assertWalletAccess(db, targetWalletId, userId, "editor");
+  const membership = await assertWalletAccess(
+    db,
+    targetWalletId,
+    userId,
+    "editor"
+  );
   const parsed = parseBcaNotification(input.text, { subject: input.subject });
   if (!parsed) {
     throw new AppError(
@@ -561,15 +560,14 @@ export function simulateBcaNotification(
     );
   }
 
-  const ownerCategories = db
+  const ownerCategories = await db
     .select({
       id: categories.id,
       name: categories.name,
       type: categories.type,
     })
     .from(categories)
-    .where(eq(categories.userId, membership.wallet.ownerId))
-    .all();
+    .where(eq(categories.userId, membership.wallet.ownerId));
 
   const suggestedCategoryId = suggestBcaCategoryId(
     ownerCategories,
@@ -577,13 +575,14 @@ export function simulateBcaNotification(
     `${parsed.title} ${parsed.notes}`
   );
   const suggestedCategoryName =
-    ownerCategories.find((c) => c.id === suggestedCategoryId)?.name ?? "Lainnya";
+    ownerCategories.find((c) => c.id === suggestedCategoryId)?.name ??
+    "Lainnya";
 
   if (!input.commit) {
     return { parsed, suggestedCategoryId, suggestedCategoryName };
   }
 
-  const result = recordParsedEntryForWallet(db, {
+  const result = await recordParsedEntryForWallet(db, {
     userId,
     integrationId: integration?.id ?? null,
     walletId: targetWalletId,
@@ -600,18 +599,23 @@ export function simulateBcaNotification(
 /**
  * Parses a KlikBCA / myBCA CSV mutasi file and flags rows that already exist in DB.
  */
-export function previewBcaCsvImport(
+export async function previewBcaCsvImport(
   db: AppDb,
   userId: string,
   input: { walletId: string; csvText: string }
-): {
+): Promise<{
   rows: BcaCsvPreviewRow[];
   skippedPending: number;
   skippedInvalid: number;
   detectedPeriod: string | null;
   categories: Array<{ id: string; name: string; type: "income" | "expense" }>;
-} {
-  const membership = assertWalletAccess(db, input.walletId, userId, "editor");
+}> {
+  const membership = await assertWalletAccess(
+    db,
+    input.walletId,
+    userId,
+    "editor"
+  );
   const parsed = parseBcaCsv(input.csvText);
 
   if (parsed.entries.length === 0) {
@@ -621,20 +625,19 @@ export function previewBcaCsvImport(
     );
   }
 
-  const ownerCategories = db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      type: categories.type,
-    })
-    .from(categories)
-    .where(eq(categories.userId, membership.wallet.ownerId))
-    .all();
+  const hashes = parsed.entries.map((e) =>
+    buildBcaDedupeHash(input.walletId, e)
+  );
 
-  const catNameMap = new Map(ownerCategories.map((c) => [c.id, c.name]));
-
-  const hashes = parsed.entries.map((e) => buildBcaDedupeHash(input.walletId, e));
-  const existingRows =
+  const [ownerCategories, existingRows] = await Promise.all([
+    db
+      .select({
+        id: categories.id,
+        name: categories.name,
+        type: categories.type,
+      })
+      .from(categories)
+      .where(eq(categories.userId, membership.wallet.ownerId)),
     hashes.length > 0
       ? db
           .select({ dedupeHash: bankSyncLogs.dedupeHash })
@@ -646,14 +649,17 @@ export function previewBcaCsvImport(
               inArray(bankSyncLogs.dedupeHash, hashes)
             )
           )
-          .all()
-      : [];
+      : Promise.resolve([]),
+  ]);
+
+  const catNameMap = new Map(ownerCategories.map((c) => [c.id, c.name]));
   const existingSet = new Set(existingRows.map((r) => r.dedupeHash));
 
   const seenInBatch = new Set<string>();
   const rows: BcaCsvPreviewRow[] = parsed.entries.map((entry, idx) => {
     const dedupeHash = hashes[idx];
-    const isDuplicate = existingSet.has(dedupeHash) || seenInBatch.has(dedupeHash);
+    const isDuplicate =
+      existingSet.has(dedupeHash) || seenInBatch.has(dedupeHash);
     seenInBatch.add(dedupeHash);
 
     const suggestedCategoryId = suggestBcaCategoryId(
@@ -683,7 +689,7 @@ export function previewBcaCsvImport(
 /**
  * Commits selected BCA CSV mutasi rows atomically with per-row deduplication.
  */
-export function commitBcaCsvImport(
+export async function commitBcaCsvImport(
   db: AppDb,
   userId: string,
   input: {
@@ -699,18 +705,18 @@ export function commitBcaCsvImport(
       categoryId: string;
     }>;
   }
-): {
+): Promise<{
   importedCount: number;
   duplicateCount: number;
   totalIncome: number;
   totalExpense: number;
-} {
-  assertWalletAccess(db, input.walletId, userId, "editor");
+}> {
+  await assertWalletAccess(db, input.walletId, userId, "editor");
   if (input.rows.length === 0) {
     throw new AppError(400, "Pilih minimal satu transaksi untuk diimpor.");
   }
 
-  const integration = db
+  const [integration] = await db
     .select({ id: bankIntegrations.id })
     .from(bankIntegrations)
     .where(
@@ -719,7 +725,7 @@ export function commitBcaCsvImport(
         eq(bankIntegrations.provider, "bca")
       )
     )
-    .get();
+    .limit(1);
 
   let importedCount = 0;
   let duplicateCount = 0;
@@ -727,7 +733,7 @@ export function commitBcaCsvImport(
   let totalExpense = 0;
 
   for (const row of input.rows) {
-    const res = recordParsedEntryForWallet(db, {
+    const res = await recordParsedEntryForWallet(db, {
       userId,
       integrationId: integration?.id ?? null,
       walletId: input.walletId,

@@ -115,21 +115,21 @@ describe("BCA Notification & CSV Parser", () => {
 
 describe("BCA Webhook Auto-Record & CSV Import Service", () => {
   test("webhook authenticates via secret token, atomically updates BCA wallet balance, deduplicates, and supports rotation", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const { user } = await registerUser(db, {
         name: "Budi",
         email: "budi@example.com",
         password: "password123",
       });
-      const bcaWallet = createWallet(db, user.id, {
+      const bcaWallet = await createWallet(db, user.id, {
         name: "BCA Pribadi",
         type: "bank",
         initialBalance: 1_000_000,
       });
 
       // Setup integration -> returns rawToken once
-      const setup = upsertBcaIntegration(db, user.id, {
+      const setup = await upsertBcaIntegration(db, user.id, {
         walletId: bcaWallet.id,
         isActive: true,
         autoCategorize: true,
@@ -141,14 +141,14 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       const token = setup.rawToken!;
 
       // Invalid token rejected with 401
-      expect(() =>
+      await expect(
         ingestBcaNotificationByToken(db, "bca_live_invalid", {
           text: "Transfer masuk Rp 100.000 dari AHMAD",
         })
-      ).toThrow(AppError);
+      ).rejects.toThrow(AppError);
 
       // Valid incoming transfer via webhook
-      const res1 = ingestBcaNotificationByToken(db, token, {
+      const res1 = await ingestBcaNotificationByToken(db, token, {
         subject: "Transfer Masuk myBCA",
         text: "Anda menerima transfer sebesar Rp 500.000,00 dari RINA pada 21/11/2026 Ref: REF001",
         source: "webhook_email",
@@ -160,7 +160,7 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       }
 
       // Duplicate webhook delivery -> returns duplicate without mutating balance twice
-      const resDup = ingestBcaNotificationByToken(db, token, {
+      const resDup = await ingestBcaNotificationByToken(db, token, {
         subject: "Transfer Masuk myBCA",
         text: "Anda menerima transfer sebesar Rp 500.000,00 dari RINA pada 21/11/2026 Ref: REF001",
         source: "webhook_email",
@@ -168,34 +168,34 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       expect(resDup.status).toBe("duplicate");
 
       // Valid outgoing QRIS expense
-      const res2 = ingestBcaNotificationByToken(db, token, {
+      const res2 = await ingestBcaNotificationByToken(db, token, {
         text: "Pembayaran QRIS di KOPI KENANGAN sebesar Rp 45.000,00 pada 21/11/2026 berhasil. Ref: QRIS02",
         source: "webhook_push",
       });
       expect(res2.status).toBe("imported");
 
       // Check exact wallet balance: 1_000_000 + 500_000 - 45_000 = 1_455_000
-      const updatedWallet = listUserWallets(db, user.id).find(
+      const updatedWallet = (await listUserWallets(db, user.id)).find(
         (w) => w.id === bcaWallet.id
       )!;
       expect(updatedWallet.balance).toBe(1_455_000);
 
       // Rotate token -> old token fails (401), new token works
-      const rotated = rotateBcaWebhookToken(db, user.id);
+      const rotated = await rotateBcaWebhookToken(db, user.id);
       expect(rotated.rawToken).not.toBe(token);
-      expect(() =>
+      await expect(
         ingestBcaNotificationByToken(db, token, {
           text: "Transfer masuk Rp 50.000 dari TEST Ref: OLD01",
         })
-      ).toThrow(AppError);
+      ).rejects.toThrow(AppError);
 
       // Pause integration -> webhook returns 403
-      upsertBcaIntegration(db, user.id, {
+      await upsertBcaIntegration(db, user.id, {
         walletId: bcaWallet.id,
         isActive: false,
       });
       try {
-        ingestBcaNotificationByToken(db, rotated.rawToken, {
+        await ingestBcaNotificationByToken(db, rotated.rawToken, {
           text: "Transfer masuk Rp 50.000 dari TEST Ref: PAUSE01",
         });
         throw new Error("Should have thrown 403");
@@ -205,29 +205,29 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       }
 
       // Verify sync logs recorded cleanly
-      const { logs } = getBcaIntegration(db, user.id);
+      const { logs } = await getBcaIntegration(db, user.id);
       expect(logs.length).toBe(3);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("simulator and CSV preview/commit enforce anti-duplicate and reconcile balances", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const { user } = await registerUser(db, {
         name: "Siti",
         email: "siti@example.com",
         password: "password123",
       });
-      const bcaWallet = createWallet(db, user.id, {
+      const bcaWallet = await createWallet(db, user.id, {
         name: "BCA Utama",
         type: "bank",
         initialBalance: 500_000,
       });
 
       // Simulator preview (does not commit)
-      const simPreview = simulateBcaNotification(db, user.id, {
+      const simPreview = await simulateBcaNotification(db, user.id, {
         walletId: bcaWallet.id,
         text: "Pembayaran Virtual Account TOKOPEDIA sebesar Rp 120.000 pada 20/11/2026 berhasil Ref: VA777",
         commit: false,
@@ -236,7 +236,7 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       expect(simPreview.result).toBeUndefined();
 
       // Simulator commit
-      const simCommit = simulateBcaNotification(db, user.id, {
+      const simCommit = await simulateBcaNotification(db, user.id, {
         walletId: bcaWallet.id,
         text: "Pembayaran Virtual Account TOKOPEDIA sebesar Rp 120.000 pada 20/11/2026 berhasil Ref: VA777",
         commit: true,
@@ -251,15 +251,15 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
         "'03/11,QR 004 STARBUCKS COFFEE,0000,\"65,000.00 DB\",\"2,435,000.00\"",
       ].join("\n");
 
-      const preview1 = previewBcaCsvImport(db, user.id, {
+      const preview1 = await previewBcaCsvImport(db, user.id, {
         walletId: bcaWallet.id,
         csvText,
       });
       expect(preview1.rows.length).toBe(2);
       expect(preview1.rows.every((r) => !r.isDuplicate)).toBe(true);
 
-      const userCats = listCategories(db, user.id);
-      const commit1 = commitBcaCsvImport(db, user.id, {
+      const userCats = await listCategories(db, user.id);
+      const commit1 = await commitBcaCsvImport(db, user.id, {
         walletId: bcaWallet.id,
         rows: preview1.rows.map((r) => ({
           type: r.type,
@@ -278,19 +278,21 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       expect(commit1.totalExpense).toBe(65_000);
 
       // Re-uploading the exact same CSV flags both rows as duplicate!
-      const preview2 = previewBcaCsvImport(db, user.id, {
+      const preview2 = await previewBcaCsvImport(db, user.id, {
         walletId: bcaWallet.id,
         csvText,
       });
       expect(preview2.rows.every((r) => r.isDuplicate)).toBe(true);
 
       // Final balance: 500_000 - 120_000 + 2_000_000 - 65_000 = 2_315_000
-      const w = listUserWallets(db, user.id).find((x) => x.id === bcaWallet.id)!;
+      const w = (await listUserWallets(db, user.id)).find(
+        (x) => x.id === bcaWallet.id
+      )!;
       expect(w.balance).toBe(2_315_000);
-      const txs = listTransactions(db, user.id, { walletId: bcaWallet.id });
+      const txs = await listTransactions(db, user.id, { walletId: bcaWallet.id });
       expect(txs.items.length).toBe(3);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 });

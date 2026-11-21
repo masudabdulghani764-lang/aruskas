@@ -79,11 +79,11 @@ export function advanceDate(
   ).padStart(2, "0")}`;
 }
 
-function buildRecurringRuleViews(
+async function buildRecurringRuleViews(
   db: AppDb,
   rows: Array<typeof recurringRules.$inferSelect>,
   todayIso: string
-): RecurringRuleView[] {
+): Promise<RecurringRuleView[]> {
   if (rows.length === 0) {
     return [];
   }
@@ -91,23 +91,23 @@ function buildRecurringRuleViews(
   const walletIds = Array.from(new Set(rows.map((r) => r.walletId)));
   const categoryIds = Array.from(new Set(rows.map((r) => r.categoryId)));
 
-  const walletRows = db
-    .select({ id: wallets.id, name: wallets.name })
-    .from(wallets)
-    .where(inArray(wallets.id, walletIds))
-    .all();
-  const walletMap = new Map(walletRows.map((w) => [w.id, w.name]));
+  const [walletRows, categoryRows] = await Promise.all([
+    db
+      .select({ id: wallets.id, name: wallets.name })
+      .from(wallets)
+      .where(inArray(wallets.id, walletIds)),
+    db
+      .select({
+        id: categories.id,
+        name: categories.name,
+        color: categories.color,
+        icon: categories.icon,
+      })
+      .from(categories)
+      .where(inArray(categories.id, categoryIds)),
+  ]);
 
-  const categoryRows = db
-    .select({
-      id: categories.id,
-      name: categories.name,
-      color: categories.color,
-      icon: categories.icon,
-    })
-    .from(categories)
-    .where(inArray(categories.id, categoryIds))
-    .all();
+  const walletMap = new Map(walletRows.map((w) => [w.id, w.name]));
   const categoryMap = new Map(categoryRows.map((c) => [c.id, c]));
 
   return rows.map((row) => {
@@ -133,11 +133,11 @@ function buildRecurringRuleViews(
   });
 }
 
-function validateRecurringFields(
+async function validateRecurringFields(
   db: AppDb,
   userId: string,
   input: CreateRecurringInput
-): CreateRecurringInput {
+): Promise<CreateRecurringInput> {
   const amount = assertPositiveIntAmount(input.amount);
   const title = input.title.trim();
   if (!title) {
@@ -146,15 +146,23 @@ function validateRecurringFields(
   const nextRunDate = assertValidIsoDate(input.nextRunDate);
 
   if (input.type !== "income" && input.type !== "expense") {
-    throw new AppError(400, "Tipe jadwal rutin harus pemasukan atau pengeluaran.");
+    throw new AppError(
+      400,
+      "Tipe jadwal rutin harus pemasukan atau pengeluaran."
+    );
   }
   if (input.frequency !== "weekly" && input.frequency !== "monthly") {
     throw new AppError(400, "Frekuensi jadwal harus mingguan atau bulanan.");
   }
 
-  const { wallet } = assertWalletAccess(db, input.walletId, userId, "owner");
+  const { wallet } = await assertWalletAccess(
+    db,
+    input.walletId,
+    userId,
+    "owner"
+  );
 
-  const category = db
+  const [category] = await db
     .select({
       id: categories.id,
       userId: categories.userId,
@@ -162,7 +170,7 @@ function validateRecurringFields(
     })
     .from(categories)
     .where(eq(categories.id, input.categoryId))
-    .get();
+    .limit(1);
 
   if (
     !category ||
@@ -183,16 +191,16 @@ function validateRecurringFields(
   };
 }
 
-function loadOwnedRule(
+async function loadOwnedRule(
   db: AppDb,
   ruleId: string,
   userId: string
-): typeof recurringRules.$inferSelect {
-  const rule = db
+): Promise<typeof recurringRules.$inferSelect> {
+  const [rule] = await db
     .select()
     .from(recurringRules)
     .where(eq(recurringRules.id, ruleId))
-    .get();
+    .limit(1);
 
   if (!rule) {
     throw new AppError(404, "Jadwal transaksi rutin tidak ditemukan.");
@@ -208,16 +216,15 @@ function loadOwnedRule(
 /**
  * Lists all recurring rules owned by the user ordered by nextRunDate ascending.
  */
-export function listRecurringRules(
+export async function listRecurringRules(
   db: AppDb,
   userId: string
-): RecurringRuleView[] {
-  const rows = db
+): Promise<RecurringRuleView[]> {
+  const rows = await db
     .select()
     .from(recurringRules)
     .where(eq(recurringRules.userId, userId))
-    .orderBy(asc(recurringRules.nextRunDate), asc(recurringRules.createdAt))
-    .all();
+    .orderBy(asc(recurringRules.nextRunDate), asc(recurringRules.createdAt));
 
   return buildRecurringRuleViews(db, rows, getTodayISO());
 }
@@ -225,13 +232,13 @@ export function listRecurringRules(
 /**
  * Lists active recurring rules whose `nextRunDate <= todayIso`.
  */
-export function listDueRecurringRules(
+export async function listDueRecurringRules(
   db: AppDb,
   userId: string,
   todayIso?: string
-): RecurringRuleView[] {
+): Promise<RecurringRuleView[]> {
   const today = todayIso ? assertValidIsoDate(todayIso) : getTodayISO();
-  const rows = db
+  const rows = await db
     .select()
     .from(recurringRules)
     .where(
@@ -241,8 +248,7 @@ export function listDueRecurringRules(
         lte(recurringRules.nextRunDate, today)
       )
     )
-    .orderBy(asc(recurringRules.nextRunDate), asc(recurringRules.createdAt))
-    .all();
+    .orderBy(asc(recurringRules.nextRunDate), asc(recurringRules.createdAt));
 
   return buildRecurringRuleViews(db, rows, today);
 }
@@ -250,52 +256,51 @@ export function listDueRecurringRules(
 /**
  * Creates a new recurring rule (owner-only on the target wallet).
  */
-export function createRecurringRule(
+export async function createRecurringRule(
   db: AppDb,
   userId: string,
   input: CreateRecurringInput
-): RecurringRuleView {
-  const resolved = validateRecurringFields(db, userId, input);
+): Promise<RecurringRuleView> {
+  const resolved = await validateRecurringFields(db, userId, input);
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  db.insert(recurringRules)
-    .values({
-      id,
-      userId,
-      walletId: resolved.walletId,
-      categoryId: resolved.categoryId,
-      type: resolved.type,
-      amount: resolved.amount,
-      title: resolved.title,
-      frequency: resolved.frequency,
-      nextRunDate: resolved.nextRunDate,
-      isActive: true,
-      createdAt,
-    })
-    .run();
+  await db.insert(recurringRules).values({
+    id,
+    userId,
+    walletId: resolved.walletId,
+    categoryId: resolved.categoryId,
+    type: resolved.type,
+    amount: resolved.amount,
+    title: resolved.title,
+    frequency: resolved.frequency,
+    nextRunDate: resolved.nextRunDate,
+    isActive: true,
+    createdAt,
+  });
 
-  const created = db
+  const [created] = await db
     .select()
     .from(recurringRules)
     .where(eq(recurringRules.id, id))
-    .get()!;
+    .limit(1);
 
-  return buildRecurringRuleViews(db, [created], getTodayISO())[0];
+  const views = await buildRecurringRuleViews(db, [created!], getTodayISO());
+  return views[0];
 }
 
 /**
  * Updates a recurring rule owned by the user.
  */
-export function updateRecurringRule(
+export async function updateRecurringRule(
   db: AppDb,
   ruleId: string,
   userId: string,
   input: Partial<CreateRecurringInput & { isActive: boolean }>
-): RecurringRuleView {
-  const existing = loadOwnedRule(db, ruleId, userId);
+): Promise<RecurringRuleView> {
+  const existing = await loadOwnedRule(db, ruleId, userId);
 
-  const resolved = validateRecurringFields(db, userId, {
+  const resolved = await validateRecurringFields(db, userId, {
     walletId: input.walletId ?? existing.walletId,
     categoryId: input.categoryId ?? existing.categoryId,
     type: input.type ?? existing.type,
@@ -307,7 +312,8 @@ export function updateRecurringRule(
 
   const isActive = input.isActive ?? existing.isActive;
 
-  db.update(recurringRules)
+  await db
+    .update(recurringRules)
     .set({
       walletId: resolved.walletId,
       categoryId: resolved.categoryId,
@@ -318,35 +324,35 @@ export function updateRecurringRule(
       nextRunDate: resolved.nextRunDate,
       isActive,
     })
-    .where(eq(recurringRules.id, ruleId))
-    .run();
+    .where(eq(recurringRules.id, ruleId));
 
-  const updated = db
+  const [updated] = await db
     .select()
     .from(recurringRules)
     .where(eq(recurringRules.id, ruleId))
-    .get()!;
+    .limit(1);
 
-  return buildRecurringRuleViews(db, [updated], getTodayISO())[0];
+  const views = await buildRecurringRuleViews(db, [updated!], getTodayISO());
+  return views[0];
 }
 
 /**
  * Deletes a recurring rule while detaching any historical transactions generated by it.
  */
-export function deleteRecurringRule(
+export async function deleteRecurringRule(
   db: AppDb,
   ruleId: string,
   userId: string
-): void {
-  loadOwnedRule(db, ruleId, userId);
+): Promise<void> {
+  await loadOwnedRule(db, ruleId, userId);
 
-  db.transaction((tx) => {
-    tx.update(transactions)
+  await db.transaction(async (tx) => {
+    await tx
+      .update(transactions)
       .set({ recurringRuleId: null })
-      .where(eq(transactions.recurringRuleId, ruleId))
-      .run();
+      .where(eq(transactions.recurringRuleId, ruleId));
 
-    tx.delete(recurringRules).where(eq(recurringRules.id, ruleId)).run();
+    await tx.delete(recurringRules).where(eq(recurringRules.id, ruleId));
   });
 }
 
@@ -354,22 +360,22 @@ export function deleteRecurringRule(
  * Atomically posts a transaction for `rule.nextRunDate` (with optional amount override),
  * updates wallet balance, and advances `rule.nextRunDate` by 1 cycle.
  */
-export function applyRecurringRule(
+export async function applyRecurringRule(
   db: AppDb,
   ruleId: string,
   userId: string,
   overrideAmount?: number
-): TransactionView {
+): Promise<TransactionView> {
   if (overrideAmount !== undefined) {
     assertPositiveIntAmount(overrideAmount);
   }
 
-  return db.transaction((tx) => {
-    const freshRule = tx
+  return db.transaction(async (tx) => {
+    const [freshRule] = await tx
       .select()
       .from(recurringRules)
       .where(eq(recurringRules.id, ruleId))
-      .get();
+      .limit(1);
 
     if (!freshRule) {
       throw new AppError(404, "Jadwal transaksi rutin tidak ditemukan.");
@@ -384,20 +390,24 @@ export function applyRecurringRule(
     const amount = overrideAmount ?? freshRule.amount;
     const nextRunDate = advanceDate(freshRule.nextRunDate, freshRule.frequency);
 
-    const view = insertTransactionInExecutor(tx, userId, {
-      walletId: freshRule.walletId,
-      categoryId: freshRule.categoryId,
-      type: freshRule.type,
-      amount,
-      title: freshRule.title,
-      occurredAt: freshRule.nextRunDate,
-      recurringRuleId: freshRule.id,
-    });
+    const view = await insertTransactionInExecutor(
+      tx as unknown as AppDb,
+      userId,
+      {
+        walletId: freshRule.walletId,
+        categoryId: freshRule.categoryId,
+        type: freshRule.type,
+        amount,
+        title: freshRule.title,
+        occurredAt: freshRule.nextRunDate,
+        recurringRuleId: freshRule.id,
+      }
+    );
 
-    tx.update(recurringRules)
+    await tx
+      .update(recurringRules)
       .set({ nextRunDate })
-      .where(eq(recurringRules.id, freshRule.id))
-      .run();
+      .where(eq(recurringRules.id, freshRule.id));
 
     return view;
   });
@@ -406,32 +416,37 @@ export function applyRecurringRule(
 /**
  * Advances `nextRunDate` by 1 cycle without inserting any transaction or changing wallet balance.
  */
-export function skipRecurringRule(
+export async function skipRecurringRule(
   db: AppDb,
   ruleId: string,
   userId: string
-): RecurringRuleView {
-  return db.transaction((tx) => {
+): Promise<RecurringRuleView> {
+  return db.transaction(async (tx) => {
     const txDb = tx as unknown as AppDb;
-    const existing = loadOwnedRule(txDb, ruleId, userId);
+    const existing = await loadOwnedRule(txDb, ruleId, userId);
     if (!existing.isActive) {
       throw new AppError(400, "Jadwal rutin sedang nonaktif.");
     }
-    assertWalletAccess(txDb, existing.walletId, userId, "owner");
+    await assertWalletAccess(txDb, existing.walletId, userId, "owner");
 
     const nextRunDate = advanceDate(existing.nextRunDate, existing.frequency);
 
-    tx.update(recurringRules)
+    await tx
+      .update(recurringRules)
       .set({ nextRunDate })
-      .where(eq(recurringRules.id, ruleId))
-      .run();
+      .where(eq(recurringRules.id, ruleId));
 
-    const updated = tx
+    const [updated] = await tx
       .select()
       .from(recurringRules)
       .where(eq(recurringRules.id, ruleId))
-      .get()!;
+      .limit(1);
 
-    return buildRecurringRuleViews(txDb, [updated], getTodayISO())[0];
+    const views = await buildRecurringRuleViews(
+      txDb,
+      [updated!],
+      getTodayISO()
+    );
+    return views[0];
   });
 }

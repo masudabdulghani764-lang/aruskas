@@ -6,9 +6,9 @@ import { ensureDemoSeeded } from "@/lib/seed";
 
 export async function POST(request: Request) {
   try {
-    const db = getDb();
+    const db = await getDb();
     const user = await ensureDemoSeeded(db);
-    const { token, expiresAt } = createSession(
+    const { token, expiresAt } = await createSession(
       db,
       user.id,
       request.headers.get("user-agent")

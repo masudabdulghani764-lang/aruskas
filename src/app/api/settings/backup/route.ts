@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const user = await requireCurrentUser();
     const today = getTodayISO();
-    const backup = buildUserBackupJson(getDb(), user);
+    const backup = await buildUserBackupJson(await getDb(), user);
 
     return new NextResponse(JSON.stringify(backup, null, 2), {
       status: 200,

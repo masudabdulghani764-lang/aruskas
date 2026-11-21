@@ -33,7 +33,7 @@ export async function PATCH(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = profileSchema.parse(body);
 
-    const user = updateUserProfile(getDb(), currentUser.id, parsed);
+    const user = await updateUserProfile(await getDb(), currentUser.id, parsed);
     return NextResponse.json({ user });
   } catch (err) {
     return handleApiError(err);

@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const parsed = registerSchema.parse(body);
 
     const { user, token, expiresAt } = await registerUser(
-      getDb(),
+      await getDb(),
       parsed,
       request.headers.get("user-agent")
     );

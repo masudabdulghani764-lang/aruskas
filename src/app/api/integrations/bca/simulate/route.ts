@@ -37,8 +37,8 @@ export async function POST(request: Request) {
     const rawBody = await parseJsonBody(request);
     const parsed = simulateSchema.parse(rawBody);
 
-    const db = getDb();
-    const result = simulateBcaNotification(db, user.id, parsed);
+    const db = await getDb();
+    const result = await simulateBcaNotification(db, user.id, parsed);
     return NextResponse.json(result);
   } catch (err) {
     return handleApiError(err);

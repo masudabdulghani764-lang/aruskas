@@ -17,7 +17,7 @@ export default async function PengaturanPage() {
     redirect("/masuk");
   }
 
-  const initialCategories = listCategories(getDb(), user.id);
+  const initialCategories = await listCategories(await getDb(), user.id);
 
   return (
     <SettingsClient

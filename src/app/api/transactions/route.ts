@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { deleteAttachmentQuietly, saveAttachment } from "@/lib/attachments";
+import { prepareAttachmentForDb } from "@/lib/attachments";
 import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
 import { AppError, handleApiError } from "@/lib/errors";
 import {
@@ -165,7 +165,7 @@ export async function GET(request: Request) {
       assertValidIsoDate(parsed.to);
     }
 
-    const result = listTransactions(getDb(), user.id, parsed);
+    const result = await listTransactions(await getDb(), user.id, parsed);
     return NextResponse.json(result);
   } catch (err) {
     return handleApiError(err);
@@ -204,8 +204,12 @@ export async function POST(request: Request) {
       });
 
       const fileEntry = formData.get("attachment");
-      let savedAttachment: { path: string; name: string; mime: string } | null =
-        null;
+      let preparedAttachment: {
+        path: string;
+        name: string;
+        mime: string;
+        dataBase64: string;
+      } | null = null;
 
       if (
         fileEntry &&
@@ -213,36 +217,30 @@ export async function POST(request: Request) {
         (fileEntry.size > 0 || fileEntry.name !== "")
       ) {
         const buffer = new Uint8Array(await fileEntry.arrayBuffer());
-        savedAttachment = await saveAttachment({
+        preparedAttachment = prepareAttachmentForDb({
           name: fileEntry.name || "lampiran",
           type: fileEntry.type || "application/octet-stream",
           buffer,
         });
       }
 
-      try {
-        const transaction = createTransaction(getDb(), user.id, {
-          ...parsed,
-          ...(savedAttachment
-            ? {
-                attachmentPath: savedAttachment.path,
-                attachmentName: savedAttachment.name,
-                attachmentMime: savedAttachment.mime,
-              }
-            : {}),
-        });
-        return NextResponse.json({ transaction }, { status: 201 });
-      } catch (err) {
-        if (savedAttachment) {
-          await deleteAttachmentQuietly(savedAttachment.path);
-        }
-        throw err;
-      }
+      const transaction = await createTransaction(await getDb(), user.id, {
+        ...parsed,
+        ...(preparedAttachment
+          ? {
+              attachmentPath: preparedAttachment.path,
+              attachmentName: preparedAttachment.name,
+              attachmentMime: preparedAttachment.mime,
+              attachmentData: preparedAttachment.dataBase64,
+            }
+          : {}),
+      });
+      return NextResponse.json({ transaction }, { status: 201 });
     }
 
     const body = await parseJsonBody(request);
     const parsed = createTransactionSchema.parse(body);
-    const transaction = createTransaction(getDb(), user.id, parsed);
+    const transaction = await createTransaction(await getDb(), user.id, parsed);
     return NextResponse.json({ transaction }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

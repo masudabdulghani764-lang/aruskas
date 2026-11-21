@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const query = parseReportQueryParams(searchParams);
 
-    const report = getFinancialReport(getDb(), user.id, query);
+    const report = await getFinancialReport(await getDb(), user.id, query);
     return NextResponse.json(report);
   } catch (err) {
     return handleApiError(err);

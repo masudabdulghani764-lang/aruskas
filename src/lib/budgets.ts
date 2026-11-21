@@ -57,18 +57,18 @@ function computeBudgetStatus(
   return "safe";
 }
 
-function buildBudgetProgressViews(
+async function buildBudgetProgressViews(
   db: AppDb,
   userId: string,
   month: string,
   rows: BudgetRowWithCategory[]
-): BudgetProgressView[] {
+): Promise<BudgetProgressView[]> {
   if (rows.length === 0) {
     return [];
   }
 
   const categoryIds = Array.from(new Set(rows.map((r) => r.categoryId)));
-  const spentRows = db
+  const spentRows = await db
     .select({
       categoryId: transactions.categoryId,
       total: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
@@ -83,8 +83,7 @@ function buildBudgetProgressViews(
         inArray(transactions.categoryId, categoryIds)
       )
     )
-    .groupBy(transactions.categoryId)
-    .all();
+    .groupBy(transactions.categoryId);
 
   const spentMap = new Map<string, number>();
   for (const item of spentRows) {
@@ -119,14 +118,14 @@ function buildBudgetProgressViews(
  * Lists monthly budgets for `userId` with exact expense realization across owned
  * wallets only (excluding transfers and wallets owned by other users).
  */
-export function listMonthlyBudgets(
+export async function listMonthlyBudgets(
   db: AppDb,
   userId: string,
   month: string
-): BudgetProgressView[] {
+): Promise<BudgetProgressView[]> {
   const validMonth = assertValidMonthYM(month);
 
-  const rows = db
+  const rows = await db
     .select({
       id: budgets.id,
       categoryId: budgets.categoryId,
@@ -139,8 +138,7 @@ export function listMonthlyBudgets(
     .from(budgets)
     .innerJoin(categories, eq(budgets.categoryId, categories.id))
     .where(and(eq(budgets.userId, userId), eq(budgets.month, validMonth)))
-    .orderBy(asc(categories.name), asc(budgets.createdAt))
-    .all();
+    .orderBy(asc(categories.name), asc(budgets.createdAt));
 
   return buildBudgetProgressViews(db, userId, validMonth, rows);
 }
@@ -148,19 +146,19 @@ export function listMonthlyBudgets(
 /**
  * Inserts or updates a monthly expense budget on `(userId, categoryId, month)`.
  */
-export function upsertBudget(
+export async function upsertBudget(
   db: AppDb,
   userId: string,
   input: { categoryId: string; month: string; limitAmount: number }
-): BudgetProgressView {
+): Promise<BudgetProgressView> {
   const validMonth = assertValidMonthYM(input.month);
   const limitAmount = assertPositiveIntAmount(input.limitAmount);
 
-  const category = db
+  const [category] = await db
     .select()
     .from(categories)
     .where(eq(categories.id, input.categoryId))
-    .get();
+    .limit(1);
 
   if (!category) {
     throw new AppError(404, "Kategori tidak ditemukan.");
@@ -176,7 +174,7 @@ export function upsertBudget(
   }
 
   const now = new Date().toISOString();
-  const saved = db
+  const [saved] = await db
     .insert(budgets)
     .values({
       id: crypto.randomUUID(),
@@ -190,12 +188,11 @@ export function upsertBudget(
       target: [budgets.userId, budgets.categoryId, budgets.month],
       set: { limitAmount },
     })
-    .returning({ id: budgets.id })
-    .get()!;
+    .returning({ id: budgets.id });
 
-  return buildBudgetProgressViews(db, userId, validMonth, [
+  const views = await buildBudgetProgressViews(db, userId, validMonth, [
     {
-      id: saved.id,
+      id: saved!.id,
       categoryId: category.id,
       categoryName: category.name,
       categoryColor: category.color,
@@ -203,22 +200,23 @@ export function upsertBudget(
       month: validMonth,
       limitAmount,
     },
-  ])[0];
+  ]);
+  return views[0];
 }
 
 /**
  * Deletes an existing budget owned by `userId`.
  */
-export function deleteBudget(
+export async function deleteBudget(
   db: AppDb,
   userId: string,
   budgetId: string
-): void {
-  const existing = db
+): Promise<void> {
+  const [existing] = await db
     .select({ id: budgets.id, userId: budgets.userId })
     .from(budgets)
     .where(eq(budgets.id, budgetId))
-    .get();
+    .limit(1);
 
   if (!existing) {
     throw new AppError(404, "Anggaran tidak ditemukan.");
@@ -227,23 +225,23 @@ export function deleteBudget(
     throw new AppError(403, "Anda tidak memiliki akses ke anggaran ini.");
   }
 
-  db.delete(budgets).where(eq(budgets.id, budgetId)).run();
+  await db.delete(budgets).where(eq(budgets.id, budgetId));
 }
 
 /**
  * Idempotently copies missing budgets from the previous calendar month into `targetMonth`.
  */
-export function copyBudgetsFromPreviousMonth(
+export async function copyBudgetsFromPreviousMonth(
   db: AppDb,
   userId: string,
   targetMonth: string
-): { copiedCount: number } {
+): Promise<{ copiedCount: number }> {
   const validTargetMonth = assertValidMonthYM(targetMonth);
   const previousMonth = getPreviousMonthYM(validTargetMonth);
   const now = new Date().toISOString();
 
-  return db.transaction((tx) => {
-    const prevBudgets = tx
+  return db.transaction(async (tx) => {
+    const prevBudgets = await tx
       .select({
         categoryId: budgets.categoryId,
         limitAmount: budgets.limitAmount,
@@ -251,20 +249,18 @@ export function copyBudgetsFromPreviousMonth(
       .from(budgets)
       .where(
         and(eq(budgets.userId, userId), eq(budgets.month, previousMonth))
-      )
-      .all();
+      );
 
     if (prevBudgets.length === 0) {
       return { copiedCount: 0 };
     }
 
-    const existingRows = tx
+    const existingRows = await tx
       .select({ categoryId: budgets.categoryId })
       .from(budgets)
       .where(
         and(eq(budgets.userId, userId), eq(budgets.month, validTargetMonth))
-      )
-      .all();
+      );
 
     const existingCategoryIds = new Set(existingRows.map((r) => r.categoryId));
     const missing = prevBudgets.filter(
@@ -275,7 +271,8 @@ export function copyBudgetsFromPreviousMonth(
       return { copiedCount: 0 };
     }
 
-    tx.insert(budgets)
+    await tx
+      .insert(budgets)
       .values(
         missing.map((item) => ({
           id: crypto.randomUUID(),
@@ -288,8 +285,7 @@ export function copyBudgetsFromPreviousMonth(
       )
       .onConflictDoNothing({
         target: [budgets.userId, budgets.categoryId, budgets.month],
-      })
-      .run();
+      });
 
     return { copiedCount: missing.length };
   });

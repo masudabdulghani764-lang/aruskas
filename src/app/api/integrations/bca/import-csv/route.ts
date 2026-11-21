@@ -103,11 +103,11 @@ export async function POST(request: Request) {
         ? (rawBody as { action?: unknown }).action
         : null;
 
-    const db = getDb();
+    const db = await getDb();
 
     if (action === "preview") {
       const parsed = previewSchema.parse(rawBody);
-      const preview = previewBcaCsvImport(db, user.id, {
+      const preview = await previewBcaCsvImport(db, user.id, {
         walletId: parsed.walletId,
         csvText: parsed.csvText,
       });
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
 
     if (action === "commit") {
       const parsed = commitSchema.parse(rawBody);
-      const result = commitBcaCsvImport(db, user.id, {
+      const result = await commitBcaCsvImport(db, user.id, {
         walletId: parsed.walletId,
         rows: parsed.rows,
       });

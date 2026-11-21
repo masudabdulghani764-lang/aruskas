@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const parsed = loginSchema.parse(body);
 
     const { user, token, expiresAt } = await loginUser(
-      getDb(),
+      await getDb(),
       parsed,
       request.headers.get("user-agent")
     );

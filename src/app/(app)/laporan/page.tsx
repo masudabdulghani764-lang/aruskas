@@ -19,14 +19,16 @@ export default async function LaporanPage() {
     redirect("/masuk");
   }
 
-  const db = getDb();
+  const db = await getDb();
   const { from, to } = resolveReportPeriodRange("this_month");
-  const initialReport = getFinancialReport(db, user.id, {
-    from,
-    to,
-    scope: "all",
-  });
-  const initialWallets = listUserWallets(db, user.id);
+  const [initialReport, initialWallets] = await Promise.all([
+    getFinancialReport(db, user.id, {
+      from,
+      to,
+      scope: "all",
+    }),
+    listUserWallets(db, user.id),
+  ]);
 
   return (
     <ReportsClient

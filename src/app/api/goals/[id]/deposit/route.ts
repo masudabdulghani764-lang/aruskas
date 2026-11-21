@@ -61,7 +61,7 @@ export async function POST(
     const body = await parseJsonBody(request);
     const parsed = depositGoalSchema.parse(body);
 
-    const goal = depositToSavingsGoal(getDb(), user.id, id, parsed);
+    const goal = await depositToSavingsGoal(await getDb(), user.id, id, parsed);
     return NextResponse.json({ goal });
   } catch (err) {
     return handleApiError(err);

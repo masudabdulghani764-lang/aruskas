@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { token } = await context.params;
-    const invite = getInviteByToken(getDb(), token);
+    const invite = await getInviteByToken(await getDb(), token);
 
     return NextResponse.json({
       invite: {

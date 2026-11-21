@@ -39,7 +39,7 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const parsed = updateCategorySchema.parse(body);
 
-    const category = updateCategory(getDb(), user.id, id, parsed);
+    const category = await updateCategory(await getDb(), user.id, id, parsed);
     return NextResponse.json({ category });
   } catch (err) {
     return handleApiError(err);
@@ -54,7 +54,7 @@ export async function DELETE(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    deleteCategory(getDb(), user.id, id);
+    await deleteCategory(await getDb(), user.id, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return handleApiError(err);

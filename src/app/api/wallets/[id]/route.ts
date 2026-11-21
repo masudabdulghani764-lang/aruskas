@@ -38,7 +38,7 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const parsed = updateWalletSchema.parse(body);
 
-    const wallet = updateWallet(getDb(), id, user.id, parsed);
+    const wallet = await updateWallet(await getDb(), id, user.id, parsed);
     return NextResponse.json({ wallet });
   } catch (err) {
     return handleApiError(err);

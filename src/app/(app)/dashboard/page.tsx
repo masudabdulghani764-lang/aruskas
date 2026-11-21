@@ -17,9 +17,14 @@ export default async function DashboardPage() {
     redirect("/masuk");
   }
 
-  const initialData = getDashboardSummary(getDb(), user.id, user.email, {
-    scope: "all",
-  });
+  const initialData = await getDashboardSummary(
+    await getDb(),
+    user.id,
+    user.email,
+    {
+      scope: "all",
+    }
+  );
 
   return <DashboardClient initialData={initialData} userName={user.name} />;
 }

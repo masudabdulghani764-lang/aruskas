@@ -63,7 +63,7 @@ const createGoalSchema = z.object(
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    const goals = listSavingsGoals(getDb(), user.id);
+    const goals = await listSavingsGoals(await getDb(), user.id);
     return NextResponse.json({ goals });
   } catch (err) {
     return handleApiError(err);
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = createGoalSchema.parse(body);
 
-    const goal = createSavingsGoal(getDb(), user.id, parsed);
+    const goal = await createSavingsGoal(await getDb(), user.id, parsed);
     return NextResponse.json({ goal }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

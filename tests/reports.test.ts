@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { closeDb, createDb, getDb } from "@/db";
+import { type AppDb, closeDb, createDb, getDb } from "@/db";
 import { categories } from "@/db/schema";
 import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import { upsertBudget } from "@/lib/budgets";
@@ -58,25 +58,22 @@ async function expectAppError(
   return appErr;
 }
 
-function getUserCategory(
-  db: ReturnType<typeof createDb>["db"],
+async function getUserCategory(
+  db: AppDb,
   userId: string,
   type: "income" | "expense",
   index = 0
 ) {
-  const rows = db
-    .select()
-    .from(categories)
-    .where(eq(categories.userId, userId))
-    .all()
-    .filter((c) => c.type === type);
+  const rows = (
+    await db.select().from(categories).where(eq(categories.userId, userId))
+  ).filter((c) => c.type === type);
   expect(rows.length).toBeGreaterThan(index);
   return rows[index];
 }
 
 describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
   test("getDashboardSummary excludes viewer wallets from totalBalance/cashflow into watchedWallets and scope='personal' excludes shared wallets", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Raka",
@@ -89,41 +86,41 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         password: "Password123!",
       });
 
-      const personalBca = createWallet(db, owner.user.id, {
+      const personalBca = await createWallet(db, owner.user.id, {
         name: "BCA Pribadi",
         type: "bank",
         initialBalance: 5_000_000,
       });
-      const sharedKas = createWallet(db, owner.user.id, {
+      const sharedKas = await createWallet(db, owner.user.id, {
         name: "Kas Bersama",
         type: "cash",
         initialBalance: 2_000_000,
       });
-      const archivedWallet = createWallet(db, owner.user.id, {
+      const archivedWallet = await createWallet(db, owner.user.id, {
         name: "Dompet Lama",
         type: "cash",
         initialBalance: 9_000_000,
       });
-      updateWallet(db, archivedWallet.id, owner.user.id, { archived: true });
+      await updateWallet(db, archivedWallet.id, owner.user.id, { archived: true });
 
-      const partnerEditorWallet = createWallet(db, partner.user.id, {
+      const partnerEditorWallet = await createWallet(db, partner.user.id, {
         name: "Kas Proyek",
         type: "ewallet",
         initialBalance: 1_000_000,
       });
-      const partnerViewerWallet = createWallet(db, partner.user.id, {
+      const partnerViewerWallet = await createWallet(db, partner.user.id, {
         name: "Tabungan Nadia",
         type: "savings",
         initialBalance: 20_000_000,
       });
 
-      const sharedInvite = createWalletInvite(db, sharedKas.id, owner.user.id, {
+      const sharedInvite = await createWalletInvite(db, sharedKas.id, owner.user.id, {
         email: partner.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, sharedInvite.token, partner.user);
+      await acceptWalletInvite(db, sharedInvite.token, partner.user);
 
-      const editorInvite = createWalletInvite(
+      const editorInvite = await createWalletInvite(
         db,
         partnerEditorWallet.id,
         partner.user.id,
@@ -132,9 +129,9 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
           role: "editor",
         }
       );
-      acceptWalletInvite(db, editorInvite.token, owner.user);
+      await acceptWalletInvite(db, editorInvite.token, owner.user);
 
-      const viewerInvite = createWalletInvite(
+      const viewerInvite = await createWalletInvite(
         db,
         partnerViewerWallet.id,
         partner.user.id,
@@ -143,12 +140,12 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
           role: "viewer",
         }
       );
-      acceptWalletInvite(db, viewerInvite.token, owner.user);
+      await acceptWalletInvite(db, viewerInvite.token, owner.user);
 
-      const ownerIncomeCat = getUserCategory(db, owner.user.id, "income", 0);
-      const ownerExpenseCat = getUserCategory(db, owner.user.id, "expense", 0);
-      const partnerIncomeCat = getUserCategory(db, partner.user.id, "income", 0);
-      const partnerExpenseCat = getUserCategory(
+      const ownerIncomeCat = await getUserCategory(db, owner.user.id, "income", 0);
+      const ownerExpenseCat = await getUserCategory(db, owner.user.id, "expense", 0);
+      const partnerIncomeCat = await getUserCategory(db, partner.user.id, "income", 0);
+      const partnerExpenseCat = await getUserCategory(
         db,
         partner.user.id,
         "expense",
@@ -156,7 +153,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       );
 
       // Previous month (2026-10) transactions
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: personalBca.id,
         categoryId: ownerIncomeCat.id,
         type: "income",
@@ -164,7 +161,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Gaji Oktober",
         occurredAt: "2026-10-05",
       });
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: personalBca.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -174,7 +171,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       });
 
       // Current month (2026-11) transactions
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: personalBca.id,
         categoryId: ownerIncomeCat.id,
         type: "income",
@@ -182,7 +179,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Gaji November",
         occurredAt: "2026-11-01",
       });
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: personalBca.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -191,7 +188,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-04",
       });
       // Transfer between personal and shared must NOT count as income/expense in monthlySeries
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: personalBca.id,
         targetWalletId: sharedKas.id,
         type: "transfer",
@@ -200,7 +197,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-05",
       });
       // Expense on shared wallet (included in scope='all', excluded in scope='personal')
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: sharedKas.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -209,7 +206,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-06",
       });
       // Income on partnerEditorWallet (included in scope='all', excluded in scope='personal')
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: partnerEditorWallet.id,
         categoryId: partnerIncomeCat.id,
         type: "income",
@@ -218,7 +215,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-07",
       });
       // Viewer wallet massive income & expense -> MUST BE EXCLUDED from all totals & series
-      createTransaction(db, partner.user.id, {
+      await createTransaction(db, partner.user.id, {
         walletId: partnerViewerWallet.id,
         categoryId: partnerIncomeCat.id,
         type: "income",
@@ -226,7 +223,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Hadiah Besar Nadia",
         occurredAt: "2026-11-08",
       });
-      createTransaction(db, partner.user.id, {
+      await createTransaction(db, partner.user.id, {
         walletId: partnerViewerWallet.id,
         categoryId: partnerExpenseCat.id,
         type: "expense",
@@ -236,12 +233,12 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       });
 
       // Budget, due recurring rule, and pending invite
-      upsertBudget(db, owner.user.id, {
+      await upsertBudget(db, owner.user.id, {
         categoryId: ownerExpenseCat.id,
         month: "2026-11",
         limitAmount: 5_000_000,
       });
-      createRecurringRule(db, owner.user.id, {
+      await createRecurringRule(db, owner.user.id, {
         walletId: personalBca.id,
         categoryId: ownerExpenseCat.id,
         type: "expense",
@@ -250,18 +247,18 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         frequency: "monthly",
         nextRunDate: "2026-11-20",
       });
-      const extraWallet = createWallet(db, partner.user.id, {
+      const extraWallet = await createWallet(db, partner.user.id, {
         name: "Dompet Undangan",
         type: "cash",
         initialBalance: 300_000,
       });
-      createWalletInvite(db, extraWallet.id, partner.user.id, {
+      await createWalletInvite(db, extraWallet.id, partner.user.id, {
         email: owner.user.email,
         role: "viewer",
       });
 
       // 1. scope = "all"
-      const allSummary = getDashboardSummary(
+      const allSummary = await getDashboardSummary(
         db,
         owner.user.id,
         owner.user.email,
@@ -324,7 +321,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       ).toBe(false);
 
       // 2. scope = "personal" excludes sharedKas and partnerEditorWallet
-      const personalSummary = getDashboardSummary(
+      const personalSummary = await getDashboardSummary(
         db,
         owner.user.id,
         owner.user.email,
@@ -350,15 +347,15 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         )
       ).toBe(false);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("getDashboardSummary works cleanly with demo seed data and returns null balanceGrowthPct when starting balance <= 0", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const demo = await ensureDemoSeeded(db);
-      const demoDash = getDashboardSummary(db, demo.id, demo.email);
+      const demoDash = await getDashboardSummary(db, demo.id, demo.email);
       expect(demoDash.activeWallets).toHaveLength(4);
       expect(demoDash.watchedWallets).toHaveLength(1);
       expect(demoDash.watchedWallets[0].name).toBe("Tabungan Liburan Nadia");
@@ -371,17 +368,17 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         email: "baru@aruskas.test",
         password: "Password123!",
       });
-      const freshDash = getDashboardSummary(db, fresh.user.id, fresh.user.email);
+      const freshDash = await getDashboardSummary(db, fresh.user.id, fresh.user.email);
       expect(freshDash.totalBalance).toBe(0);
       expect(freshDash.savingRate).toBe(0);
       expect(freshDash.balanceGrowthPct).toBeNull();
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("getFinancialReport for a single wallet reconciles openingBalance + totalIncome - totalExpense + transferIn - transferOut === closingBalance across prior history & in-range flows", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const user = await registerUser(db, {
         name: "Raka",
@@ -394,25 +391,25 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         password: "Password123!",
       });
 
-      const bca = createWallet(db, user.user.id, {
+      const bca = await createWallet(db, user.user.id, {
         name: "Bank BCA",
         type: "bank",
         initialBalance: 1_000_000,
       });
-      const tunai = createWallet(db, user.user.id, {
+      const tunai = await createWallet(db, user.user.id, {
         name: "Dompet Tunai",
         type: "cash",
         initialBalance: 2_000_000,
       });
 
-      const gajiCat = getUserCategory(db, user.user.id, "income", 0);
-      const bonusCat = getUserCategory(db, user.user.id, "income", 3);
-      const makanCat = getUserCategory(db, user.user.id, "expense", 0);
-      const transCat = getUserCategory(db, user.user.id, "expense", 1);
+      const gajiCat = await getUserCategory(db, user.user.id, "income", 0);
+      const bonusCat = await getUserCategory(db, user.user.id, "income", 3);
+      const makanCat = await getUserCategory(db, user.user.id, "expense", 0);
+      const transCat = await getUserCategory(db, user.user.id, "expense", 1);
 
       // Prior history strictly before 2026-11-01 on BCA:
       // 1_000_000 + 4_000_000 (income) - 500_000 (expense) + 300_000 (transfer in) - 200_000 (transfer out) = 4_600_000
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: gajiCat.id,
         type: "income",
@@ -420,7 +417,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Gaji Oktober",
         occurredAt: "2026-10-05",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: makanCat.id,
         type: "expense",
@@ -428,7 +425,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Makan Oktober",
         occurredAt: "2026-10-12",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: tunai.id,
         targetWalletId: bca.id,
         type: "transfer",
@@ -436,7 +433,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Setor Tunai Oktober",
         occurredAt: "2026-10-20",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         targetWalletId: tunai.id,
         type: "transfer",
@@ -452,7 +449,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       // transferOut: 750_000
       // netChange = 6_000_000 - 1_000_000 + 450_000 - 750_000 = 4_700_000
       // closingBalance = 4_600_000 + 4_700_000 = 9_300_000
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: gajiCat.id,
         type: "income",
@@ -460,7 +457,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Gaji November",
         occurredAt: "2026-11-01",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: bonusCat.id,
         type: "income",
@@ -468,7 +465,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Bonus Proyek",
         occurredAt: "2026-11-10",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: makanCat.id,
         type: "expense",
@@ -476,7 +473,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Katering",
         occurredAt: "2026-11-10",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: transCat.id,
         type: "expense",
@@ -484,7 +481,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Tol & Parkir",
         occurredAt: "2026-11-15",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: tunai.id,
         targetWalletId: bca.id,
         type: "transfer",
@@ -492,7 +489,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Setor Tunai Nov",
         occurredAt: "2026-11-18",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         targetWalletId: tunai.id,
         type: "transfer",
@@ -502,7 +499,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       });
 
       // Post-range (> 2026-11-30) transaction must NOT affect November report
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: gajiCat.id,
         type: "income",
@@ -511,7 +508,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-12-01",
       });
 
-      const report = getFinancialReport(db, user.user.id, {
+      const report = await getFinancialReport(db, user.user.id, {
         from: "2026-11-01",
         to: "2026-11-30",
         walletId: bca.id,
@@ -561,7 +558,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       expect(report.expenseByCategory[1].percentage).toBe(20);
 
       // Multi-month range (> 45 days) groups trendSeries by YYYY-MM
-      const multiMonth = getFinancialReport(db, user.user.id, {
+      const multiMonth = await getFinancialReport(db, user.user.id, {
         from: "2026-10-01",
         to: "2026-12-31",
         walletId: bca.id,
@@ -594,12 +591,12 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         400
       );
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("aggregate getFinancialReport excludes internal transfers from income/expense, excludes viewer wallets, and reconciles openingBalance -> closingBalance in all & personal scopes", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const owner = await registerUser(db, {
         name: "Raka",
@@ -612,34 +609,34 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         password: "Password123!",
       });
 
-      const bca = createWallet(db, owner.user.id, {
+      const bca = await createWallet(db, owner.user.id, {
         name: "BCA Pribadi",
         type: "bank",
         initialBalance: 2_000_000,
       });
-      const gopay = createWallet(db, owner.user.id, {
+      const gopay = await createWallet(db, owner.user.id, {
         name: "GoPay",
         type: "ewallet",
         initialBalance: 500_000,
       });
-      const kasShared = createWallet(db, owner.user.id, {
+      const kasShared = await createWallet(db, owner.user.id, {
         name: "Kas Keluarga",
         type: "bank",
         initialBalance: 1_000_000,
       });
-      const partnerViewer = createWallet(db, partner.user.id, {
+      const partnerViewer = await createWallet(db, partner.user.id, {
         name: "Tabungan Nadia",
         type: "savings",
         initialBalance: 10_000_000,
       });
 
-      const sharedInv = createWalletInvite(db, kasShared.id, owner.user.id, {
+      const sharedInv = await createWalletInvite(db, kasShared.id, owner.user.id, {
         email: partner.user.email,
         role: "editor",
       });
-      acceptWalletInvite(db, sharedInv.token, partner.user);
+      await acceptWalletInvite(db, sharedInv.token, partner.user);
 
-      const viewerInv = createWalletInvite(
+      const viewerInv = await createWalletInvite(
         db,
         partnerViewer.id,
         partner.user.id,
@@ -648,14 +645,14 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
           role: "viewer",
         }
       );
-      acceptWalletInvite(db, viewerInv.token, owner.user);
+      await acceptWalletInvite(db, viewerInv.token, owner.user);
 
-      const incomeCat = getUserCategory(db, owner.user.id, "income", 0);
-      const expenseCat = getUserCategory(db, owner.user.id, "expense", 0);
-      const partnerIncomeCat = getUserCategory(db, partner.user.id, "income", 0);
+      const incomeCat = await getUserCategory(db, owner.user.id, "income", 0);
+      const expenseCat = await getUserCategory(db, owner.user.id, "expense", 0);
+      const partnerIncomeCat = await getUserCategory(db, partner.user.id, "income", 0);
 
       // Prior (2026-10) income on BCA + internal transfer BCA -> GoPay
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         categoryId: incomeCat.id,
         type: "income",
@@ -663,7 +660,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Gaji Okt",
         occurredAt: "2026-10-01",
       });
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         targetWalletId: gopay.id,
         type: "transfer",
@@ -673,7 +670,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       });
 
       // Nov 2026 transactions
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         categoryId: incomeCat.id,
         type: "income",
@@ -682,7 +679,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-01",
       });
       // Internal transfer BCA -> GoPay (must cancel out completely!)
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         targetWalletId: gopay.id,
         type: "transfer",
@@ -691,7 +688,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-03",
       });
       // Transfer BCA -> kasShared (internal in scope='all', boundary OUT in scope='personal')
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         targetWalletId: kasShared.id,
         type: "transfer",
@@ -700,7 +697,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-05",
       });
       // Expense on GoPay & kasShared
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: gopay.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -708,7 +705,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Makan GoFood",
         occurredAt: "2026-11-08",
       });
-      createTransaction(db, partner.user.id, {
+      await createTransaction(db, partner.user.id, {
         walletId: kasShared.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -717,7 +714,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-09",
       });
       // Viewer wallet activity -> MUST NOT affect aggregate report
-      createTransaction(db, partner.user.id, {
+      await createTransaction(db, partner.user.id, {
         walletId: partnerViewer.id,
         categoryId: partnerIncomeCat.id,
         type: "income",
@@ -727,7 +724,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       });
 
       // 1. Aggregate scope = "all"
-      const aggAll = getFinancialReport(db, owner.user.id, {
+      const aggAll = await getFinancialReport(db, owner.user.id, {
         from: "2026-11-01",
         to: "2026-11-30",
         scope: "all",
@@ -756,7 +753,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       ).toBe(false);
 
       // 2. Aggregate scope = "personal"
-      const aggPersonal = getFinancialReport(db, owner.user.id, {
+      const aggPersonal = await getFinancialReport(db, owner.user.id, {
         from: "2026-11-01",
         to: "2026-11-30",
         scope: "personal",
@@ -778,31 +775,31 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
           aggPersonal.transferOut
       ).toBe(aggPersonal.closingBalance);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("Review Focus: buildTransactionsCsv starts with UTF-8 BOM, has Indonesian headers, and neutralizes formula-injection payloads", async () => {
-    const { db, sqlite } = createDb(":memory:");
+    const { db, close } = await createDb(":memory:");
     try {
       const user = await registerUser(db, {
         name: "Raka",
         email: "raka-csv@aruskas.test",
         password: "Password123!",
       });
-      const bca = createWallet(db, user.user.id, {
+      const bca = await createWallet(db, user.user.id, {
         name: "BCA Utama",
         type: "bank",
         initialBalance: 5_000_000,
       });
-      const tunai = createWallet(db, user.user.id, {
+      const tunai = await createWallet(db, user.user.id, {
         name: "Dompet Tunai",
         type: "cash",
         initialBalance: 1_000_000,
       });
-      const expenseCat = getUserCategory(db, user.user.id, "expense", 0);
+      const expenseCat = await getUserCategory(db, user.user.id, "expense", 0);
 
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -812,7 +809,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         paymentMethod: "@CMD",
         occurredAt: "2026-11-15",
       });
-      createTransaction(db, user.user.id, {
+      await createTransaction(db, user.user.id, {
         walletId: bca.id,
         targetWalletId: tunai.id,
         type: "transfer",
@@ -821,7 +818,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         occurredAt: "2026-11-14",
       });
 
-      const rows = listTransactions(db, user.user.id, {}).items;
+      const rows = (await listTransactions(db, user.user.id, {})).items;
       const csv = buildTransactionsCsv(rows);
 
       expect(csv.startsWith("\uFEFF")).toBe(true);
@@ -842,16 +839,16 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       expect(lines[2]).toContain("Transfer");
 
       // Backup JSON snapshot check
-      upsertBudget(db, user.user.id, {
+      await upsertBudget(db, user.user.id, {
         categoryId: expenseCat.id,
         month: "2026-11",
         limitAmount: 2_000_000,
       });
-      createSavingsGoal(db, user.user.id, {
+      await createSavingsGoal(db, user.user.id, {
         name: "Dana Darurat",
         targetAmount: 10_000_000,
       });
-      createRecurringRule(db, user.user.id, {
+      await createRecurringRule(db, user.user.id, {
         walletId: bca.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -861,7 +858,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         nextRunDate: "2026-12-01",
       });
 
-      const backup = buildUserBackupJson(db, user.user);
+      const backup = await buildUserBackupJson(db, user.user);
       expect(backup.user.email).toBe("raka-csv@aruskas.test");
       expect((backup.user as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(backup.wallets.length).toBeGreaterThanOrEqual(3);
@@ -871,18 +868,18 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       expect(backup.savingsGoals).toHaveLength(1);
       expect(backup.recurringRules).toHaveLength(1);
     } finally {
-      sqlite.close();
+      await close();
     }
   });
 
   test("API routes enforce 401, Indonesian 400 validation errors, 403 RBAC, and correct JSON/CSV/Backup download headers", async () => {
     const prevDbPath = process.env.DATABASE_PATH;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-rep-api-"));
-    process.env.DATABASE_PATH = path.join(tempDir, "test.db");
+    process.env.DATABASE_PATH = `memory://rep-api-${crypto.randomUUID()}`;
     mockSessionCookie = undefined;
 
     try {
-      const db = getDb();
+      const db = await getDb();
       const owner = await registerUser(db, {
         name: "Raka API",
         email: "raka-rep-api@aruskas.test",
@@ -915,15 +912,15 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       // Authenticate as owner
       mockSessionCookie = owner.token;
 
-      const bca = createWallet(db, owner.user.id, {
+      const bca = await createWallet(db, owner.user.id, {
         name: "BCA Uji",
         type: "bank",
         initialBalance: 3_000_000,
       });
-      const incomeCat = getUserCategory(db, owner.user.id, "income", 0);
-      const expenseCat = getUserCategory(db, owner.user.id, "expense", 0);
+      const incomeCat = await getUserCategory(db, owner.user.id, "income", 0);
+      const expenseCat = await getUserCategory(db, owner.user.id, "expense", 0);
 
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         categoryId: incomeCat.id,
         type: "income",
@@ -931,7 +928,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         title: "Gaji Uji",
         occurredAt: "2026-11-05",
       });
-      createTransaction(db, owner.user.id, {
+      await createTransaction(db, owner.user.id, {
         walletId: bca.id,
         categoryId: expenseCat.id,
         type: "expense",
@@ -1086,7 +1083,7 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
         );
       }
     } finally {
-      closeDb();
+      await closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

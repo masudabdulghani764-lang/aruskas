@@ -59,7 +59,7 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const parsed = updateGoalSchema.parse(body);
 
-    const goal = updateSavingsGoal(getDb(), user.id, id, parsed);
+    const goal = await updateSavingsGoal(await getDb(), user.id, id, parsed);
     return NextResponse.json({ goal });
   } catch (err) {
     return handleApiError(err);
@@ -74,7 +74,7 @@ export async function DELETE(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    deleteSavingsGoal(getDb(), user.id, id);
+    await deleteSavingsGoal(await getDb(), user.id, id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return handleApiError(err);

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { transactions } from "@/db/schema";
+import { transactionAttachments, transactions } from "@/db/schema";
 import {
   buildContentDisposition,
   readAttachmentBuffer,
@@ -17,26 +17,41 @@ export async function GET(
   try {
     const user = await requireCurrentUser();
     const { transactionId } = await context.params;
-    const db = getDb();
+    const db = await getDb();
 
     // Verifies transaction existence (404) and viewer access on wallet or targetWallet (403).
-    getTransactionById(db, transactionId, user.id);
+    await getTransactionById(db, transactionId, user.id);
 
-    const row = db
-      .select({
-        attachmentPath: transactions.attachmentPath,
-        attachmentName: transactions.attachmentName,
-        attachmentMime: transactions.attachmentMime,
-      })
-      .from(transactions)
-      .where(eq(transactions.id, transactionId))
-      .get();
+    const [[row], [blobRow]] = await Promise.all([
+      db
+        .select({
+          attachmentPath: transactions.attachmentPath,
+          attachmentName: transactions.attachmentName,
+          attachmentMime: transactions.attachmentMime,
+        })
+        .from(transactions)
+        .where(eq(transactions.id, transactionId))
+        .limit(1),
+      db
+        .select({ data: transactionAttachments.data })
+        .from(transactionAttachments)
+        .where(eq(transactionAttachments.transactionId, transactionId))
+        .limit(1),
+    ]);
 
     if (!row?.attachmentPath) {
       throw new AppError(404, "Transaksi ini tidak memiliki lampiran.");
     }
 
-    const bytes = await readAttachmentBuffer(row.attachmentPath);
+    let bytes: Uint8Array;
+    if (blobRow?.data) {
+      bytes = new Uint8Array(Buffer.from(blobRow.data, "base64"));
+    } else if (!row.attachmentPath.startsWith("db:")) {
+      bytes = await readAttachmentBuffer(row.attachmentPath);
+    } else {
+      throw new AppError(404, "Berkas lampiran tidak ditemukan.");
+    }
+
     const contentDisposition = buildContentDisposition(
       row.attachmentName ?? "lampiran",
       "inline"

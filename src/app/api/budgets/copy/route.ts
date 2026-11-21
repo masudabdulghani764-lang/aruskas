@@ -27,8 +27,8 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = copyBudgetsSchema.parse(body);
 
-    const result = copyBudgetsFromPreviousMonth(
-      getDb(),
+    const result = await copyBudgetsFromPreviousMonth(
+      await getDb(),
       user.id,
       parsed.month
     );

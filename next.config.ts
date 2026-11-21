@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  serverExternalPackages: ["bun:sqlite"],
+  serverExternalPackages: ["pg", "@electric-sql/pglite"],
   async redirects() {
     return [
       { source: "/login", destination: "/masuk", permanent: false },

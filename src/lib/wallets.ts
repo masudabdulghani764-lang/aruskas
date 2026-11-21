@@ -72,20 +72,20 @@ const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * Hydrates wallet records with their member lists using a single batch query.
  */
-function buildWalletViews(
+async function buildWalletViews(
   db: AppDb,
   rows: Array<{
     wallet: typeof wallets.$inferSelect;
     role: WalletRole;
     ownerName: string;
   }>
-): WalletWithRole[] {
+): Promise<WalletWithRole[]> {
   if (rows.length === 0) {
     return [];
   }
 
   const walletIds = rows.map((row) => row.wallet.id);
-  const memberRows = db
+  const memberRows = await db
     .select({
       walletId: walletMembers.walletId,
       userId: walletMembers.userId,
@@ -97,8 +97,7 @@ function buildWalletViews(
     .from(walletMembers)
     .innerJoin(users, eq(walletMembers.userId, users.id))
     .where(inArray(walletMembers.walletId, walletIds))
-    .orderBy(asc(walletMembers.createdAt))
-    .all();
+    .orderBy(asc(walletMembers.createdAt));
 
   const membersByWallet = new Map<string, WalletMemberView[]>();
   for (const row of memberRows) {
@@ -129,13 +128,13 @@ function buildWalletViews(
   }));
 }
 
-function getWalletViewForUser(
+async function getWalletViewForUser(
   db: AppDb,
   walletId: string,
-  userId: string,
+  _userId: string,
   role: WalletRole
-): WalletWithRole {
-  const row = db
+): Promise<WalletWithRole> {
+  const [row] = await db
     .select({
       wallet: wallets,
       ownerName: users.name,
@@ -143,37 +142,38 @@ function getWalletViewForUser(
     .from(wallets)
     .innerJoin(users, eq(wallets.ownerId, users.id))
     .where(eq(wallets.id, walletId))
-    .get();
+    .limit(1);
 
   if (!row) {
     throw new AppError(404, "Dompet tidak ditemukan.");
   }
 
-  return buildWalletViews(db, [
+  const views = await buildWalletViews(db, [
     { wallet: row.wallet, role, ownerName: row.ownerName },
-  ])[0];
+  ]);
+  return views[0];
 }
 
 /**
  * Verifies that a wallet exists and the user holds at least `minRole` access.
  */
-export function assertWalletAccess(
+export async function assertWalletAccess(
   db: AppDb,
   walletId: string,
   userId: string,
   minRole: WalletRole
-): WalletMembership {
-  const wallet = db
+): Promise<WalletMembership> {
+  const [wallet] = await db
     .select()
     .from(wallets)
     .where(eq(wallets.id, walletId))
-    .get();
+    .limit(1);
 
   if (!wallet) {
     throw new AppError(404, "Dompet tidak ditemukan.");
   }
 
-  const membership = db
+  const [membership] = await db
     .select({ role: walletMembers.role })
     .from(walletMembers)
     .where(
@@ -182,7 +182,7 @@ export function assertWalletAccess(
         eq(walletMembers.userId, userId)
       )
     )
-    .get();
+    .limit(1);
 
   if (!membership || ROLE_RANK[membership.role] < ROLE_RANK[minRole]) {
     throw new AppError(403, "Anda tidak memiliki akses ke dompet ini.");
@@ -194,16 +194,16 @@ export function assertWalletAccess(
 /**
  * Lists all wallets accessible to the user, optionally including archived ones.
  */
-export function listUserWallets(
+export async function listUserWallets(
   db: AppDb,
   userId: string,
   opts?: { includeArchived?: boolean }
-): WalletWithRole[] {
+): Promise<WalletWithRole[]> {
   const condition = opts?.includeArchived
     ? eq(walletMembers.userId, userId)
     : and(eq(walletMembers.userId, userId), isNull(wallets.archivedAt));
 
-  const rows = db
+  const rows = await db
     .select({
       wallet: wallets,
       role: walletMembers.role,
@@ -213,8 +213,7 @@ export function listUserWallets(
     .innerJoin(wallets, eq(walletMembers.walletId, wallets.id))
     .innerJoin(users, eq(wallets.ownerId, users.id))
     .where(condition)
-    .orderBy(asc(wallets.createdAt))
-    .all();
+    .orderBy(asc(wallets.createdAt));
 
   return buildWalletViews(db, rows);
 }
@@ -222,11 +221,11 @@ export function listUserWallets(
 /**
  * Creates a new wallet and its owner membership atomically.
  */
-export function createWallet(
+export async function createWallet(
   db: AppDb,
   userId: string,
   input: { name: string; type: WalletType; initialBalance: number }
-): WalletWithRole {
+): Promise<WalletWithRole> {
   const name = input.name.trim();
   if (!name) {
     throw new AppError(400, "Nama dompet wajib diisi.");
@@ -239,11 +238,11 @@ export function createWallet(
     );
   }
 
-  const owner = db
+  const [owner] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.id, userId))
-    .get();
+    .limit(1);
   if (!owner) {
     throw new AppError(404, "Pengguna tidak ditemukan.");
   }
@@ -251,30 +250,26 @@ export function createWallet(
   const walletId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  db.transaction((tx) => {
-    tx.insert(wallets)
-      .values({
-        id: walletId,
-        ownerId: userId,
-        name,
-        type: input.type,
-        initialBalance: input.initialBalance,
-        balance: input.initialBalance,
-        isShared: false,
-        archivedAt: null,
-        createdAt: now,
-      })
-      .run();
+  await db.transaction(async (tx) => {
+    await tx.insert(wallets).values({
+      id: walletId,
+      ownerId: userId,
+      name,
+      type: input.type,
+      initialBalance: input.initialBalance,
+      balance: input.initialBalance,
+      isShared: false,
+      archivedAt: null,
+      createdAt: now,
+    });
 
-    tx.insert(walletMembers)
-      .values({
-        id: crypto.randomUUID(),
-        walletId,
-        userId,
-        role: "owner",
-        createdAt: now,
-      })
-      .run();
+    await tx.insert(walletMembers).values({
+      id: crypto.randomUUID(),
+      walletId,
+      userId,
+      role: "owner",
+      createdAt: now,
+    });
   });
 
   return getWalletViewForUser(db, walletId, userId, "owner");
@@ -283,13 +278,13 @@ export function createWallet(
 /**
  * Updates wallet name, type, or archive status (owner only).
  */
-export function updateWallet(
+export async function updateWallet(
   db: AppDb,
   walletId: string,
   userId: string,
   input: { name?: string; type?: WalletType; archived?: boolean }
-): WalletWithRole {
-  assertWalletAccess(db, walletId, userId, "owner");
+): Promise<WalletWithRole> {
+  await assertWalletAccess(db, walletId, userId, "owner");
 
   const patch: Partial<typeof wallets.$inferInsert> = {};
 
@@ -310,7 +305,7 @@ export function updateWallet(
   }
 
   if (Object.keys(patch).length > 0) {
-    db.update(wallets).set(patch).where(eq(wallets.id, walletId)).run();
+    await db.update(wallets).set(patch).where(eq(wallets.id, walletId));
   }
 
   return getWalletViewForUser(db, walletId, userId, "owner");
@@ -319,19 +314,19 @@ export function updateWallet(
 /**
  * Creates a single-use 7-day invitation token for a wallet (owner only).
  */
-export function createWalletInvite(
+export async function createWalletInvite(
   db: AppDb,
   walletId: string,
   ownerId: string,
   input: { email?: string | null; role: "editor" | "viewer" }
-): InviteRecord {
-  const { wallet } = assertWalletAccess(db, walletId, ownerId, "owner");
+): Promise<InviteRecord> {
+  const { wallet } = await assertWalletAccess(db, walletId, ownerId, "owner");
 
-  const owner = db
+  const [owner] = await db
     .select({ email: users.email })
     .from(users)
     .where(eq(users.id, ownerId))
-    .get();
+    .limit(1);
 
   const normalizedEmail = input.email?.trim()
     ? input.email.trim().toLowerCase()
@@ -342,14 +337,14 @@ export function createWalletInvite(
       throw new AppError(400, "Anda tidak dapat mengundang diri sendiri.");
     }
 
-    const existingUser = db
+    const [existingUser] = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.email, normalizedEmail))
-      .get();
+      .limit(1);
 
     if (existingUser) {
-      const existingMember = db
+      const [existingMember] = await db
         .select({ id: walletMembers.id })
         .from(walletMembers)
         .where(
@@ -358,7 +353,7 @@ export function createWalletInvite(
             eq(walletMembers.userId, existingUser.id)
           )
         )
-        .get();
+        .limit(1);
 
       if (existingMember) {
         throw new AppError(409, "Pengguna ini sudah menjadi anggota dompet.");
@@ -372,19 +367,17 @@ export function createWalletInvite(
   const id = crypto.randomUUID();
   const token = randomBytes(32).toString("hex");
 
-  db.insert(walletInvites)
-    .values({
-      id,
-      walletId,
-      createdBy: ownerId,
-      email: normalizedEmail,
-      role: input.role,
-      token,
-      expiresAt,
-      acceptedAt: null,
-      createdAt,
-    })
-    .run();
+  await db.insert(walletInvites).values({
+    id,
+    walletId,
+    createdBy: ownerId,
+    email: normalizedEmail,
+    role: input.role,
+    token,
+    expiresAt,
+    acceptedAt: null,
+    createdAt,
+  });
 
   return {
     id,
@@ -399,15 +392,15 @@ export function createWalletInvite(
   };
 }
 
-function validateAndGetInviteRow(
+async function validateAndGetInviteRow(
   db: AppDb,
   token: string
-): PendingInviteView {
+): Promise<PendingInviteView> {
   if (!token) {
     throw new AppError(404, "Tautan undangan tidak ditemukan.");
   }
 
-  const row = db
+  const [row] = await db
     .select({
       id: walletInvites.id,
       walletId: walletInvites.walletId,
@@ -424,7 +417,7 @@ function validateAndGetInviteRow(
     .innerJoin(wallets, eq(walletInvites.walletId, wallets.id))
     .innerJoin(users, eq(walletInvites.createdBy, users.id))
     .where(eq(walletInvites.token, token))
-    .get();
+    .limit(1);
 
   if (!row) {
     throw new AppError(404, "Tautan undangan tidak ditemukan.");
@@ -455,19 +448,22 @@ function validateAndGetInviteRow(
 /**
  * Validates and returns a pending invite preview by token (404/410 on invalid state).
  */
-export function getInviteByToken(db: AppDb, token: string): PendingInviteView {
+export async function getInviteByToken(
+  db: AppDb,
+  token: string
+): Promise<PendingInviteView> {
   return validateAndGetInviteRow(db, token);
 }
 
 /**
  * Accepts a single-use wallet invitation atomically and marks the wallet shared.
  */
-export function acceptWalletInvite(
+export async function acceptWalletInvite(
   db: AppDb,
   token: string,
   user: SafeUser
-): { walletId: string; walletName: string; role: "editor" | "viewer" } {
-  const invite = validateAndGetInviteRow(db, token);
+): Promise<{ walletId: string; walletName: string; role: "editor" | "viewer" }> {
+  const invite = await validateAndGetInviteRow(db, token);
 
   if (invite.email && invite.email.toLowerCase() !== user.email.toLowerCase()) {
     throw new AppError(
@@ -478,9 +474,9 @@ export function acceptWalletInvite(
 
   const now = new Date().toISOString();
 
-  db.transaction((tx) => {
+  await db.transaction(async (tx) => {
     // Atomically claim the single-use invite inside the transaction.
-    const claimed = tx
+    const [claimed] = await tx
       .update(walletInvites)
       .set({ acceptedAt: now })
       .where(
@@ -492,8 +488,7 @@ export function acceptWalletInvite(
       .returning({
         id: walletInvites.id,
         expiresAt: walletInvites.expiresAt,
-      })
-      .get();
+      });
 
     if (!claimed) {
       throw new AppError(410, "Tautan undangan sudah digunakan.");
@@ -504,7 +499,7 @@ export function acceptWalletInvite(
       throw new AppError(410, "Tautan undangan telah kedaluwarsa.");
     }
 
-    const existingMember = tx
+    const [existingMember] = await tx
       .select({ id: walletMembers.id })
       .from(walletMembers)
       .where(
@@ -513,26 +508,24 @@ export function acceptWalletInvite(
           eq(walletMembers.userId, user.id)
         )
       )
-      .get();
+      .limit(1);
 
     if (existingMember) {
       throw new AppError(409, "Anda sudah menjadi anggota dompet ini.");
     }
 
-    tx.insert(walletMembers)
-      .values({
-        id: crypto.randomUUID(),
-        walletId: invite.walletId,
-        userId: user.id,
-        role: invite.role,
-        createdAt: now,
-      })
-      .run();
+    await tx.insert(walletMembers).values({
+      id: crypto.randomUUID(),
+      walletId: invite.walletId,
+      userId: user.id,
+      role: invite.role,
+      createdAt: now,
+    });
 
-    tx.update(wallets)
+    await tx
+      .update(wallets)
       .set({ isShared: true })
-      .where(eq(wallets.id, invite.walletId))
-      .run();
+      .where(eq(wallets.id, invite.walletId));
   });
 
   return {
@@ -545,16 +538,16 @@ export function acceptWalletInvite(
 /**
  * Lists active, unexpired, unaccepted invitations addressed to the given email.
  */
-export function listPendingInvitesForEmail(
+export async function listPendingInvitesForEmail(
   db: AppDb,
   email: string
-): PendingInviteView[] {
+): Promise<PendingInviteView[]> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) {
     return [];
   }
 
-  const rows = db
+  const rows = await db
     .select({
       id: walletInvites.id,
       walletId: walletInvites.walletId,
@@ -575,8 +568,7 @@ export function listPendingInvitesForEmail(
         isNull(walletInvites.acceptedAt)
       )
     )
-    .orderBy(desc(walletInvites.createdAt))
-    .all();
+    .orderBy(desc(walletInvites.createdAt));
 
   const nowMs = Date.now();
   return rows.filter((row) => {
@@ -588,19 +580,18 @@ export function listPendingInvitesForEmail(
 /**
  * Lists all active and past invitations for a wallet (owner only).
  */
-export function listWalletInvites(
+export async function listWalletInvites(
   db: AppDb,
   walletId: string,
   ownerId: string
-): InviteRecord[] {
-  const { wallet } = assertWalletAccess(db, walletId, ownerId, "owner");
+): Promise<InviteRecord[]> {
+  const { wallet } = await assertWalletAccess(db, walletId, ownerId, "owner");
 
-  const rows = db
+  const rows = await db
     .select()
     .from(walletInvites)
     .where(eq(walletInvites.walletId, walletId))
-    .orderBy(desc(walletInvites.createdAt))
-    .all();
+    .orderBy(desc(walletInvites.createdAt));
 
   return rows.map((row) => ({
     id: row.id,
@@ -618,13 +609,13 @@ export function listWalletInvites(
 /**
  * Removes a member from a shared wallet and resets `isShared` when only the owner remains.
  */
-export function removeWalletMember(
+export async function removeWalletMember(
   db: AppDb,
   walletId: string,
   ownerId: string,
   targetUserId: string
-): void {
-  assertWalletAccess(db, walletId, ownerId, "owner");
+): Promise<void> {
+  await assertWalletAccess(db, walletId, ownerId, "owner");
 
   if (targetUserId === ownerId) {
     throw new AppError(
@@ -633,7 +624,7 @@ export function removeWalletMember(
     );
   }
 
-  const target = db
+  const [target] = await db
     .select({ id: walletMembers.id })
     .from(walletMembers)
     .where(
@@ -642,33 +633,32 @@ export function removeWalletMember(
         eq(walletMembers.userId, targetUserId)
       )
     )
-    .get();
+    .limit(1);
 
   if (!target) {
     throw new AppError(404, "Anggota dompet tidak ditemukan.");
   }
 
-  db.transaction((tx) => {
-    tx.delete(walletMembers)
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(walletMembers)
       .where(
         and(
           eq(walletMembers.walletId, walletId),
           eq(walletMembers.userId, targetUserId)
         )
-      )
-      .run();
+      );
 
-    const remaining = tx
+    const remaining = await tx
       .select({ id: walletMembers.id })
       .from(walletMembers)
-      .where(eq(walletMembers.walletId, walletId))
-      .all();
+      .where(eq(walletMembers.walletId, walletId));
 
     if (remaining.length <= 1) {
-      tx.update(wallets)
+      await tx
+        .update(wallets)
         .set({ isShared: false })
-        .where(eq(wallets.id, walletId))
-        .run();
+        .where(eq(wallets.id, walletId));
     }
   });
 }

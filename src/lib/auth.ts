@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb, type AppDb } from "@/db";
 import { sessions, users, walletMembers, wallets } from "@/db/schema";
-import { AppError } from "@/lib/errors";
+import { AppError, isPgUniqueViolation } from "@/lib/errors";
 import { seedDefaultCategoriesForUser } from "@/lib/seed";
 
 export const DEMO_EMAIL = "demo@aruskas.id";
@@ -68,25 +68,23 @@ export function hashSessionToken(rawToken: string): string {
 /**
  * Creates a new 30-day session in the database and returns the raw token and expiry.
  */
-export function createSession(
+export async function createSession(
   db: AppDb,
   userId: string,
   userAgent?: string | null
-): { token: string; expiresAt: string } {
+): Promise<{ token: string; expiresAt: string }> {
   const rawToken = randomBytes(32).toString("hex");
   const tokenHash = hashSessionToken(rawToken);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS).toISOString();
 
-  db.insert(sessions)
-    .values({
-      id: tokenHash,
-      userId,
-      expiresAt,
-      userAgent: userAgent ?? null,
-      createdAt: now.toISOString(),
-    })
-    .run();
+  await db.insert(sessions).values({
+    id: tokenHash,
+    userId,
+    expiresAt,
+    userAgent: userAgent ?? null,
+    createdAt: now.toISOString(),
+  });
 
   return { token: rawToken, expiresAt };
 }
@@ -94,16 +92,16 @@ export function createSession(
 /**
  * Resolves a raw session token to a SafeUser, deleting the session if expired.
  */
-export function getUserBySessionToken(
+export async function getUserBySessionToken(
   db: AppDb,
   rawToken: string
-): SafeUser | null {
+): Promise<SafeUser | null> {
   if (!rawToken) {
     return null;
   }
 
   const tokenHash = hashSessionToken(rawToken);
-  const row = db
+  const [row] = await db
     .select({
       sessionId: sessions.id,
       expiresAt: sessions.expiresAt,
@@ -118,7 +116,7 @@ export function getUserBySessionToken(
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .where(eq(sessions.id, tokenHash))
-    .get();
+    .limit(1);
 
   if (!row) {
     return null;
@@ -126,7 +124,7 @@ export function getUserBySessionToken(
 
   const expiresMs = Date.parse(row.expiresAt);
   if (Number.isNaN(expiresMs) || expiresMs <= Date.now()) {
-    db.delete(sessions).where(eq(sessions.id, tokenHash)).run();
+    await db.delete(sessions).where(eq(sessions.id, tokenHash));
     return null;
   }
 
@@ -136,13 +134,16 @@ export function getUserBySessionToken(
 /**
  * Deletes a session by raw token if it exists.
  */
-export function destroySession(db: AppDb, rawToken: string): void {
+export async function destroySession(
+  db: AppDb,
+  rawToken: string
+): Promise<void> {
   if (!rawToken) {
     return;
   }
 
   const tokenHash = hashSessionToken(rawToken);
-  db.delete(sessions).where(eq(sessions.id, tokenHash)).run();
+  await db.delete(sessions).where(eq(sessions.id, tokenHash));
 }
 
 /**
@@ -155,7 +156,8 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
     return null;
   }
 
-  return getUserBySessionToken(getDb(), rawToken);
+  const db = await getDb();
+  return getUserBySessionToken(db, rawToken);
 }
 
 /**
@@ -224,11 +226,11 @@ export async function registerUser(
   const email = input.email.trim().toLowerCase();
   const name = input.name.trim();
 
-  const existing = db
+  const [existing] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.email, email))
-    .get();
+    .limit(1);
   if (existing) {
     throw new AppError(409, "Email sudah terdaftar.");
   }
@@ -239,54 +241,45 @@ export async function registerUser(
   const defaultWalletId = crypto.randomUUID();
 
   try {
-    db.transaction((tx) => {
-      tx.insert(users)
-        .values({
-          id: userId,
-          name,
-          email,
-          passwordHash,
-          monthlySavingsTarget: 0,
-          createdAt: now,
-        })
-        .run();
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({
+        id: userId,
+        name,
+        email,
+        passwordHash,
+        monthlySavingsTarget: 0,
+        createdAt: now,
+      });
 
-      tx.insert(wallets)
-        .values({
-          id: defaultWalletId,
-          ownerId: userId,
-          name: "Dompet Utama",
-          type: "cash",
-          initialBalance: 0,
-          balance: 0,
-          isShared: false,
-          createdAt: now,
-        })
-        .run();
+      await tx.insert(wallets).values({
+        id: defaultWalletId,
+        ownerId: userId,
+        name: "Dompet Utama",
+        type: "cash",
+        initialBalance: 0,
+        balance: 0,
+        isShared: false,
+        createdAt: now,
+      });
 
-      tx.insert(walletMembers)
-        .values({
-          id: crypto.randomUUID(),
-          walletId: defaultWalletId,
-          userId,
-          role: "owner",
-          createdAt: now,
-        })
-        .run();
+      await tx.insert(walletMembers).values({
+        id: crypto.randomUUID(),
+        walletId: defaultWalletId,
+        userId,
+        role: "owner",
+        createdAt: now,
+      });
 
-      seedDefaultCategoriesForUser(tx as unknown as AppDb, userId);
+      await seedDefaultCategoriesForUser(tx as unknown as AppDb, userId);
     });
   } catch (err) {
-    if (
-      err instanceof Error &&
-      err.message.toLowerCase().includes("unique")
-    ) {
+    if (isPgUniqueViolation(err)) {
       throw new AppError(409, "Email sudah terdaftar.");
     }
     throw err;
   }
 
-  const session = createSession(db, userId, userAgent);
+  const session = await createSession(db, userId, userAgent);
   const user = toSafeUser({
     id: userId,
     name,
@@ -311,11 +304,11 @@ export async function loginUser(
   userAgent?: string | null
 ): Promise<{ user: SafeUser; token: string; expiresAt: string }> {
   const email = input.email.trim().toLowerCase();
-  const row = db
+  const [row] = await db
     .select()
     .from(users)
     .where(eq(users.email, email))
-    .get();
+    .limit(1);
 
   if (!row) {
     throw new AppError(401, "Email atau kata sandi salah.");
@@ -326,7 +319,7 @@ export async function loginUser(
     throw new AppError(401, "Email atau kata sandi salah.");
   }
 
-  const session = createSession(db, row.id, userAgent);
+  const session = await createSession(db, row.id, userAgent);
   return {
     user: toSafeUser(row),
     token: session.token,
@@ -337,23 +330,22 @@ export async function loginUser(
 /**
  * Updates the user's display name and monthly savings target percentage.
  */
-export function updateUserProfile(
+export async function updateUserProfile(
   db: AppDb,
   userId: string,
   input: { name: string; monthlySavingsTarget: number }
-): SafeUser {
+): Promise<SafeUser> {
   const name = input.name.trim();
   const target = Math.round(input.monthlySavingsTarget);
 
-  const updated = db
+  const [updated] = await db
     .update(users)
     .set({
       name,
       monthlySavingsTarget: target,
     })
     .where(eq(users.id, userId))
-    .returning()
-    .get();
+    .returning();
 
   if (!updated) {
     throw new AppError(404, "Pengguna tidak ditemukan.");
@@ -371,7 +363,11 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string
 ): Promise<void> {
-  const user = db.select().from(users).where(eq(users.id, userId)).get();
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (!user) {
     throw new AppError(404, "Pengguna tidak ditemukan.");
   }
@@ -386,8 +382,8 @@ export async function changePassword(
   }
 
   const newHash = await hashPassword(newPassword);
-  db.update(users)
+  await db
+    .update(users)
     .set({ passwordHash: newHash })
-    .where(eq(users.id, userId))
-    .run();
+    .where(eq(users.id, userId));
 }

@@ -37,7 +37,12 @@ export async function POST(
     }
 
     const parsed = applyRecurringSchema.parse(rawBody);
-    const transaction = applyRecurringRule(getDb(), id, user.id, parsed.amount);
+    const transaction = await applyRecurringRule(
+      await getDb(),
+      id,
+      user.id,
+      parsed.amount
+    );
     return NextResponse.json({ transaction }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

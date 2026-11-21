@@ -77,9 +77,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const dueOnly = searchParams.get("dueOnly") === "true";
 
+    const db = await getDb();
     const rules = dueOnly
-      ? listDueRecurringRules(getDb(), user.id)
-      : listRecurringRules(getDb(), user.id);
+      ? await listDueRecurringRules(db, user.id)
+      : await listRecurringRules(db, user.id);
 
     return NextResponse.json({ rules });
   } catch (err) {
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = createRecurringSchema.parse(body);
 
-    const rule = createRecurringRule(getDb(), user.id, parsed);
+    const rule = await createRecurringRule(await getDb(), user.id, parsed);
     return NextResponse.json({ rule }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

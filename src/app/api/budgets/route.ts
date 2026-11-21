@@ -56,7 +56,7 @@ export async function GET(request: Request) {
     });
     const month = parsed.month ?? getCurrentMonthYM();
 
-    const budgets = listMonthlyBudgets(getDb(), user.id, month);
+    const budgets = await listMonthlyBudgets(await getDb(), user.id, month);
     return NextResponse.json({ month, budgets });
   } catch (err) {
     return handleApiError(err);
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = upsertBudgetSchema.parse(body);
 
-    const budget = upsertBudget(getDb(), user.id, parsed);
+    const budget = await upsertBudget(await getDb(), user.id, parsed);
     return NextResponse.json({ budget });
   } catch (err) {
     return handleApiError(err);

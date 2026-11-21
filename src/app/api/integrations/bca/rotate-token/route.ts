@@ -7,8 +7,8 @@ import { handleApiError } from "@/lib/errors";
 export async function POST() {
   try {
     const user = await requireCurrentUser();
-    const db = getDb();
-    const result = rotateBcaWebhookToken(db, user.id);
+    const db = await getDb();
+    const result = await rotateBcaWebhookToken(db, user.id);
     return NextResponse.json(result);
   } catch (err) {
     return handleApiError(err);

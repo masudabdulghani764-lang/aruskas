@@ -70,6 +70,40 @@ export function buildContentDisposition(
   return `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodedUtf8}`;
 }
 
+/**
+ * Validates an uploaded receipt attachment (MIME type & <= 2 MB) and returns
+ * its metadata + base64 payload for persistent PostgreSQL storage.
+ */
+export function prepareAttachmentForDb(file: {
+  name: string;
+  type: string;
+  buffer: Uint8Array;
+}): { path: string; name: string; mime: string; dataBase64: string } {
+  const mime = file.type.trim().toLowerCase();
+  if (!ALLOWED_ATTACHMENT_MIMES.has(mime)) {
+    throw new AppError(
+      400,
+      "Tipe lampiran tidak didukung. Gunakan JPG, PNG, WebP, atau PDF."
+    );
+  }
+
+  if (file.buffer.byteLength <= 0) {
+    throw new AppError(400, "Berkas lampiran tidak boleh kosong.");
+  }
+
+  if (file.buffer.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new AppError(400, "Ukuran lampiran maksimal 2 MB.");
+  }
+
+  const ext = MIME_EXTENSIONS[mime] ?? "";
+  return {
+    path: `db:${crypto.randomUUID()}${ext}`,
+    name: sanitizeAttachmentName(file.name),
+    mime,
+    dataBase64: Buffer.from(file.buffer).toString("base64"),
+  };
+}
+
 function resolveSafeAttachmentPath(relPath: string, baseDir?: string): string {
   if (!relPath || relPath.includes("\0") || path.isAbsolute(relPath)) {
     throw new AppError(400, "Path lampiran tidak valid.");
@@ -145,12 +179,15 @@ export async function readAttachmentBuffer(
 }
 
 /**
- * Best-effort cleanup of an uploaded file if a transaction write fails afterwards.
+ * Best-effort cleanup of a filesystem uploaded file if present (no-op for `db:` stored rows).
  */
 export async function deleteAttachmentQuietly(
   relPath: string,
   baseDir?: string
 ): Promise<void> {
+  if (relPath.startsWith("db:")) {
+    return;
+  }
   try {
     const targetPath = resolveSafeAttachmentPath(relPath, baseDir);
     await fs.promises.unlink(targetPath);

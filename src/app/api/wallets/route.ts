@@ -44,7 +44,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const includeArchived = searchParams.get("includeArchived") === "true";
 
-    const wallets = listUserWallets(getDb(), user.id, { includeArchived });
+    const wallets = await listUserWallets(await getDb(), user.id, {
+      includeArchived,
+    });
     return NextResponse.json({ wallets });
   } catch (err) {
     return handleApiError(err);
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = createWalletSchema.parse(body);
 
-    const wallet = createWallet(getDb(), user.id, parsed);
+    const wallet = await createWallet(await getDb(), user.id, parsed);
     return NextResponse.json({ wallet }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

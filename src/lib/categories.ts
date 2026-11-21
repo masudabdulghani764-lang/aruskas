@@ -13,16 +13,16 @@ import { AppError } from "@/lib/errors";
 export type CategoryRecord = typeof categories.$inferSelect;
 export type CategoryType = "income" | "expense";
 
-function loadOwnedCategory(
+async function loadOwnedCategory(
   db: AppDb,
   userId: string,
   categoryId: string
-): CategoryRecord {
-  const category = db
+): Promise<CategoryRecord> {
+  const [category] = await db
     .select()
     .from(categories)
     .where(eq(categories.id, categoryId))
-    .get();
+    .limit(1);
 
   if (!category) {
     throw new AppError(404, "Kategori tidak ditemukan.");
@@ -39,11 +39,11 @@ function loadOwnedCategory(
  * Lists categories owned by `userId`, or by `opts.ownerId` when the caller
  * shares at least one wallet owned by `opts.ownerId`.
  */
-export function listCategories(
+export async function listCategories(
   db: AppDb,
   userId: string,
   opts?: { type?: CategoryType; ownerId?: string }
-): CategoryRecord[] {
+): Promise<CategoryRecord[]> {
   if (
     opts?.type !== undefined &&
     opts.type !== "income" &&
@@ -57,7 +57,7 @@ export function listCategories(
 
   const targetOwnerId = opts?.ownerId?.trim() || userId;
   if (targetOwnerId !== userId) {
-    const shared = db
+    const [shared] = await db
       .select({ walletId: walletMembers.walletId })
       .from(walletMembers)
       .innerJoin(wallets, eq(walletMembers.walletId, wallets.id))
@@ -67,7 +67,7 @@ export function listCategories(
           eq(wallets.ownerId, targetOwnerId)
         )
       )
-      .get();
+      .limit(1);
 
     if (!shared) {
       throw new AppError(
@@ -88,18 +88,17 @@ export function listCategories(
     .select()
     .from(categories)
     .where(condition)
-    .orderBy(asc(categories.createdAt), asc(categories.name))
-    .all();
+    .orderBy(asc(categories.createdAt), asc(categories.name));
 }
 
 /**
  * Creates a custom income or expense category for the authenticated user.
  */
-export function createCategory(
+export async function createCategory(
   db: AppDb,
   userId: string,
   input: { name: string; type: CategoryType; icon?: string; color?: string }
-): CategoryRecord {
+): Promise<CategoryRecord> {
   const name = input.name.trim();
   if (!name) {
     throw new AppError(400, "Nama kategori wajib diisi.");
@@ -116,7 +115,7 @@ export function createCategory(
   const color = input.color?.trim() || "#64748b";
   const now = new Date().toISOString();
 
-  return db
+  const [created] = await db
     .insert(categories)
     .values({
       id: crypto.randomUUID(),
@@ -128,20 +127,21 @@ export function createCategory(
       isDefault: false,
       createdAt: now,
     })
-    .returning()
-    .get()!;
+    .returning();
+
+  return created!;
 }
 
 /**
  * Updates name, icon, or color of an existing category owned by `userId`.
  */
-export function updateCategory(
+export async function updateCategory(
   db: AppDb,
   userId: string,
   categoryId: string,
   input: { name?: string; icon?: string; color?: string }
-): CategoryRecord {
-  const existing = loadOwnedCategory(db, userId, categoryId);
+): Promise<CategoryRecord> {
+  const existing = await loadOwnedCategory(db, userId, categoryId);
   const patch: Partial<typeof categories.$inferInsert> = {};
 
   if (input.name !== undefined) {
@@ -172,47 +172,45 @@ export function updateCategory(
     return existing;
   }
 
-  return db
+  const [updated] = await db
     .update(categories)
     .set(patch)
     .where(eq(categories.id, categoryId))
-    .returning()
-    .get()!;
+    .returning();
+
+  return updated!;
 }
 
 /**
  * Deletes an unreferenced category owned by `userId`, throwing 409 if it is still
  * referenced by any transaction, budget, or recurring rule.
  */
-export function deleteCategory(
+export async function deleteCategory(
   db: AppDb,
   userId: string,
   categoryId: string
-): void {
-  db.transaction((tx) => {
-    loadOwnedCategory(tx as unknown as AppDb, userId, categoryId);
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await loadOwnedCategory(tx as unknown as AppDb, userId, categoryId);
 
-    const txCount = Number(
+    const [[txRow], [budgetRow], [recurringRow]] = await Promise.all([
       tx
         .select({ count: sql<number>`count(*)` })
         .from(transactions)
-        .where(eq(transactions.categoryId, categoryId))
-        .get()?.count ?? 0
-    );
-    const budgetCount = Number(
+        .where(eq(transactions.categoryId, categoryId)),
       tx
         .select({ count: sql<number>`count(*)` })
         .from(budgets)
-        .where(eq(budgets.categoryId, categoryId))
-        .get()?.count ?? 0
-    );
-    const recurringCount = Number(
+        .where(eq(budgets.categoryId, categoryId)),
       tx
         .select({ count: sql<number>`count(*)` })
         .from(recurringRules)
-        .where(eq(recurringRules.categoryId, categoryId))
-        .get()?.count ?? 0
-    );
+        .where(eq(recurringRules.categoryId, categoryId)),
+    ]);
+
+    const txCount = Number(txRow?.count ?? 0);
+    const budgetCount = Number(budgetRow?.count ?? 0);
+    const recurringCount = Number(recurringRow?.count ?? 0);
 
     const total = txCount + budgetCount + recurringCount;
     if (total > 0) {
@@ -222,6 +220,6 @@ export function deleteCategory(
       );
     }
 
-    tx.delete(categories).where(eq(categories.id, categoryId)).run();
+    await tx.delete(categories).where(eq(categories.id, categoryId));
   });
 }

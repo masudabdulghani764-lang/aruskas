@@ -1,11 +1,13 @@
 import {
+  bigint,
+  boolean,
   integer,
-  sqliteTable,
+  pgTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
@@ -14,7 +16,7 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -24,21 +26,21 @@ export const sessions = sqliteTable("sessions", {
   createdAt: text("created_at").notNull(),
 });
 
-export const wallets = sqliteTable("wallets", {
+export const wallets = pgTable("wallets", {
   id: text("id").primaryKey(),
   ownerId: text("owner_id")
     .notNull()
     .references(() => users.id),
   name: text("name").notNull(),
   type: text("type", { enum: ["cash", "bank", "ewallet", "savings"] }).notNull(),
-  initialBalance: integer("initial_balance").notNull(),
-  balance: integer("balance").notNull(),
-  isShared: integer("is_shared", { mode: "boolean" }).notNull().default(false),
+  initialBalance: bigint("initial_balance", { mode: "number" }).notNull(),
+  balance: bigint("balance", { mode: "number" }).notNull(),
+  isShared: boolean("is_shared").notNull().default(false),
   archivedAt: text("archived_at"),
   createdAt: text("created_at").notNull(),
 });
 
-export const walletMembers = sqliteTable(
+export const walletMembers = pgTable(
   "wallet_members",
   {
     id: text("id").primaryKey(),
@@ -56,7 +58,7 @@ export const walletMembers = sqliteTable(
   ]
 );
 
-export const walletInvites = sqliteTable("wallet_invites", {
+export const walletInvites = pgTable("wallet_invites", {
   id: text("id").primaryKey(),
   walletId: text("wallet_id")
     .notNull()
@@ -72,7 +74,7 @@ export const walletInvites = sqliteTable("wallet_invites", {
   createdAt: text("created_at").notNull(),
 });
 
-export const categories = sqliteTable("categories", {
+export const categories = pgTable("categories", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -81,11 +83,11 @@ export const categories = sqliteTable("categories", {
   type: text("type", { enum: ["income", "expense"] }).notNull(),
   icon: text("icon").notNull(),
   color: text("color").notNull(),
-  isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
 
-export const recurringRules = sqliteTable("recurring_rules", {
+export const recurringRules = pgTable("recurring_rules", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -97,15 +99,15 @@ export const recurringRules = sqliteTable("recurring_rules", {
     .notNull()
     .references(() => categories.id),
   type: text("type", { enum: ["income", "expense"] }).notNull(),
-  amount: integer("amount").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
   title: text("title").notNull(),
   frequency: text("frequency", { enum: ["weekly", "monthly"] }).notNull(),
   nextRunDate: text("next_run_date").notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: text("created_at").notNull(),
 });
 
-export const transactions = sqliteTable("transactions", {
+export const transactions = pgTable("transactions", {
   id: text("id").primaryKey(),
   walletId: text("wallet_id")
     .notNull()
@@ -116,7 +118,7 @@ export const transactions = sqliteTable("transactions", {
     .notNull()
     .references(() => users.id),
   type: text("type", { enum: ["income", "expense", "transfer"] }).notNull(),
-  amount: integer("amount").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
   title: text("title").notNull(),
   notes: text("notes"),
   paymentMethod: text("payment_method"),
@@ -131,7 +133,15 @@ export const transactions = sqliteTable("transactions", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const budgets = sqliteTable(
+export const transactionAttachments = pgTable("transaction_attachments", {
+  transactionId: text("transaction_id")
+    .primaryKey()
+    .references(() => transactions.id, { onDelete: "cascade" }),
+  data: text("data").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const budgets = pgTable(
   "budgets",
   {
     id: text("id").primaryKey(),
@@ -142,7 +152,7 @@ export const budgets = sqliteTable(
       .notNull()
       .references(() => categories.id, { onDelete: "cascade" }),
     month: text("month").notNull(),
-    limitAmount: integer("limit_amount").notNull(),
+    limitAmount: bigint("limit_amount", { mode: "number" }).notNull(),
     createdAt: text("created_at").notNull(),
   },
   (table) => [
@@ -154,21 +164,23 @@ export const budgets = sqliteTable(
   ]
 );
 
-export const savingsGoals = sqliteTable("savings_goals", {
+export const savingsGoals = pgTable("savings_goals", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   walletId: text("wallet_id").references(() => wallets.id),
   name: text("name").notNull(),
-  targetAmount: integer("target_amount").notNull(),
-  currentAmount: integer("current_amount").notNull().default(0),
+  targetAmount: bigint("target_amount", { mode: "number" }).notNull(),
+  currentAmount: bigint("current_amount", { mode: "number" })
+    .notNull()
+    .default(0),
   deadline: text("deadline"),
   notes: text("notes"),
   createdAt: text("created_at").notNull(),
 });
 
-export const bankIntegrations = sqliteTable(
+export const bankIntegrations = pgTable(
   "bank_integrations",
   {
     id: text("id").primaryKey(),
@@ -181,10 +193,8 @@ export const bankIntegrations = sqliteTable(
       .references(() => wallets.id, { onDelete: "cascade" }),
     webhookTokenHash: text("webhook_token_hash").notNull().unique(),
     tokenPrefix: text("token_prefix").notNull(),
-    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-    autoCategorize: integer("auto_categorize", { mode: "boolean" })
-      .notNull()
-      .default(true),
+    isActive: boolean("is_active").notNull().default(true),
+    autoCategorize: boolean("auto_categorize").notNull().default(true),
     lastSyncedAt: text("last_synced_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -197,7 +207,7 @@ export const bankIntegrations = sqliteTable(
   ]
 );
 
-export const bankSyncLogs = sqliteTable("bank_sync_logs", {
+export const bankSyncLogs = pgTable("bank_sync_logs", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()

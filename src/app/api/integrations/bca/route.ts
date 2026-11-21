@@ -33,9 +33,12 @@ const upsertSchema = z.object(
 export async function GET() {
   try {
     const user = await requireCurrentUser();
-    const db = getDb();
-    const { integration, logs } = getBcaIntegration(db, user.id);
-    const writableWallets = listUserWallets(db, user.id).filter(
+    const db = await getDb();
+    const [{ integration, logs }, allWallets] = await Promise.all([
+      getBcaIntegration(db, user.id),
+      listUserWallets(db, user.id),
+    ]);
+    const writableWallets = allWallets.filter(
       (w) => w.role === "owner" || w.role === "editor"
     );
 
@@ -54,9 +57,9 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser();
     const rawBody = await parseJsonBody(request);
     const parsed = upsertSchema.parse(rawBody);
-    const db = getDb();
+    const db = await getDb();
 
-    const result = upsertBcaIntegration(db, user.id, {
+    const result = await upsertBcaIntegration(db, user.id, {
       walletId: parsed.walletId,
       isActive: parsed.isActive,
       autoCategorize: parsed.autoCategorize,

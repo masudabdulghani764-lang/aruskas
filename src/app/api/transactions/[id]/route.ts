@@ -87,7 +87,7 @@ export async function GET(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    const transaction = getTransactionById(getDb(), id, user.id);
+    const transaction = await getTransactionById(await getDb(), id, user.id);
     return NextResponse.json({ transaction });
   } catch (err) {
     return handleApiError(err);
@@ -104,7 +104,12 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const parsed = updateTransactionSchema.parse(body);
 
-    const transaction = updateTransaction(getDb(), id, user.id, parsed);
+    const transaction = await updateTransaction(
+      await getDb(),
+      id,
+      user.id,
+      parsed
+    );
     return NextResponse.json({ transaction });
   } catch (err) {
     return handleApiError(err);
@@ -119,7 +124,7 @@ export async function DELETE(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    const deleted = deleteTransaction(getDb(), id, user.id);
+    const deleted = await deleteTransaction(await getDb(), id, user.id);
     if (deleted.attachmentPath) {
       await deleteAttachmentQuietly(deleted.attachmentPath);
     }

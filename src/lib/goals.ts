@@ -26,7 +26,9 @@ export type SavingsGoalView = {
 
 type DbExecutor = Pick<AppDb, "select" | "insert" | "update" | "delete">;
 
-function normalizeOptionalText(value: string | null | undefined): string | null {
+function normalizeOptionalText(
+  value: string | null | undefined
+): string | null {
   if (value === undefined || value === null) {
     return null;
   }
@@ -68,16 +70,16 @@ function toSavingsGoalView(row: {
   };
 }
 
-function loadOwnedGoal(
+async function loadOwnedGoal(
   db: DbExecutor,
   goalId: string,
   userId: string
-): typeof savingsGoals.$inferSelect {
-  const goal = db
+): Promise<typeof savingsGoals.$inferSelect> {
+  const [goal] = await db
     .select()
     .from(savingsGoals)
     .where(eq(savingsGoals.id, goalId))
-    .get();
+    .limit(1);
 
   if (!goal) {
     throw new AppError(404, "Target tabungan tidak ditemukan.");
@@ -92,8 +94,11 @@ function loadOwnedGoal(
   return goal;
 }
 
-function getSavingsGoalView(db: DbExecutor, goalId: string): SavingsGoalView {
-  const row = db
+async function getSavingsGoalView(
+  db: DbExecutor,
+  goalId: string
+): Promise<SavingsGoalView> {
+  const [row] = await db
     .select({
       goal: savingsGoals,
       walletName: wallets.name,
@@ -101,7 +106,7 @@ function getSavingsGoalView(db: DbExecutor, goalId: string): SavingsGoalView {
     .from(savingsGoals)
     .leftJoin(wallets, eq(savingsGoals.walletId, wallets.id))
     .where(eq(savingsGoals.id, goalId))
-    .get();
+    .limit(1);
 
   if (!row) {
     throw new AppError(404, "Target tabungan tidak ditemukan.");
@@ -113,8 +118,11 @@ function getSavingsGoalView(db: DbExecutor, goalId: string): SavingsGoalView {
 /**
  * Lists all savings goals owned by `userId` with remaining amount and progress percentage.
  */
-export function listSavingsGoals(db: AppDb, userId: string): SavingsGoalView[] {
-  const rows = db
+export async function listSavingsGoals(
+  db: AppDb,
+  userId: string
+): Promise<SavingsGoalView[]> {
+  const rows = await db
     .select({
       goal: savingsGoals,
       walletName: wallets.name,
@@ -122,8 +130,7 @@ export function listSavingsGoals(db: AppDb, userId: string): SavingsGoalView[] {
     .from(savingsGoals)
     .leftJoin(wallets, eq(savingsGoals.walletId, wallets.id))
     .where(eq(savingsGoals.userId, userId))
-    .orderBy(asc(savingsGoals.createdAt))
-    .all();
+    .orderBy(asc(savingsGoals.createdAt));
 
   return rows.map(toSavingsGoalView);
 }
@@ -131,7 +138,7 @@ export function listSavingsGoals(db: AppDb, userId: string): SavingsGoalView[] {
 /**
  * Creates a new savings goal, optionally linked to an accessible wallet.
  */
-export function createSavingsGoal(
+export async function createSavingsGoal(
   db: AppDb,
   userId: string,
   input: {
@@ -142,7 +149,7 @@ export function createSavingsGoal(
     deadline?: string | null;
     notes?: string | null;
   }
-): SavingsGoalView {
+): Promise<SavingsGoalView> {
   const name = input.name.trim();
   if (!name) {
     throw new AppError(400, "Nama target tabungan wajib diisi.");
@@ -153,7 +160,7 @@ export function createSavingsGoal(
 
   const walletId = normalizeOptionalText(input.walletId);
   if (walletId) {
-    assertWalletAccess(db, walletId, userId, "editor");
+    await assertWalletAccess(db, walletId, userId, "editor");
   }
 
   const rawDeadline = normalizeOptionalText(input.deadline);
@@ -163,19 +170,17 @@ export function createSavingsGoal(
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
-  db.insert(savingsGoals)
-    .values({
-      id,
-      userId,
-      walletId,
-      name,
-      targetAmount,
-      currentAmount,
-      deadline,
-      notes,
-      createdAt,
-    })
-    .run();
+  await db.insert(savingsGoals).values({
+    id,
+    userId,
+    walletId,
+    name,
+    targetAmount,
+    currentAmount,
+    deadline,
+    notes,
+    createdAt,
+  });
 
   return getSavingsGoalView(db, id);
 }
@@ -183,7 +188,7 @@ export function createSavingsGoal(
 /**
  * Updates metadata or target configuration of a savings goal owned by `userId`.
  */
-export function updateSavingsGoal(
+export async function updateSavingsGoal(
   db: AppDb,
   userId: string,
   goalId: string,
@@ -194,8 +199,8 @@ export function updateSavingsGoal(
     deadline: string | null;
     notes: string | null;
   }>
-): SavingsGoalView {
-  loadOwnedGoal(db, goalId, userId);
+): Promise<SavingsGoalView> {
+  await loadOwnedGoal(db, goalId, userId);
 
   const patch: Partial<typeof savingsGoals.$inferInsert> = {};
 
@@ -214,7 +219,7 @@ export function updateSavingsGoal(
   if (input.walletId !== undefined) {
     const normalizedWalletId = normalizeOptionalText(input.walletId);
     if (normalizedWalletId) {
-      assertWalletAccess(db, normalizedWalletId, userId, "editor");
+      await assertWalletAccess(db, normalizedWalletId, userId, "editor");
     }
     patch.walletId = normalizedWalletId;
   }
@@ -231,10 +236,10 @@ export function updateSavingsGoal(
   }
 
   if (Object.keys(patch).length > 0) {
-    db.update(savingsGoals)
+    await db
+      .update(savingsGoals)
       .set(patch)
-      .where(eq(savingsGoals.id, goalId))
-      .run();
+      .where(eq(savingsGoals.id, goalId));
   }
 
   return getSavingsGoalView(db, goalId);
@@ -243,20 +248,20 @@ export function updateSavingsGoal(
 /**
  * Deletes a savings goal owned by `userId`.
  */
-export function deleteSavingsGoal(
+export async function deleteSavingsGoal(
   db: AppDb,
   userId: string,
   goalId: string
-): void {
-  loadOwnedGoal(db, goalId, userId);
-  db.delete(savingsGoals).where(eq(savingsGoals.id, goalId)).run();
+): Promise<void> {
+  await loadOwnedGoal(db, goalId, userId);
+  await db.delete(savingsGoals).where(eq(savingsGoals.id, goalId));
 }
 
 /**
  * Records a deposit into a savings goal either as a virtual progress update or as an
  * atomic wallet transfer / savings expense transaction.
  */
-export function depositToSavingsGoal(
+export async function depositToSavingsGoal(
   db: AppDb,
   userId: string,
   goalId: string,
@@ -267,7 +272,7 @@ export function depositToSavingsGoal(
     occurredAt?: string;
     notes?: string | null;
   }
-): SavingsGoalView {
+): Promise<SavingsGoalView> {
   const amount = assertPositiveIntAmount(input.amount);
   if (input.mode !== "wallet_transfer" && input.mode !== "virtual") {
     throw new AppError(400, "Mode setoran tidak valid.");
@@ -279,8 +284,9 @@ export function depositToSavingsGoal(
       : getTodayISO();
   const notes = normalizeOptionalText(input.notes);
 
-  return db.transaction((tx) => {
-    const goal = loadOwnedGoal(tx, goalId, userId);
+  return db.transaction(async (tx) => {
+    const txExec = tx as unknown as DbExecutor;
+    const goal = await loadOwnedGoal(txExec, goalId, userId);
 
     if (input.mode === "wallet_transfer") {
       const sourceWalletId = normalizeOptionalText(input.sourceWalletId);
@@ -291,7 +297,7 @@ export function depositToSavingsGoal(
         );
       }
 
-      const sourceMembership = assertWalletAccess(
+      const sourceMembership = await assertWalletAccess(
         tx as unknown as AppDb,
         sourceWalletId,
         userId,
@@ -301,7 +307,7 @@ export function depositToSavingsGoal(
       const txTitle = `Setoran Target: ${goal.name}`;
 
       if (goal.walletId && goal.walletId !== sourceWalletId) {
-        insertTransactionInExecutor(tx, userId, {
+        await insertTransactionInExecutor(txExec, userId, {
           walletId: sourceWalletId,
           targetWalletId: goal.walletId,
           type: "transfer",
@@ -311,7 +317,7 @@ export function depositToSavingsGoal(
           occurredAt,
         });
       } else {
-        let savingsCategory = tx
+        let [savingsCategory] = await tx
           .select({ id: categories.id })
           .from(categories)
           .where(
@@ -321,10 +327,10 @@ export function depositToSavingsGoal(
               eq(categories.name, "Tabungan & Investasi")
             )
           )
-          .get();
+          .limit(1);
 
         if (!savingsCategory) {
-          savingsCategory = tx
+          const [insertedCat] = await tx
             .insert(categories)
             .values({
               id: crypto.randomUUID(),
@@ -336,11 +342,11 @@ export function depositToSavingsGoal(
               isDefault: false,
               createdAt: new Date().toISOString(),
             })
-            .returning({ id: categories.id })
-            .get()!;
+            .returning({ id: categories.id });
+          savingsCategory = insertedCat!;
         }
 
-        insertTransactionInExecutor(tx, userId, {
+        await insertTransactionInExecutor(txExec, userId, {
           walletId: sourceWalletId,
           categoryId: savingsCategory.id,
           type: "expense",
@@ -352,13 +358,13 @@ export function depositToSavingsGoal(
       }
     }
 
-    tx.update(savingsGoals)
+    await tx
+      .update(savingsGoals)
       .set({
         currentAmount: sql`${savingsGoals.currentAmount} + ${amount}`,
       })
-      .where(eq(savingsGoals.id, goal.id))
-      .run();
+      .where(eq(savingsGoals.id, goal.id));
 
-    return getSavingsGoalView(tx, goal.id);
+    return getSavingsGoalView(txExec, goal.id);
   });
 }
