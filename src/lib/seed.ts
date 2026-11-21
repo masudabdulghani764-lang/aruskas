@@ -368,7 +368,7 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
 
       pushTx({
         walletId: kasId,
-        categoryId: partnerCatByName.get("Belanja Rumah Tangga"),
+        categoryId: demoCatByName.get("Belanja Rumah Tangga"),
         userId: partnerUserId,
         type: "expense",
         amount: 920_000 + monthsAgo * 25_000,
@@ -448,7 +448,7 @@ export async function ensureDemoSeeded(db: AppDb): Promise<SafeUser> {
       if (monthsAgo === 4 || monthsAgo === 1) {
         pushTx({
           walletId: kasId,
-          categoryId: partnerCatByName.get("Kesehatan"),
+          categoryId: demoCatByName.get("Kesehatan"),
           userId: partnerUserId,
           type: "expense",
           amount: 420_000,
