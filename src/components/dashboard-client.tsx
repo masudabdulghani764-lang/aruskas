@@ -197,6 +197,7 @@ export function DashboardClient({
 
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const hasLeftInitialStateRef = useRef(false);
 
   useEffect(() => {
     setChartMounted(true);
@@ -222,7 +223,7 @@ export function DashboardClient({
           { cache: "no-store", signal: controller.signal }
         );
         const body = await res.json().catch(() => ({}));
-        if (seq !== requestSeqRef.current) {
+        if (controller.signal.aborted || seq !== requestSeqRef.current) {
           return;
         }
         if (!res.ok) {
@@ -244,7 +245,7 @@ export function DashboardClient({
         setFetchError(msg);
         toast.error(msg);
       } finally {
-        if (seq === requestSeqRef.current) {
+        if (!controller.signal.aborted && seq === requestSeqRef.current) {
           setLoading(false);
           setRefreshing(false);
         }
@@ -254,6 +255,15 @@ export function DashboardClient({
   );
 
   useEffect(() => {
+    if (
+      !hasLeftInitialStateRef.current &&
+      initialData &&
+      scope === "all" &&
+      refreshTrigger === 0
+    ) {
+      return;
+    }
+    hasLeftInitialStateRef.current = true;
     void fetchDashboard(scope, data !== null);
     return () => {
       abortRef.current?.abort();

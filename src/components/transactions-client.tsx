@@ -304,7 +304,7 @@ export function TransactionsClient({
         signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));
-      if (seq !== txRequestSeqRef.current) {
+      if (controller.signal.aborted || seq !== txRequestSeqRef.current) {
         return;
       }
       if (!res.ok) {
@@ -328,7 +328,7 @@ export function TransactionsClient({
       setTxError(msg);
       toast.error(msg);
     } finally {
-      if (seq === txRequestSeqRef.current) {
+      if (!controller.signal.aborted && seq === txRequestSeqRef.current) {
         setLoadingTx(false);
       }
     }
@@ -1241,7 +1241,7 @@ export function TransactionsClient({
                           <Button
                             size="sm"
                             variant="secondary"
-                            disabled={isBusy}
+                            disabled={isBusy || !rule.isActive}
                             onClick={() => void handleSkipRule(rule.id)}
                           >
                             <SkipForward className="h-3.5 w-3.5" />

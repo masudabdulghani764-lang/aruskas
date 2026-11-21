@@ -33,8 +33,30 @@ export function createDb(dbPath = ":memory:"): {
 
 const globalForDb = globalThis as unknown as {
   __aruskasDb?: AppDb;
+  __aruskasSqlite?: Database;
   __aruskasDbPath?: string;
 };
+
+/**
+ * Safely closes the cached singleton SQLite database handle if open.
+ */
+export function closeDb(): void {
+  const sqlite = globalForDb.__aruskasSqlite;
+  if (sqlite) {
+    try {
+      sqlite.close(true);
+    } catch {
+      try {
+        sqlite.close();
+      } catch {
+        // Ignore errors if already closed
+      }
+    }
+  }
+  globalForDb.__aruskasDb = undefined;
+  globalForDb.__aruskasSqlite = undefined;
+  globalForDb.__aruskasDbPath = undefined;
+}
 
 /**
  * Returns the lazy singleton database instance for the configured DATABASE_PATH
@@ -45,8 +67,10 @@ export function getDb(): AppDb {
     process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "aruskas.db");
 
   if (!globalForDb.__aruskasDb || globalForDb.__aruskasDbPath !== dbPath) {
-    const { db } = createDb(dbPath);
+    closeDb();
+    const { db, sqlite } = createDb(dbPath);
     globalForDb.__aruskasDb = db;
+    globalForDb.__aruskasSqlite = sqlite;
     globalForDb.__aruskasDbPath = dbPath;
   }
 

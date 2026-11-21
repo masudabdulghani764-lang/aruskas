@@ -411,21 +411,27 @@ export function skipRecurringRule(
   ruleId: string,
   userId: string
 ): RecurringRuleView {
-  const existing = loadOwnedRule(db, ruleId, userId);
-  assertWalletAccess(db, existing.walletId, userId, "owner");
+  return db.transaction((tx) => {
+    const txDb = tx as unknown as AppDb;
+    const existing = loadOwnedRule(txDb, ruleId, userId);
+    if (!existing.isActive) {
+      throw new AppError(400, "Jadwal rutin sedang nonaktif.");
+    }
+    assertWalletAccess(txDb, existing.walletId, userId, "owner");
 
-  const nextRunDate = advanceDate(existing.nextRunDate, existing.frequency);
+    const nextRunDate = advanceDate(existing.nextRunDate, existing.frequency);
 
-  db.update(recurringRules)
-    .set({ nextRunDate })
-    .where(eq(recurringRules.id, ruleId))
-    .run();
+    tx.update(recurringRules)
+      .set({ nextRunDate })
+      .where(eq(recurringRules.id, ruleId))
+      .run();
 
-  const updated = db
-    .select()
-    .from(recurringRules)
-    .where(eq(recurringRules.id, ruleId))
-    .get()!;
+    const updated = tx
+      .select()
+      .from(recurringRules)
+      .where(eq(recurringRules.id, ruleId))
+      .get()!;
 
-  return buildRecurringRuleViews(db, [updated], getTodayISO())[0];
+    return buildRecurringRuleViews(txDb, [updated], getTodayISO())[0];
+  });
 }

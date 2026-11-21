@@ -65,7 +65,7 @@ export function SettingsClient({
   initialCategories,
 }: SettingsClientProps) {
   const router = useRouter();
-  const { refreshTrigger, triggerRefresh } = useQuickAdd();
+  const { refreshTrigger } = useQuickAdd();
 
   // User & Profile state
   const [user, setUser] = useState<SafeUser>(initialUser);
@@ -124,7 +124,7 @@ export function SettingsClient({
         signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));
-      if (seq !== catSeqRef.current) {
+      if (controller.signal.aborted || seq !== catSeqRef.current) {
         return;
       }
       if (!res.ok) {
@@ -351,7 +351,6 @@ export function SettingsClient({
       }
       setCatModalOpen(false);
       await fetchCategories();
-      triggerRefresh();
     } catch {
       const msg = "Terjadi gangguan jaringan saat menyimpan kategori.";
       setCatFormError(msg);
@@ -386,7 +385,6 @@ export function SettingsClient({
       toast.success(`Kategori "${deleteCatTarget.name}" berhasil dihapus.`);
       setDeleteCatTarget(null);
       await fetchCategories();
-      triggerRefresh();
     } catch {
       const msg = "Terjadi gangguan jaringan saat menghapus kategori.";
       setCatListError(msg);

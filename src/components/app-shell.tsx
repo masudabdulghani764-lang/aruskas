@@ -174,7 +174,12 @@ export function AppShell({
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Gagal keluar. Silakan coba lagi.");
+        return;
+      }
       toast.success("Anda telah keluar dari akun.");
       router.push("/masuk");
       router.refresh();

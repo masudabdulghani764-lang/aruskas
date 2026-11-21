@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createDb, getDb } from "@/db";
+import { closeDb, createDb, getDb } from "@/db";
 import { walletInvites, walletMembers, wallets } from "@/db/schema";
 import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import { AppError } from "@/lib/errors";
@@ -120,6 +120,16 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
             name: "Dompet Pecahan",
             type: "cash",
             initialBalance: 100.5,
+          }),
+        400
+      );
+
+      await expectAppError(
+        () =>
+          createWallet(db, reg.user.id, {
+            name: "Dompet Terlalu Besar",
+            type: "cash",
+            initialBalance: Number.MAX_SAFE_INTEGER + 1,
           }),
         400
       );
@@ -637,6 +647,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
       expect(usedRes.status).toBe(410);
     } finally {
+      closeDb();
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;
       } else {
@@ -932,6 +943,39 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
         ((await nonStringEmailObj.json()) as { error: string }).error
       ).toBe("Email harus berupa teks.");
 
+      // Top-level non-object JSON & MAX_SAFE_INTEGER initialBalance -> Indonesian 400
+      for (const res of [
+        await createWalletRoute(
+          jsonRequest("http://localhost/api/wallets", "POST", [])
+        ),
+        await updateWalletRoute(
+          jsonRequest(`http://localhost/api/wallets/${walletId}`, "PATCH", []),
+          { params: Promise.resolve({ id: walletId }) }
+        ),
+        await createWalletInviteRoute(
+          jsonRequest(
+            `http://localhost/api/wallets/${walletId}/invites`,
+            "POST",
+            []
+          ),
+          { params: Promise.resolve({ id: walletId }) }
+        ),
+      ]) {
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: string }).error).toBe(
+          "Format data permintaan tidak valid."
+        );
+      }
+
+      const hugeBalanceRes = await createWalletRoute(
+        jsonRequest("http://localhost/api/wallets", "POST", {
+          name: "Terlalu Besar",
+          type: "cash",
+          initialBalance: Number.MAX_SAFE_INTEGER + 1,
+        })
+      );
+      expect(hugeBalanceRes.status).toBe(400);
+
       // Whitespace-only email normalizes to null on POST /api/wallets/[id]/invites -> 201
       const whitespaceInviteRes = await createWalletInviteRoute(
         jsonRequest(
@@ -1013,6 +1057,7 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       expect(removeRes.status).toBe(200);
       expect(await removeRes.json()).toEqual({ ok: true });
     } finally {
+      closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

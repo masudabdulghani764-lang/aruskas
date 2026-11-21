@@ -140,7 +140,12 @@ export default function UndanganTokenPage() {
   async function handleSwitchAccount() {
     setSwitchingAccount(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Gagal mengganti akun.");
+        return;
+      }
       router.push(`/masuk?next=${encodeURIComponent(`/undangan/${token}`)}`);
       router.refresh();
     } catch {

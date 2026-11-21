@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createDb, getDb } from "@/db";
+import { closeDb, createDb, getDb } from "@/db";
 import { categories, transactions, wallets } from "@/db/schema";
 import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import {
@@ -772,6 +772,15 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
           }),
         403
       );
+      await expectAppError(
+        () =>
+          depositToSavingsGoal(db, user.user.id, linkedGoal.id, {
+            amount: 100_000,
+            mode: "virtual",
+            occurredAt: "2026-02-30",
+          }),
+        400
+      );
       // Balances unchanged on rejected deposits
       expect(getWalletBalance(db, checkingWallet.id)).toBe(7_000_000);
       expect(getWalletBalance(db, savingsWallet.id)).toBe(3_500_000);
@@ -1212,6 +1221,16 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
           .goal.currentAmount
       ).toBe(1_250_000);
 
+      const invalidVirtualDateRes = await depositGoalRoute(
+        jsonReq(`http://localhost/api/goals/${goalId}/deposit`, "POST", {
+          amount: 100_000,
+          mode: "virtual",
+          occurredAt: "2026-02-30",
+        }),
+        { params: Promise.resolve({ id: goalId }) }
+      );
+      expect(invalidVirtualDateRes.status).toBe(400);
+
       const delGoalRes = await deleteGoalRoute(
         new Request(`http://localhost/api/goals/${goalId}`, {
           method: "DELETE",
@@ -1246,6 +1265,7 @@ describe("Categories, Monthly Budgets & Dual-Mode Savings Goals", () => {
       );
       expect(invalidDeadlineRes.status).toBe(400);
     } finally {
+      closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

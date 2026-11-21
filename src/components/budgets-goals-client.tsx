@@ -120,6 +120,7 @@ export function BudgetsGoalsClient({
   const goalsAbortRef = useRef<AbortController | null>(null);
   const hasHydratedBudgetsRef = useRef(true);
   const hasHydratedGoalsRef = useRef(true);
+  const hasLeftInitialBudgetsStateRef = useRef(false);
 
   // Budget Modal state
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
@@ -195,7 +196,7 @@ export function BudgetsGoalsClient({
           { cache: "no-store", signal: controller.signal }
         );
         const data = await res.json().catch(() => ({}));
-        if (seq !== budgetSeqRef.current) {
+        if (controller.signal.aborted || seq !== budgetSeqRef.current) {
           return;
         }
         if (!res.ok) {
@@ -220,7 +221,7 @@ export function BudgetsGoalsClient({
         setBudgetError(msg);
         toast.error(msg);
       } finally {
-        if (seq === budgetSeqRef.current) {
+        if (!controller.signal.aborted && seq === budgetSeqRef.current) {
           setLoadingBudgets(false);
           setRefreshingBudgets(false);
         }
@@ -256,7 +257,7 @@ export function BudgetsGoalsClient({
         catsRes.json().catch(() => ({})),
       ]);
 
-      if (seq !== goalsSeqRef.current) {
+      if (controller.signal.aborted || seq !== goalsSeqRef.current) {
         return;
       }
 
@@ -289,7 +290,7 @@ export function BudgetsGoalsClient({
       setGoalsError(msg);
       toast.error(msg);
     } finally {
-      if (seq === goalsSeqRef.current) {
+      if (!controller.signal.aborted && seq === goalsSeqRef.current) {
         setLoadingGoals(false);
       }
     }
@@ -297,14 +298,25 @@ export function BudgetsGoalsClient({
 
   // Keep monthly budgets synced with selected month and global Quick-Add refreshes
   useEffect(() => {
+    if (
+      !hasLeftInitialBudgetsStateRef.current &&
+      month === initialMonth &&
+      refreshTrigger === 0
+    ) {
+      return;
+    }
+    hasLeftInitialBudgetsStateRef.current = true;
     void fetchBudgets(month, hasHydratedBudgetsRef.current);
     return () => {
       budgetAbortRef.current?.abort();
     };
-  }, [month, refreshTrigger, fetchBudgets]);
+  }, [month, initialMonth, refreshTrigger, fetchBudgets]);
 
   // Keep goals, wallets, and expense categories synced with global Quick-Add refreshes
   useEffect(() => {
+    if (refreshTrigger === 0) {
+      return;
+    }
     void fetchGoalsAndMeta(hasHydratedGoalsRef.current);
     return () => {
       goalsAbortRef.current?.abort();
@@ -646,7 +658,6 @@ export function BudgetsGoalsClient({
           : `Progres tabungan bertambah ${formatIDR(amount)}.`
       );
       setDepositGoal(null);
-      await Promise.all([fetchGoalsAndMeta(true), fetchBudgets(month, true)]);
       triggerRefresh();
     } catch {
       const msg = "Terjadi gangguan jaringan saat mencatat setoran.";

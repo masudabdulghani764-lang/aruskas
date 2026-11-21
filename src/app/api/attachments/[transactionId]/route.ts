@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/db";
 import { transactions } from "@/db/schema";
 import {
+  buildContentDisposition,
   readAttachmentBuffer,
-  sanitizeAttachmentName,
 } from "@/lib/attachments";
 import { requireCurrentUser } from "@/lib/auth";
 import { AppError, handleApiError } from "@/lib/errors";
@@ -37,13 +37,16 @@ export async function GET(
     }
 
     const bytes = await readAttachmentBuffer(row.attachmentPath);
-    const filename = sanitizeAttachmentName(row.attachmentName ?? "lampiran");
+    const contentDisposition = buildContentDisposition(
+      row.attachmentName ?? "lampiran",
+      "inline"
+    );
 
     return new NextResponse(Buffer.from(bytes), {
       status: 200,
       headers: {
         "Content-Type": row.attachmentMime ?? "application/octet-stream",
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": contentDisposition,
         "X-Content-Type-Options": "nosniff",
       },
     });

@@ -177,7 +177,7 @@ export async function POST(request: Request) {
     const user = await requireCurrentUser();
     const contentType = request.headers.get("content-type") ?? "";
 
-    if (contentType.includes("multipart/form-data")) {
+    if (contentType.toLowerCase().includes("multipart/form-data")) {
       let formData: FormData;
       try {
         formData = await request.formData();

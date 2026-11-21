@@ -9,24 +9,27 @@ import {
   listWalletInvites,
 } from "@/lib/wallets";
 
-const createInviteSchema = z.object({
-  email: z
-    .string({ invalid_type_error: "Email harus berupa teks." })
-    .trim()
-    .refine(
-      (val) => val === "" || z.string().email().safeParse(val).success,
-      "Format email tidak valid."
-    )
-    .transform((val) => (val === "" ? null : val))
-    .optional()
-    .nullable(),
-  role: z.enum(["editor", "viewer"], {
-    errorMap: indonesianEnumErrorMap(
-      "Peran undangan wajib dipilih.",
-      "Peran undangan harus editor atau viewer."
-    ),
-  }),
-});
+const createInviteSchema = z.object(
+  {
+    email: z
+      .string({ invalid_type_error: "Email harus berupa teks." })
+      .trim()
+      .refine(
+        (val) => val === "" || z.string().email().safeParse(val).success,
+        "Format email tidak valid."
+      )
+      .transform((val) => (val === "" ? null : val))
+      .optional()
+      .nullable(),
+    role: z.enum(["editor", "viewer"], {
+      errorMap: indonesianEnumErrorMap(
+        "Peran undangan wajib dipilih.",
+        "Peran undangan harus editor atau viewer."
+      ),
+    }),
+  },
+  { invalid_type_error: "Format data permintaan tidak valid." }
+);
 
 export async function GET(
   _request: Request,

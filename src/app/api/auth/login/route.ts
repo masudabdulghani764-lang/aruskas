@@ -4,15 +4,18 @@ import { getDb } from "@/db";
 import { loginUser, parseJsonBody, setSessionCookie } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
 
-const loginSchema = z.object({
-  email: z
-    .string({ required_error: "Email wajib diisi." })
-    .trim()
-    .email("Format email tidak valid."),
-  password: z
-    .string({ required_error: "Kata sandi wajib diisi." })
-    .min(1, "Kata sandi wajib diisi."),
-});
+const loginSchema = z.object(
+  {
+    email: z
+      .string({ required_error: "Email wajib diisi." })
+      .trim()
+      .email("Format email tidak valid."),
+    password: z
+      .string({ required_error: "Kata sandi wajib diisi." })
+      .min(1, "Kata sandi wajib diisi."),
+  },
+  { invalid_type_error: "Format data permintaan tidak valid." }
+);
 
 export async function POST(request: Request) {
   try {

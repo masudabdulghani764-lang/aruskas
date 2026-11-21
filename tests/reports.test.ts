@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createDb, getDb } from "@/db";
+import { closeDb, createDb, getDb } from "@/db";
 import { categories } from "@/db/schema";
 import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import { upsertBudget } from "@/lib/budgets";
@@ -33,10 +33,14 @@ mock.module("next/headers", () => ({
   }),
 }));
 
+import { POST as loginRoute } from "@/app/api/auth/login/route";
+import { POST as registerRoute } from "@/app/api/auth/register/route";
 import { GET as getDashboardRoute } from "@/app/api/dashboard/route";
 import { GET as exportReportsCsvRoute } from "@/app/api/reports/export/csv/route";
 import { GET as getReportsRoute } from "@/app/api/reports/route";
 import { GET as getBackupRoute } from "@/app/api/settings/backup/route";
+import { POST as changePasswordRoute } from "@/app/api/settings/password/route";
+import { PATCH as updateProfileRoute } from "@/app/api/settings/profile/route";
 
 async function expectAppError(
   fn: () => unknown | Promise<unknown>,
@@ -1044,7 +1048,45 @@ describe("Dashboard Aggregation, Financial Reports & CSV/Backup Export", () => {
       expect(backupJson.user.email).toBe("raka-rep-api@aruskas.test");
       expect(backupJson.user.passwordHash).toBeUndefined();
       expect(backupJson.transactions).toHaveLength(2);
+
+      // 7. Non-object JSON arrays rejected with Indonesian message across auth & settings routes
+      for (const res of [
+        await loginRoute(
+          new Request("http://localhost/api/auth/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "[]",
+          })
+        ),
+        await registerRoute(
+          new Request("http://localhost/api/auth/register", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "[]",
+          })
+        ),
+        await updateProfileRoute(
+          new Request("http://localhost/api/settings/profile", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: "[]",
+          })
+        ),
+        await changePasswordRoute(
+          new Request("http://localhost/api/settings/password", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "[]",
+          })
+        ),
+      ]) {
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: string }).error).toBe(
+          "Format data permintaan tidak valid."
+        );
+      }
     } finally {
+      closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

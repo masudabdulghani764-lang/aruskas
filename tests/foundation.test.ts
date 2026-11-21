@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createDb } from "@/db";
+import { closeDb, createDb, getDb } from "@/db";
 import {
   budgets,
   categories,
@@ -287,6 +290,40 @@ describe("Database Foundation & Schema", () => {
       }).toThrow();
     } finally {
       sqlite.close();
+    }
+  });
+
+  test("getDb() closes previous SQLite handle on DATABASE_PATH switch and closeDb() releases locks", () => {
+    const prevDbPath = process.env.DATABASE_PATH;
+    const tempDir1 = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-db-sw1-"));
+    const tempDir2 = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-db-sw2-"));
+    try {
+      process.env.DATABASE_PATH = path.join(tempDir1, "one.db");
+      const db1 = getDb();
+      expect(db1.select().from(users).all()).toEqual([]);
+
+      // Switching DATABASE_PATH must close the first handle before opening the second
+      process.env.DATABASE_PATH = path.join(tempDir2, "two.db");
+      const db2 = getDb();
+      expect(db2).not.toBe(db1);
+      expect(db2.select().from(users).all()).toEqual([]);
+
+      // Removing tempDir1 succeeds cleanly now that its SQLite handle was closed
+      fs.rmSync(tempDir1, { recursive: true, force: true });
+      expect(fs.existsSync(tempDir1)).toBe(false);
+
+      closeDb();
+      fs.rmSync(tempDir2, { recursive: true, force: true });
+      expect(fs.existsSync(tempDir2)).toBe(false);
+    } finally {
+      closeDb();
+      if (prevDbPath === undefined) {
+        delete process.env.DATABASE_PATH;
+      } else {
+        process.env.DATABASE_PATH = prevDbPath;
+      }
+      fs.rmSync(tempDir1, { recursive: true, force: true });
+      fs.rmSync(tempDir2, { recursive: true, force: true });
     }
   });
 });

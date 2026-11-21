@@ -232,11 +232,7 @@ export function createWallet(
     throw new AppError(400, "Nama dompet wajib diisi.");
   }
 
-  if (
-    !Number.isFinite(input.initialBalance) ||
-    !Number.isInteger(input.initialBalance) ||
-    input.initialBalance < 0
-  ) {
+  if (!Number.isSafeInteger(input.initialBalance) || input.initialBalance < 0) {
     throw new AppError(
       400,
       "Saldo awal harus berupa bilangan bulat minimal 0."

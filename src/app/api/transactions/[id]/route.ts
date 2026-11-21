@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/db";
+import { deleteAttachmentQuietly } from "@/lib/attachments";
 import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
 import {
@@ -118,7 +119,10 @@ export async function DELETE(
     const user = await requireCurrentUser();
     const { id } = await context.params;
 
-    deleteTransaction(getDb(), id, user.id);
+    const deleted = deleteTransaction(getDb(), id, user.id);
+    if (deleted.attachmentPath) {
+      await deleteAttachmentQuietly(deleted.attachmentPath);
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     return handleApiError(err);

@@ -280,6 +280,7 @@ export function ReportsClient({
   const [printedDate, setPrintedDate] = useState(() => formatDateID(initialTo));
 
   const hasHydratedRef = useRef(true);
+  const hasLeftInitialStateRef = useRef(false);
   const seqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -288,12 +289,10 @@ export function ReportsClient({
     setPrintedDate(formatDateID(getTodayISO()));
   }, []);
 
-  const activeRange = useMemo(() => {
-    if (preset === "custom") {
-      return { from: customFrom, to: customTo };
-    }
-    return resolveReportPeriodRange(preset);
-  }, [preset, customFrom, customTo]);
+  const activeRange = useMemo(
+    () => ({ from: customFrom, to: customTo }),
+    [customFrom, customTo]
+  );
 
   const dateRangeInvalid =
     !activeRange.from ||
@@ -353,7 +352,7 @@ export function ReportsClient({
           walletsRes.json().catch(() => ({})),
         ]);
 
-        if (seq !== seqRef.current) {
+        if (controller.signal.aborted || seq !== seqRef.current) {
           return;
         }
 
@@ -381,7 +380,7 @@ export function ReportsClient({
         setFetchError(msg);
         toast.error(msg);
       } finally {
-        if (seq === seqRef.current) {
+        if (!controller.signal.aborted && seq === seqRef.current) {
           setLoading(false);
           setRefreshing(false);
         }
@@ -391,6 +390,17 @@ export function ReportsClient({
   );
 
   useEffect(() => {
+    if (
+      !hasLeftInitialStateRef.current &&
+      preset === "this_month" &&
+      walletSelection === "scope:all" &&
+      activeRange.from === initialFrom &&
+      activeRange.to === initialTo &&
+      refreshTrigger === 0
+    ) {
+      return;
+    }
+    hasLeftInitialStateRef.current = true;
     void fetchReportAndWallets(
       queryString,
       dateRangeInvalid,
@@ -399,7 +409,18 @@ export function ReportsClient({
     return () => {
       abortRef.current?.abort();
     };
-  }, [queryString, dateRangeInvalid, refreshTrigger, fetchReportAndWallets]);
+  }, [
+    preset,
+    walletSelection,
+    activeRange.from,
+    activeRange.to,
+    initialFrom,
+    initialTo,
+    queryString,
+    dateRangeInvalid,
+    refreshTrigger,
+    fetchReportAndWallets,
+  ]);
 
   function handleSelectPreset(nextPreset: ReportPeriodPreset) {
     setPreset(nextPreset);
@@ -771,7 +792,7 @@ export function ReportsClient({
                 Belum ada data tren arus kas pada rentang tanggal ini.
               </div>
             ) : (
-              <div className="h-[260px] w-full print:h-[220px]">
+              <div className="h-[260px] w-full min-w-0 print:h-[220px] print:overflow-hidden">
                 {chartMounted ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart

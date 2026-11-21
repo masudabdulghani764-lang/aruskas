@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { createDb, getDb } from "@/db";
+import { closeDb, createDb, getDb } from "@/db";
 import { categories, recurringRules, transactions, users, wallets } from "@/db/schema";
 import {
   DEMO_PARTNER_EMAIL,
@@ -14,6 +14,7 @@ import { AppError } from "@/lib/errors";
 import { ensureDemoSeeded } from "@/lib/seed";
 import {
   MAX_ATTACHMENT_BYTES,
+  buildContentDisposition,
   readAttachmentBuffer,
   saveAttachment,
 } from "@/lib/attachments";
@@ -771,6 +772,14 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
         () => readAttachmentBuffer(path.join(tempDir, savedPng.path), tempDir),
         400
       );
+
+      // Content-Disposition header handles Unicode filenames without Headers TypeError
+      const unicodeHeader = buildContentDisposition("Struk — Kafe Éclair.pdf");
+      expect(() => new Headers({ "Content-Disposition": unicodeHeader })).not.toThrow();
+      expect(unicodeHeader).toContain('inline; filename="Struk _ Kafe Eclair.pdf"');
+      expect(unicodeHeader).toContain(
+        "filename*=UTF-8''Struk%20%E2%80%94%20Kafe%20%C3%89clair.pdf"
+      );
     } finally {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -901,6 +910,14 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
           .where(eq(transactions.recurringRuleId, dueRule.id))
           .all()
       ).toHaveLength(1);
+
+      // Inactive rule cannot be skipped -> 400
+      updateRecurringRule(db, dueRule.id, owner.user.id, { isActive: false });
+      const inactiveSkipErr = await expectAppError(
+        () => skipRecurringRule(db, dueRule.id, owner.user.id),
+        400
+      );
+      expect(inactiveSkipErr.message).toBe("Jadwal rutin sedang nonaktif.");
 
       // Deleting a rule that already posted transactions succeeds cleanly without FK crash
       // while preserving the posted transaction
@@ -1212,6 +1229,54 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
       expect(delRes.status).toBe(200);
       expect(getWalletBalance(db, wallet.id)).toBe(1_000_000);
+      // Confirm attachment file on disk is cleaned up after transaction deletion
+      expect(fs.readdirSync(uploadDir)).toHaveLength(0);
+
+      // 4b. Unicode attachment filename -> valid Content-Disposition header (no TypeError) & cleanup on delete
+      const pdfBytes = new TextEncoder().encode("%PDF-1.4\nunicode-test");
+      const unicodeForm = new FormData();
+      unicodeForm.set("walletId", wallet.id);
+      unicodeForm.set("categoryId", expenseCat.id);
+      unicodeForm.set("type", "expense");
+      unicodeForm.set("amount", "45000");
+      unicodeForm.set("title", "Kopi Eclair");
+      unicodeForm.set("occurredAt", "2026-11-20");
+      unicodeForm.set(
+        "attachment",
+        new File([pdfBytes], "Struk — Kafe Éclair.pdf", {
+          type: "application/pdf",
+        })
+      );
+      const unicodeUploadRes = await createTransactionRoute(
+        new Request("http://localhost/api/transactions", {
+          method: "POST",
+          body: unicodeForm,
+        })
+      );
+      expect(unicodeUploadRes.status).toBe(201);
+      const unicodeTxId = (
+        (await unicodeUploadRes.json()) as { transaction: { id: string } }
+      ).transaction.id;
+      expect(fs.readdirSync(uploadDir)).toHaveLength(1);
+
+      const unicodeDlRes = await downloadAttachmentRoute(
+        new Request(`http://localhost/api/attachments/${unicodeTxId}`),
+        { params: Promise.resolve({ transactionId: unicodeTxId }) }
+      );
+      expect(unicodeDlRes.status).toBe(200);
+      const cdHeader = unicodeDlRes.headers.get("content-disposition");
+      expect(cdHeader).toBeTruthy();
+      expect(() => new Headers({ "Content-Disposition": cdHeader! })).not.toThrow();
+      expect(cdHeader!).toContain("filename*=UTF-8''");
+
+      const unicodeDelRes = await deleteTransactionRoute(
+        new Request(`http://localhost/api/transactions/${unicodeTxId}`, {
+          method: "DELETE",
+        }),
+        { params: Promise.resolve({ id: unicodeTxId }) }
+      );
+      expect(unicodeDelRes.status).toBe(200);
+      expect(fs.readdirSync(uploadDir)).toHaveLength(0);
 
       // 5. Recurring routes lifecycle: POST -> apply (no body) -> skip -> PATCH -> DELETE
       const createRuleRes = await createRecurringRoute(
@@ -1337,6 +1402,7 @@ describe("Atomic Transactions Engine, Attachments & Recurring Rules", () => {
       );
       expect(dueOnlyRes.status).toBe(200);
     } finally {
+      closeDb();
       mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;

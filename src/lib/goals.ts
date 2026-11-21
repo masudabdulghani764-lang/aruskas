@@ -273,6 +273,10 @@ export function depositToSavingsGoal(
     throw new AppError(400, "Mode setoran tidak valid.");
   }
 
+  const occurredAt =
+    input.occurredAt !== undefined
+      ? assertValidIsoDate(input.occurredAt)
+      : getTodayISO();
   const notes = normalizeOptionalText(input.notes);
 
   return db.transaction((tx) => {
@@ -286,11 +290,6 @@ export function depositToSavingsGoal(
           "Dompet asal wajib dipilih untuk setoran dari dompet."
         );
       }
-
-      const occurredAt =
-        input.occurredAt !== undefined
-          ? assertValidIsoDate(input.occurredAt)
-          : getTodayISO();
 
       const sourceMembership = assertWalletAccess(
         tx as unknown as AppDb,

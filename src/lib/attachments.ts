@@ -37,6 +37,35 @@ export function sanitizeAttachmentName(rawName: string): string {
   return cleaned || "lampiran";
 }
 
+/**
+ * Builds an HTTP-safe Content-Disposition header pairing an ASCII fallback
+ * `filename="..."` with RFC 5987 `filename*=UTF-8''...` so Unicode filenames
+ * never trigger Headers ByteString TypeErrors.
+ */
+export function buildContentDisposition(
+  rawName: string | null | undefined,
+  disposition: "inline" | "attachment" = "inline"
+): string {
+  const utf8Name = sanitizeAttachmentName(rawName ?? "lampiran");
+  const asciiCandidate = utf8Name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]+/g, "_")
+    .replace(/["\\/;]/g, "")
+    .trim();
+  const asciiName =
+    asciiCandidate && !/^[._\s]+$/.test(asciiCandidate)
+      ? asciiCandidate
+      : "lampiran";
+
+  const encodedUtf8 = encodeURIComponent(utf8Name).replace(
+    /[!'()*]/g,
+    (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+
+  return `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodedUtf8}`;
+}
+
 function resolveSafeAttachmentPath(relPath: string, baseDir?: string): string {
   if (!relPath || relPath.includes("\0") || path.isAbsolute(relPath)) {
     throw new AppError(400, "Path lampiran tidak valid.");

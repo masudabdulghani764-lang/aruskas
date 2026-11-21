@@ -5,25 +5,28 @@ import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
 import { indonesianEnumErrorMap, updateWallet } from "@/lib/wallets";
 
-const updateWalletSchema = z.object({
-  name: z
-    .string({ invalid_type_error: "Nama dompet harus berupa teks." })
-    .trim()
-    .min(1, "Nama dompet tidak boleh kosong.")
-    .max(80, "Nama dompet maksimal 80 karakter.")
-    .optional(),
-  type: z
-    .enum(["cash", "bank", "ewallet", "savings"], {
-      errorMap: indonesianEnumErrorMap(
-        "Tipe dompet wajib dipilih.",
-        "Tipe dompet tidak valid."
-      ),
-    })
-    .optional(),
-  archived: z
-    .boolean({ invalid_type_error: "Status arsip harus berupa boolean." })
-    .optional(),
-});
+const updateWalletSchema = z.object(
+  {
+    name: z
+      .string({ invalid_type_error: "Nama dompet harus berupa teks." })
+      .trim()
+      .min(1, "Nama dompet tidak boleh kosong.")
+      .max(80, "Nama dompet maksimal 80 karakter.")
+      .optional(),
+    type: z
+      .enum(["cash", "bank", "ewallet", "savings"], {
+        errorMap: indonesianEnumErrorMap(
+          "Tipe dompet wajib dipilih.",
+          "Tipe dompet tidak valid."
+        ),
+      })
+      .optional(),
+    archived: z
+      .boolean({ invalid_type_error: "Status arsip harus berupa boolean." })
+      .optional(),
+  },
+  { invalid_type_error: "Format data permintaan tidak valid." }
+);
 
 export async function PATCH(
   request: Request,

@@ -85,4 +85,11 @@
   tr {
     break-inside: avoid;
   }
+
+  .recharts-wrapper,
+  .recharts-responsive-container,
+  .recharts-surface {
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
 }

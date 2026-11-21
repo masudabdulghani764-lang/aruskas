@@ -604,13 +604,14 @@ export function updateTransaction(
 
 /**
  * Deletes a transaction and atomically reverses its wallet balance impact.
+ * Returns the deleted attachment relative path (if any) for post-commit cleanup.
  */
 export function deleteTransaction(
   db: AppDb,
   txId: string,
   userId: string
-): void {
-  db.transaction((tx) => {
+): { attachmentPath: string | null } {
+  return db.transaction((tx) => {
     const existing = tx
       .select()
       .from(transactions)
@@ -637,6 +638,8 @@ export function deleteTransaction(
     const deltas = collectTxDeltas(existing, -1);
     applyWalletDeltas(tx, deltas);
     tx.delete(transactions).where(eq(transactions.id, txId)).run();
+
+    return { attachmentPath: existing.attachmentPath ?? null };
   });
 }
 

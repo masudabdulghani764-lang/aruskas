@@ -8,21 +8,24 @@ import {
 } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
 
-const profileSchema = z.object({
-  name: z
-    .string({ required_error: "Nama wajib diisi." })
-    .trim()
-    .min(2, "Nama minimal 2 karakter.")
-    .max(100, "Nama maksimal 100 karakter."),
-  monthlySavingsTarget: z
-    .number({
-      required_error: "Target tabungan bulanan wajib diisi.",
-      invalid_type_error: "Target tabungan bulanan harus berupa angka.",
-    })
-    .int("Target tabungan bulanan harus berupa bilangan bulat.")
-    .min(0, "Target tabungan minimal 0%.")
-    .max(100, "Target tabungan maksimal 100%."),
-});
+const profileSchema = z.object(
+  {
+    name: z
+      .string({ required_error: "Nama wajib diisi." })
+      .trim()
+      .min(2, "Nama minimal 2 karakter.")
+      .max(100, "Nama maksimal 100 karakter."),
+    monthlySavingsTarget: z
+      .number({
+        required_error: "Target tabungan bulanan wajib diisi.",
+        invalid_type_error: "Target tabungan bulanan harus berupa angka.",
+      })
+      .int("Target tabungan bulanan harus berupa bilangan bulat.")
+      .min(0, "Target tabungan minimal 0%.")
+      .max(100, "Target tabungan maksimal 100%."),
+  },
+  { invalid_type_error: "Format data permintaan tidak valid." }
+);
 
 export async function PATCH(request: Request) {
   try {

@@ -8,15 +8,18 @@ import {
 } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
 
-const passwordSchema = z.object({
-  currentPassword: z
-    .string({ required_error: "Kata sandi saat ini wajib diisi." })
-    .min(1, "Kata sandi saat ini wajib diisi."),
-  newPassword: z
-    .string({ required_error: "Kata sandi baru wajib diisi." })
-    .min(8, "Kata sandi baru minimal 8 karakter.")
-    .max(128, "Kata sandi baru maksimal 128 karakter."),
-});
+const passwordSchema = z.object(
+  {
+    currentPassword: z
+      .string({ required_error: "Kata sandi saat ini wajib diisi." })
+      .min(1, "Kata sandi saat ini wajib diisi."),
+    newPassword: z
+      .string({ required_error: "Kata sandi baru wajib diisi." })
+      .min(8, "Kata sandi baru minimal 8 karakter.")
+      .max(128, "Kata sandi baru maksimal 128 karakter."),
+  },
+  { invalid_type_error: "Format data permintaan tidak valid." }
+);
 
 export async function POST(request: Request) {
   try {
