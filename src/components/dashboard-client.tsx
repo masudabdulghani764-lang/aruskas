@@ -632,12 +632,14 @@ export function DashboardClient({
         </div>
       )}
 
-      {/* Hero Balance Sheet — Deep Botanical Forest & Warm Gold Focal Card */}
-      <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-gradient-to-br from-[#14532D] via-[#113B26] to-[#0D2E1D] p-6 sm:p-8 text-[#FAF8F4] shadow-[0_14px_34px_rgba(20,83,45,0.18)]">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#E5B869]/15 blur-2xl"
-        />
+      {/* Hero Balance Sheet — Deep Botanical Forest & Warm Gold Focal Card (zero blur filter cost) */}
+      <div
+        className="relative overflow-hidden rounded-3xl border border-[#245A3E] p-6 sm:p-8 text-[#FAF8F4] shadow-sm"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 92% 12%, rgba(229, 184, 105, 0.22) 0%, rgba(229, 184, 105, 0) 55%), linear-gradient(135deg, #14532D 0%, #113B26 55%, #0D2E1D 100%)",
+        }}
+      >
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -860,7 +862,7 @@ export function DashboardClient({
 
         <div className="h-[270px] w-full">
           {chartMounted ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" debounce={150}>
               <BarChart
                 data={data.monthlySeries}
                 margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
@@ -895,6 +897,7 @@ export function DashboardClient({
                   fill="#15803D"
                   radius={[6, 6, 0, 0]}
                   maxBarSize={32}
+                  isAnimationActive={false}
                 />
                 <Bar
                   dataKey="expense"
@@ -902,6 +905,7 @@ export function DashboardClient({
                   fill="#B91C1C"
                   radius={[6, 6, 0, 0]}
                   maxBarSize={32}
+                  isAnimationActive={false}
                 />
               </BarChart>
             </ResponsiveContainer>

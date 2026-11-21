@@ -185,7 +185,7 @@ function CategoryBreakdownPanel({
           {/* Donut Ring Chart + Proportion Bars */}
           <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-12">
             <div className="no-print mx-auto h-36 w-36 sm:col-span-4">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" debounce={150}>
                 <PieChart>
                   <Pie
                     data={items}
@@ -196,6 +196,7 @@ function CategoryBreakdownPanel({
                     paddingAngle={2}
                     stroke="#FFFDF8"
                     strokeWidth={2}
+                    isAnimationActive={false}
                   >
                     {items.map((item) => (
                       <Cell
