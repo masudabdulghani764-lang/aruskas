@@ -186,6 +186,15 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month);
   CREATE INDEX IF NOT EXISTS idx_savings_goals_user ON savings_goals(user_id);
   CREATE INDEX IF NOT EXISTS idx_recurring_rules_user_next ON recurring_rules(user_id, next_run_date);
+  CREATE INDEX IF NOT EXISTS idx_recurring_rules_active_next ON recurring_rules(is_active, next_run_date);
+
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 1,
+    reset_at BIGINT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_rate_limits_reset_at ON rate_limits(reset_at);
 `;
 
 /**

@@ -1,7 +1,9 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
+  SESSION_COOKIE_NAME,
   changePassword,
   parseJsonBody,
   requireCurrentUser,
@@ -26,12 +28,15 @@ export async function POST(request: Request) {
     const currentUser = await requireCurrentUser();
     const body = await parseJsonBody(request);
     const parsed = passwordSchema.parse(body);
+    const cookieStore = await cookies();
+    const currentToken = cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
 
     await changePassword(
       await getDb(),
       currentUser.id,
       parsed.currentPassword,
-      parsed.newPassword
+      parsed.newPassword,
+      currentToken
     );
     return NextResponse.json({ ok: true });
   } catch (err) {

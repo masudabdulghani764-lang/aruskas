@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { parseJsonBody, registerUser, setSessionCookie } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
+import { enforceRateLimit, getClientIp } from "@/lib/security";
 
 const registerSchema = z.object(
   {
@@ -28,8 +29,18 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = registerSchema.parse(body);
 
+    const db = await getDb();
+    await enforceRateLimit(db, {
+      scope: "auth_register",
+      identifier: getClientIp(request),
+      limit: 10,
+      windowMs: 15 * 60 * 1000,
+      message:
+        "Terlalu banyak percobaan pendaftaran dari jaringan ini. Silakan coba lagi nanti.",
+    });
+
     const { user, token, expiresAt } = await registerUser(
-      await getDb(),
+      db,
       parsed,
       request.headers.get("user-agent")
     );

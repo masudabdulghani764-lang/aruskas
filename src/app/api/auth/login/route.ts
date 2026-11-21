@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { loginUser, parseJsonBody, setSessionCookie } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
+import { enforceRateLimit, getClientIp } from "@/lib/security";
 
 const loginSchema = z.object(
   {
@@ -22,8 +23,19 @@ export async function POST(request: Request) {
     const body = await parseJsonBody(request);
     const parsed = loginSchema.parse(body);
 
+    const db = await getDb();
+    const clientIp = getClientIp(request);
+    await enforceRateLimit(db, {
+      scope: "auth_login",
+      identifier: `${clientIp}:${parsed.email.toLowerCase()}`,
+      limit: 15,
+      windowMs: 5 * 60 * 1000,
+      message:
+        "Terlalu banyak percobaan masuk. Silakan tunggu 5 menit lalu coba lagi.",
+    });
+
     const { user, token, expiresAt } = await loginUser(
-      await getDb(),
+      db,
       parsed,
       request.headers.get("user-agent")
     );

@@ -23,6 +23,12 @@ export const metadata: Metadata = {
   },
   description:
     "Kelola arus kas pribadi dan keluarga dengan tenang. Catat pemasukan, pengeluaran, transfer antar dompet, dompet bersama keluarga, anggaran bulanan, dan laporan siap cetak PDF & CSV.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ArusKas",
+  },
 };
 
 export const viewport: Viewport = {

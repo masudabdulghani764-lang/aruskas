@@ -11,11 +11,13 @@ import {
   FileSpreadsheet,
   Info,
   KeyRound,
+  LogOut,
   Pencil,
   Plus,
   RotateCcw,
   Tags,
   Trash2,
+  Upload,
   User as UserIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -108,6 +110,11 @@ export function SettingsClient({
   // Demo Reset Modal
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [resettingDemo, setResettingDemo] = useState(false);
+
+  // Session revocation & Backup restore states
+  const [revokingSessions, setRevokingSessions] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
 
   const catSeqRef = useRef(0);
   const catAbortRef = useRef<AbortController | null>(null);
@@ -414,6 +421,83 @@ export function SettingsClient({
     }
   }
 
+  // Revoke all other sessions handler
+  async function handleRevokeOtherSessions() {
+    setRevokingSessions(true);
+    try {
+      const res = await fetch("/api/settings/sessions", { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Gagal mengeluarkan sesi perangkat lain.");
+        return;
+      }
+      const count = Number(data.revokedCount ?? 0);
+      toast.success(
+        count > 0
+          ? `${count} sesi perangkat lain berhasil dikeluarkan.`
+          : "Tidak ada sesi aktif di perangkat lain."
+      );
+    } catch {
+      toast.error("Terjadi gangguan jaringan saat mengelola sesi.");
+    } finally {
+      setRevokingSessions(false);
+    }
+  }
+
+  // Restore JSON Backup handler
+  async function handleRestoreBackupFile(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ukuran berkas backup maksimal 5 MB.");
+      return;
+    }
+
+    setRestoringBackup(true);
+    try {
+      const text = await file.text();
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        toast.error("Berkas bukan JSON yang valid.");
+        return;
+      }
+
+      const res = await fetch("/api/settings/backup/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Gagal memulihkan data backup.");
+        return;
+      }
+
+      const s = data.summary as {
+        walletsImported: number;
+        transactionsImported: number;
+        budgetsImported: number;
+        goalsImported: number;
+      };
+      toast.success(
+        `Backup dipulihkan: ${s.walletsImported} dompet, ${s.transactionsImported} transaksi, ${s.budgetsImported} anggaran, ${s.goalsImported} target.`
+      );
+      await fetchCategories();
+      router.refresh();
+    } catch {
+      toast.error("Terjadi gangguan jaringan saat memulihkan backup.");
+    } finally {
+      setRestoringBackup(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       {/* Page Title */}
@@ -626,6 +710,27 @@ export function SettingsClient({
               </Button>
             </div>
           </form>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[#E7E2D8] pt-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[#1C1917]">
+                Sesi Perangkat Aktif
+              </p>
+              <p className="text-xs text-[#78716C]">
+                Keluarkan akun Anda dari browser atau HP lain secara instan.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              loading={revokingSessions}
+              onClick={() => void handleRevokeOtherSessions()}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Keluar Perangkat Lain</span>
+            </Button>
+          </div>
         </Card>
       </div>
 
@@ -806,6 +911,23 @@ export function SettingsClient({
               <FileSpreadsheet className="h-4 w-4 text-[#14532D]" />
               <span>Unduh Semua Transaksi CSV</span>
             </a>
+
+            <input
+              ref={backupInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => void handleRestoreBackupFile(e)}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              loading={restoringBackup}
+              onClick={() => backupInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4 text-[#14532D]" />
+              <span>Impor / Pulihkan Backup JSON</span>
+            </Button>
           </div>
 
           <p className="mt-3 text-xs text-[#78716C] leading-relaxed">

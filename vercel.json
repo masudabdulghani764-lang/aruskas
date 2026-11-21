@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "bunVersion": "1.x",
   "installCommand": "bun install",
-  "buildCommand": "bun run build"
+  "buildCommand": "bun run build",
+  "crons": [
+    {
+      "path": "/api/cron/recurring",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }

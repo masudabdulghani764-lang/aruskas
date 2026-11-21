@@ -232,3 +232,9 @@ export const bankSyncLogs = pgTable("bank_sync_logs", {
   errorMessage: text("error_message"),
   createdAt: text("created_at").notNull(),
 });
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(1),
+  resetAt: bigint("reset_at", { mode: "number" }).notNull(),
+});

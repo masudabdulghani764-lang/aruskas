@@ -19,6 +19,71 @@ const MIME_EXTENSIONS: Record<string, string> = {
   "application/pdf": ".pdf",
 };
 
+/**
+ * Verifies the actual leading magic bytes of an uploaded buffer match the declared MIME type,
+ * blocking spoofed files (e.g. HTML/JS disguised as image/png).
+ */
+export function assertAttachmentMagicBytes(
+  mime: string,
+  buffer: Uint8Array
+): void {
+  const invalid = () =>
+    new AppError(
+      400,
+      "Isi berkas tidak sesuai dengan format JPG, PNG, WebP, atau PDF yang valid."
+    );
+
+  if (mime === "image/png") {
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (buffer.byteLength < sig.length || !sig.every((b, i) => buffer[i] === b)) {
+      throw invalid();
+    }
+    return;
+  }
+
+  if (mime === "image/jpeg") {
+    if (
+      buffer.byteLength < 3 ||
+      buffer[0] !== 0xff ||
+      buffer[1] !== 0xd8 ||
+      buffer[2] !== 0xff
+    ) {
+      throw invalid();
+    }
+    return;
+  }
+
+  if (mime === "image/webp") {
+    if (
+      buffer.byteLength < 12 ||
+      buffer[0] !== 0x52 || // R
+      buffer[1] !== 0x49 || // I
+      buffer[2] !== 0x46 || // F
+      buffer[3] !== 0x46 || // F
+      buffer[8] !== 0x57 || // W
+      buffer[9] !== 0x45 || // E
+      buffer[10] !== 0x42 || // B
+      buffer[11] !== 0x50 // P
+    ) {
+      throw invalid();
+    }
+    return;
+  }
+
+  if (mime === "application/pdf") {
+    if (
+      buffer.byteLength < 5 ||
+      buffer[0] !== 0x25 || // %
+      buffer[1] !== 0x50 || // P
+      buffer[2] !== 0x44 || // D
+      buffer[3] !== 0x46 || // F
+      buffer[4] !== 0x2d // -
+    ) {
+      throw invalid();
+    }
+  }
+}
+
 function resolveUploadDir(baseDir?: string): string {
   const defaultUploads = process.env.VERCEL
     ? path.join(os.tmpdir(), "aruskas-uploads")
@@ -95,6 +160,8 @@ export function prepareAttachmentForDb(file: {
     throw new AppError(400, "Ukuran lampiran maksimal 2 MB.");
   }
 
+  assertAttachmentMagicBytes(mime, file.buffer);
+
   const ext = MIME_EXTENSIONS[mime] ?? "";
   return {
     path: `db:${crypto.randomUUID()}${ext}`,
@@ -143,6 +210,8 @@ export async function saveAttachment(
   if (file.buffer.byteLength > MAX_ATTACHMENT_BYTES) {
     throw new AppError(400, "Ukuran lampiran maksimal 2 MB.");
   }
+
+  assertAttachmentMagicBytes(mime, file.buffer);
 
   const ext = MIME_EXTENSIONS[mime] ?? "";
   const fileName = `${crypto.randomUUID()}${ext}`;

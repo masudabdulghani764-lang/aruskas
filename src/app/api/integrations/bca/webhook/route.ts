@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { parseJsonBody } from "@/lib/auth";
 import { ingestBcaNotificationByToken } from "@/lib/bca-integration";
-import { handleApiError } from "@/lib/errors";
+import { AppError, handleApiError } from "@/lib/errors";
+import { enforceRateLimit, getClientIp } from "@/lib/security";
 import { indonesianEnumErrorMap } from "@/lib/wallets";
 
 const webhookPayloadSchema = z.object(
@@ -52,16 +53,30 @@ function extractWebhookToken(request: Request): string {
     return customHeader.trim();
   }
   const url = new URL(request.url);
-  return (url.searchParams.get("token") ?? "").trim();
+  if (url.searchParams.has("token")) {
+    throw new AppError(
+      400,
+      "Demi keamanan, kirim token webhook melalui header Authorization: Bearer <token> atau X-ArusKas-Token, bukan di URL."
+    );
+  }
+  return "";
 }
 
 export async function POST(request: Request) {
   try {
+    const db = await getDb();
+    await enforceRateLimit(db, {
+      scope: "bca_webhook",
+      identifier: getClientIp(request),
+      limit: 60,
+      windowMs: 60 * 1000,
+      message: "Batas permintaan webhook BCA tercapai. Coba lagi dalam 1 menit.",
+    });
+
     const rawToken = extractWebhookToken(request);
     const rawBody = await parseJsonBody(request);
     const parsed = webhookPayloadSchema.parse(rawBody);
 
-    const db = await getDb();
     const result = await ingestBcaNotificationByToken(db, rawToken, parsed);
     return NextResponse.json(result, {
       status: result.status === "imported" ? 201 : 200,

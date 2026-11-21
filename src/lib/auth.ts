@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb, type AppDb } from "@/db";
 import { sessions, users, walletMembers, wallets } from "@/db/schema";
@@ -144,6 +144,29 @@ export async function destroySession(
 
   const tokenHash = hashSessionToken(rawToken);
   await db.delete(sessions).where(eq(sessions.id, tokenHash));
+}
+
+/**
+ * Revokes all sessions belonging to a user, optionally keeping the current session token active.
+ * Returns the number of revoked sessions.
+ */
+export async function revokeAllUserSessions(
+  db: AppDb,
+  userId: string,
+  keepRawToken?: string | null
+): Promise<number> {
+  const condition = keepRawToken
+    ? and(
+        eq(sessions.userId, userId),
+        ne(sessions.id, hashSessionToken(keepRawToken))
+      )
+    : eq(sessions.userId, userId);
+
+  const deleted = await db
+    .delete(sessions)
+    .where(condition)
+    .returning({ id: sessions.id });
+  return deleted.length;
 }
 
 /**
@@ -355,13 +378,15 @@ export async function updateUserProfile(
 }
 
 /**
- * Changes the password for a non-demo user after verifying the current password.
+ * Changes the password for a non-demo user after verifying the current password
+ * and revokes all other active sessions for defense-in-depth.
  */
 export async function changePassword(
   db: AppDb,
   userId: string,
   currentPassword: string,
-  newPassword: string
+  newPassword: string,
+  keepRawToken?: string | null
 ): Promise<void> {
   const [user] = await db
     .select()
@@ -386,4 +411,8 @@ export async function changePassword(
     .update(users)
     .set({ passwordHash: newHash })
     .where(eq(users.id, userId));
+
+  if (keepRawToken !== undefined) {
+    await revokeAllUserSessions(db, userId, keepRawToken);
+  }
 }
