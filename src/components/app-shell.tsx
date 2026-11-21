@@ -14,6 +14,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   ChevronDown,
+  Landmark,
   LayoutDashboard,
   LogOut,
   PiggyBank,
@@ -239,6 +240,19 @@ export function AppShell({
                     </Link>
                   );
                 })}
+                <Link
+                  href="/integrasi-bca"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150",
+                    pathname === "/integrasi-bca" ||
+                      pathname.startsWith("/integrasi-bca/")
+                      ? "bg-[#EFECE4] text-[#14532D] font-semibold"
+                      : "text-[#57534E] hover:bg-[#EFECE4]/65 hover:text-[#1C1917]"
+                  )}
+                >
+                  <Landmark className="h-3.5 w-3.5 text-[#B45309]" />
+                  <span>Auto BCA</span>
+                </Link>
               </nav>
             </div>
 
@@ -293,6 +307,19 @@ export function AppShell({
                     </div>
 
                     <div className="py-1">
+                      <Link
+                        href="/integrasi-bca"
+                        role="menuitem"
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2.5 px-4 py-2 text-sm text-[#1C1917] transition-colors hover:bg-[#EFECE4]/70",
+                          pathname === "/integrasi-bca" &&
+                            "font-semibold text-[#14532D]"
+                        )}
+                      >
+                        <Landmark className="h-4 w-4 text-[#B45309]" />
+                        <span>Auto-Catat Bank BCA</span>
+                      </Link>
                       <Link
                         href="/pengaturan"
                         role="menuitem"

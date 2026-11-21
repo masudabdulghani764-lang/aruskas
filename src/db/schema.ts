@@ -167,3 +167,58 @@ export const savingsGoals = sqliteTable("savings_goals", {
   notes: text("notes"),
   createdAt: text("created_at").notNull(),
 });
+
+export const bankIntegrations = sqliteTable(
+  "bank_integrations",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["bca"] }).notNull(),
+    walletId: text("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    webhookTokenHash: text("webhook_token_hash").notNull().unique(),
+    tokenPrefix: text("token_prefix").notNull(),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    autoCategorize: integer("auto_categorize", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    lastSyncedAt: text("last_synced_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_bank_integrations_user_provider").on(
+      table.userId,
+      table.provider
+    ),
+  ]
+);
+
+export const bankSyncLogs = sqliteTable("bank_sync_logs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  integrationId: text("integration_id").references(() => bankIntegrations.id, {
+    onDelete: "set null",
+  }),
+  walletId: text("wallet_id")
+    .notNull()
+    .references(() => wallets.id, { onDelete: "cascade" }),
+  source: text("source", {
+    enum: ["webhook_email", "webhook_push", "csv_import", "simulator"],
+  }).notNull(),
+  dedupeHash: text("dedupe_hash").notNull(),
+  transactionId: text("transaction_id").references(() => transactions.id, {
+    onDelete: "set null",
+  }),
+  status: text("status", {
+    enum: ["imported", "duplicate", "failed"],
+  }).notNull(),
+  rawSnippet: text("raw_snippet").notNull(),
+  errorMessage: text("error_message"),
+  createdAt: text("created_at").notNull(),
+});

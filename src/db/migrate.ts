@@ -121,6 +121,44 @@ export function initSchema(sqlite: Database): void {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS bank_integrations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL CHECK (provider IN ('bca')),
+      wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+      webhook_token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      auto_categorize INTEGER NOT NULL DEFAULT 1,
+      last_synced_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS bank_sync_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      integration_id TEXT REFERENCES bank_integrations(id) ON DELETE SET NULL,
+      wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+      source TEXT NOT NULL CHECK (source IN ('webhook_email', 'webhook_push', 'csv_import', 'simulator')),
+      dedupe_hash TEXT NOT NULL,
+      transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+      status TEXT NOT NULL CHECK (status IN ('imported', 'duplicate', 'failed')),
+      raw_snippet TEXT NOT NULL,
+      error_message TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_integrations_user_provider
+      ON bank_integrations(user_id, provider);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_sync_dedupe
+      ON bank_sync_logs(wallet_id, dedupe_hash)
+      WHERE status = 'imported';
+
+    CREATE INDEX IF NOT EXISTS idx_bank_sync_logs_user_created
+      ON bank_sync_logs(user_id, created_at DESC);
+
     CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_members_unique
       ON wallet_members(wallet_id, user_id);
 

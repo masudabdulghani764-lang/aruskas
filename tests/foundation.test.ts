@@ -42,6 +42,8 @@ describe("Database Foundation & Schema", () => {
 
       const tableNames = tableRows.map((row) => row.name);
       expect(tableNames).toEqual([
+        "bank_integrations",
+        "bank_sync_logs",
         "budgets",
         "categories",
         "recurring_rules",
