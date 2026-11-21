@@ -764,6 +764,69 @@ export function DashboardClient({
             </button>
           </div>
         </div>
+
+        {/* Daily Safe-to-Spend Strip (zero blur filter cost — 60fps scroll safe) */}
+        {data.safeToSpend && (
+          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#2E6F4E] bg-[#0B2819]/75 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#E5B869]">
+                  Batas Aman Belanja Hari Ini
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    data.safeToSpend.status === "over"
+                      ? "bg-[#FEE2E2]/20 text-[#FECACA]"
+                      : data.safeToSpend.status === "caution"
+                        ? "bg-[#FEF3C7]/20 text-[#FDE68A]"
+                        : "bg-[#DCFCE7]/20 text-[#86EFAC]"
+                  )}
+                >
+                  {data.safeToSpend.status === "over"
+                    ? "Melebihi Batas"
+                    : data.safeToSpend.status === "caution"
+                      ? "Perlu Hemat"
+                      : "Aman"}
+                </span>
+              </div>
+              <p className="text-xs text-[#C6DDD0]">
+                Sisa{" "}
+                <span className="tnum font-semibold text-[#FFFFFF]">
+                  {data.safeToSpend.remainingDays} hari
+                </span>{" "}
+                di {formatMonthID(data.month)} ·{" "}
+                {data.safeToSpend.basis === "budgets"
+                  ? "berdasarkan sisa anggaran bulanan"
+                  : data.safeToSpend.basis === "income"
+                    ? "berdasarkan sisa pemasukan bulan ini"
+                    : "berdasarkan saldo aktif"}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 sm:justify-end">
+              <div className="text-left sm:text-right">
+                <p className="tnum font-display text-xl sm:text-2xl font-semibold text-[#FFFFFF]">
+                  {displayIDR(data.safeToSpend.dailyAllowance)}
+                  <span className="text-xs font-normal text-[#C6DDD0]">
+                    {" "}
+                    / hari
+                  </span>
+                </p>
+                <p className="tnum text-[11px] text-[#C6DDD0]">
+                  Sisa total: {displayIDR(data.safeToSpend.remainingBudget)}
+                </p>
+              </div>
+              <Link
+                href="/anggaran"
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border border-[#2E6F4E] bg-[#17482F] px-3 text-xs font-medium text-[#E5B869] transition-colors hover:bg-[#1E5B3C]"
+              >
+                <span>Atur</span>
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 3 KPI Cards */}

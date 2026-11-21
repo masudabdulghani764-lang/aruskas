@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   FileText,
   Paperclip,
+  Sparkles,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/primitives";
 import { compressReceiptImageIfNeeded } from "@/lib/client-image";
 import { formatIDR, getTodayISO } from "@/lib/format";
+import { parseSmartTransactionText } from "@/lib/smart-paste";
 
 export type QuickAddType = "income" | "expense" | "transfer";
 
@@ -139,6 +141,8 @@ export function QuickAddModal({
   const [occurredAt, setOccurredAt] = useState(() => getTodayISO());
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
+  const [smartInput, setSmartInput] = useState("");
+  const [smartAppliedLabel, setSmartAppliedLabel] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(
     null
@@ -242,6 +246,8 @@ export function QuickAddModal({
     setOccurredAt(getTodayISO());
     setPaymentMethod("");
     setNotes("");
+    setSmartInput("");
+    setSmartAppliedLabel(null);
     setAttachment(null);
     setErrorMsg(null);
     if (fileInputRef.current) {
@@ -350,6 +356,42 @@ export function QuickAddModal({
     if (errorMsg) {
       setErrorMsg(null);
     }
+  }
+
+  function applySmartPaste(overrideText?: string) {
+    const text = (overrideText ?? smartInput).trim();
+    if (!text) {
+      return;
+    }
+    const ownerCats = selectedWallet
+      ? (categoriesByOwner[selectedWallet.ownerId] ?? [])
+      : [];
+    const parsed = parseSmartTransactionText(text, ownerCats);
+    if (!parsed) {
+      toast.error(
+        'Belum menemukan nominal. Contoh: "Makan siang Padang 38rb pakai QRIS"'
+      );
+      return;
+    }
+
+    setTxType(parsed.type);
+    setAmountDigits(String(parsed.amount));
+    setTitle(parsed.title);
+    setOccurredAt(parsed.occurredAt);
+    if (parsed.paymentMethod) {
+      setPaymentMethod(parsed.paymentMethod);
+    }
+    if (parsed.categoryId && parsed.type !== "transfer") {
+      setCategoryId(parsed.categoryId);
+    }
+    if (parsed.notes) {
+      setNotes(parsed.notes);
+    }
+    setErrorMsg(null);
+    setSmartAppliedLabel(
+      `${parsed.title} · ${formatIDR(parsed.amount)}${parsed.categoryName ? ` · ${parsed.categoryName}` : ""}`
+    );
+    toast.success("Form terisi otomatis dari Smart Paste!");
   }
 
   async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -566,6 +608,70 @@ export function QuickAddModal({
             className="rounded-xl border border-[#FECACA] bg-[#FEE2E2]/60 px-3.5 py-2.5 text-xs sm:text-sm text-[#B91C1C]"
           >
             {errorMsg}
+          </div>
+        )}
+
+        {/* Smart Paste — 1-Line Natural Language & Bank Notification Parser */}
+        {!noWritableWallets && (
+          <div className="rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1]/85 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label
+                htmlFor="smart-paste-input"
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#14532D]"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-[#B45309]" />
+                <span>Smart Paste · Ketik Cepat 1 Baris</span>
+              </label>
+              {smartAppliedLabel && (
+                <span className="truncate text-[11px] font-medium text-[#15803D]">
+                  ✓ Terisi otomatis
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                id="smart-paste-input"
+                type="text"
+                value={smartInput}
+                onChange={(e) => setSmartInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applySmartPaste();
+                  }
+                }}
+                placeholder='Misal: "Makan Padang 38rb QRIS" atau tempel notif bank'
+                className="min-w-0 flex-1 rounded-xl border border-[#CBE0D2] bg-[#FFFFFF] px-3 py-2 text-xs text-[#1C1917] placeholder:text-[#78716C]/75 focus:border-[#14532D] focus:outline-none focus:ring-2 focus:ring-[#14532D]/15"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="primary"
+                onClick={() => applySmartPaste()}
+                disabled={!smartInput.trim()}
+              >
+                Isi
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                "Kopi Kenangan 35rb QRIS",
+                "Bensin Pertamax 150rb tunai",
+                "Gaji bulanan 8.5jt transfer",
+              ].map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => {
+                    setSmartInput(example);
+                    applySmartPaste(example);
+                  }}
+                  className="rounded-full border border-[#CBE0D2] bg-[#FFFFFF] px-2 py-0.5 text-[10px] font-medium text-[#14532D] transition-colors hover:bg-[#DCFCE7] cursor-pointer"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

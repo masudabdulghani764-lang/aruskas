@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { GoogleAuthButton } from "@/components/google-auth-button";
 import { Button, Card, Input, SkeletonCard } from "@/components/ui/primitives";
 import { resolveSafeNext } from "@/lib/navigation";
 
@@ -187,6 +188,17 @@ function DaftarForm() {
               Daftar &amp; Mulai
             </Button>
           </form>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#E7E2D8]" />
+            <span className="text-xs text-[#78716C]">atau</span>
+            <div className="h-px flex-1 bg-[#E7E2D8]" />
+          </div>
+
+          <GoogleAuthButton
+            nextPath={nextPath}
+            label="Daftar Cepat dengan Google"
+          />
 
           <p className="mt-6 text-center text-xs sm:text-sm text-[#57534E]">
             Sudah punya akun?{" "}

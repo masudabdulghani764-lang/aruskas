@@ -195,6 +195,44 @@ export const SCHEMA_SQL = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_rate_limits_reset_at ON rate_limits(reset_at);
+
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub
+    ON users(google_sub)
+    WHERE google_sub IS NOT NULL;
+
+  CREATE TABLE IF NOT EXISTS split_bills (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    total_amount BIGINT NOT NULL CHECK (total_amount > 0),
+    occurred_at TEXT NOT NULL,
+    bank_name TEXT,
+    account_number TEXT,
+    account_holder TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS split_bill_participants (
+    id TEXT PRIMARY KEY,
+    split_bill_id TEXT NOT NULL REFERENCES split_bills(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    amount BIGINT NOT NULL CHECK (amount > 0),
+    is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+    paid_at TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_split_bills_user_created
+    ON split_bills(user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_split_bills_tx
+    ON split_bills(transaction_id);
+  CREATE INDEX IF NOT EXISTS idx_split_bill_participants_bill
+    ON split_bill_participants(split_bill_id);
 `;
 
 /**

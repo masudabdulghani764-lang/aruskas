@@ -5,21 +5,34 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import { GoogleAuthButton } from "@/components/google-auth-button";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
 import { Button, Card, Input, SkeletonCard } from "@/components/ui/primitives";
 import { resolveSafeNext } from "@/lib/navigation";
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  google_cancelled: "Login dengan Google dibatalkan.",
+  google_invalid_state: "Sesi otorisasi Google tidak valid atau kedaluwarsa. Silakan coba lagi.",
+  google_failed: "Gagal masuk menggunakan Google. Silakan coba lagi atau gunakan email.",
+  google_not_configured:
+    "Login Google belum diaktifkan pada server (GOOGLE_CLIENT_ID & GOOGLE_CLIENT_SECRET belum diisi).",
+  rate_limited: "Terlalu banyak percobaan login. Coba lagi beberapa menit lagi.",
+};
 
 function MasukForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawNext = searchParams.get("next");
   const nextPath = resolveSafeNext(rawNext);
+  const queryError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(
+    queryError ? (OAUTH_ERROR_MESSAGES[queryError] ?? null) : null
+  );
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -172,13 +185,20 @@ function MasukForm() {
             <div className="h-px flex-1 bg-[#E7E2D8]" />
           </div>
 
-          <LandingDemoCta
-            variant="secondary"
-            size="lg"
-            nextPath={nextPath}
-            label="Masuk dengan Akun Demo (1-Klik)"
-            className="w-full"
-          />
+          <div className="space-y-2.5">
+            <GoogleAuthButton
+              nextPath={nextPath}
+              label="Lanjutkan dengan Google"
+            />
+
+            <LandingDemoCta
+              variant="secondary"
+              size="lg"
+              nextPath={nextPath}
+              label="Masuk dengan Akun Demo (1-Klik)"
+              className="w-full"
+            />
+          </div>
 
           <p className="mt-6 text-center text-xs sm:text-sm text-[#57534E]">
             Belum punya akun?{" "}

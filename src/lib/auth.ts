@@ -416,3 +416,116 @@ export async function changePassword(
     await revokeAllUserSessions(db, userId, keepRawToken);
   }
 }
+
+/**
+ * Finds an existing user by Google subject ID or verified email, or provisions a new
+ * account with default wallet ("Dompet Utama") & 12 Indonesian categories, then opens a session.
+ */
+export async function findOrCreateGoogleUser(
+  db: AppDb,
+  profile: { sub: string; email: string; name: string },
+  userAgent?: string | null
+): Promise<{ user: SafeUser; token: string; expiresAt: string; isNewUser: boolean }> {
+  const email = profile.email.trim().toLowerCase();
+  const sub = profile.sub.trim();
+  const name = profile.name.trim().slice(0, 100) || email.split("@")[0];
+
+  // 1. Lookup by linked Google sub
+  const [bySub] = await db
+    .select()
+    .from(users)
+    .where(eq(users.googleSub, sub))
+    .limit(1);
+
+  if (bySub) {
+    const session = await createSession(db, bySub.id, userAgent);
+    return {
+      user: toSafeUser(bySub),
+      token: session.token,
+      expiresAt: session.expiresAt,
+      isNewUser: false,
+    };
+  }
+
+  // 2. Lookup by verified email & link Google sub
+  const [byEmail] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  if (byEmail) {
+    if (byEmail.googleSub && byEmail.googleSub !== sub) {
+      throw new AppError(
+        409,
+        "Email ini sudah terhubung ke akun Google lain."
+      );
+    }
+    await db
+      .update(users)
+      .set({ googleSub: sub })
+      .where(eq(users.id, byEmail.id));
+
+    const session = await createSession(db, byEmail.id, userAgent);
+    return {
+      user: toSafeUser(byEmail),
+      token: session.token,
+      expiresAt: session.expiresAt,
+      isNewUser: false,
+    };
+  }
+
+  // 3. Provision brand-new user with unguessable random password hash + default wallet & categories
+  const randomSecret = randomBytes(32).toString("hex");
+  const passwordHash = await hashPassword(randomSecret);
+  const now = new Date().toISOString();
+  const userId = crypto.randomUUID();
+  const defaultWalletId = crypto.randomUUID();
+
+  await db.transaction(async (tx) => {
+    await tx.insert(users).values({
+      id: userId,
+      name,
+      email,
+      passwordHash,
+      googleSub: sub,
+      monthlySavingsTarget: 0,
+      createdAt: now,
+    });
+
+    await tx.insert(wallets).values({
+      id: defaultWalletId,
+      ownerId: userId,
+      name: "Dompet Utama",
+      type: "cash",
+      initialBalance: 0,
+      balance: 0,
+      isShared: false,
+      createdAt: now,
+    });
+
+    await tx.insert(walletMembers).values({
+      id: crypto.randomUUID(),
+      walletId: defaultWalletId,
+      userId,
+      role: "owner",
+      createdAt: now,
+    });
+
+    await seedDefaultCategoriesForUser(tx as unknown as AppDb, userId);
+  });
+
+  const session = await createSession(db, userId, userAgent);
+  return {
+    user: toSafeUser({
+      id: userId,
+      name,
+      email,
+      monthlySavingsTarget: 0,
+      createdAt: now,
+    }),
+    token: session.token,
+    expiresAt: session.expiresAt,
+    isNewUser: true,
+  };
+}

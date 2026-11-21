@@ -9,7 +9,67 @@ export type ParsedBcaEntry = {
   paymentMethod: string;
   notes: string;
   dedupeKey: string;
+  providerName?: string;
 };
+
+export const SUPPORTED_BANK_PROVIDERS = [
+  { id: "bca", label: "BCA / myBCA", kind: "bank" },
+  { id: "mandiri", label: "Livin' Mandiri", kind: "bank" },
+  { id: "bri", label: "BRImo (BRI)", kind: "bank" },
+  { id: "bni", label: "Wondr / BNI", kind: "bank" },
+  { id: "blu", label: "blu by BCA", kind: "bank" },
+  { id: "jago", label: "Bank Jago", kind: "bank" },
+  { id: "seabank", label: "SeaBank", kind: "bank" },
+  { id: "bsi", label: "BYOND / BSI", kind: "bank" },
+  { id: "gopay", label: "GoPay", kind: "ewallet" },
+  { id: "shopeepay", label: "ShopeePay", kind: "ewallet" },
+  { id: "ovo", label: "OVO", kind: "ewallet" },
+  { id: "dana", label: "DANA", kind: "ewallet" },
+] as const;
+
+type DetectedProvider = {
+  id: string;
+  label: string;
+  isEwallet: boolean;
+};
+
+function detectBankOrEwalletProvider(text: string): DetectedProvider {
+  const lower = text.toLowerCase();
+  if (/\b(?:blu\s*by\s*bca|blubca|bluaccount)\b/i.test(lower)) {
+    return { id: "blu", label: "blu", isEwallet: false };
+  }
+  if (/\b(?:livin|mandiri)\b/i.test(lower)) {
+    return { id: "mandiri", label: "Mandiri", isEwallet: false };
+  }
+  if (/\b(?:brimo|bank\s*bri|\bbri\b)\b/i.test(lower)) {
+    return { id: "bri", label: "BRI", isEwallet: false };
+  }
+  if (/\b(?:wondr|bni\s*mobile|bank\s*bni|\bbni\b)\b/i.test(lower)) {
+    return { id: "bni", label: "BNI", isEwallet: false };
+  }
+  if (/\b(?:bank\s*jago|\bjago\b)\b/i.test(lower)) {
+    return { id: "jago", label: "Bank Jago", isEwallet: false };
+  }
+  if (/\bseabank\b/i.test(lower)) {
+    return { id: "seabank", label: "SeaBank", isEwallet: false };
+  }
+  if (/\b(?:byond|bsi\s*mobile|bank\s*syariah\s*indonesia|\bbsi\b)\b/i.test(lower)) {
+    return { id: "bsi", label: "BSI", isEwallet: false };
+  }
+  if (/\b(?:gopay|go-?pay)\b/i.test(lower)) {
+    return { id: "gopay", label: "GoPay", isEwallet: true };
+  }
+  if (/\b(?:shopeepay|spay)\b/i.test(lower)) {
+    return { id: "shopeepay", label: "ShopeePay", isEwallet: true };
+  }
+  if (/\bovo\b/i.test(lower)) {
+    return { id: "ovo", label: "OVO", isEwallet: true };
+  }
+  if (/\b(?:dana\s*id|saldo\s*dana|kirim\s*dana|bayar\s*(?:pakai|dengan|via)\s*dana|notifikasi\s*dana|\bdana\b(?=\s+(?:berhasil|qris|saldo|transfer)))\b/i.test(lower)) {
+    return { id: "dana", label: "DANA", isEwallet: true };
+  }
+  return { id: "bca", label: "BCA", isEwallet: false };
+}
 
 export type ParsedBcaCsvResult = {
   entries: ParsedBcaEntry[];
@@ -228,13 +288,16 @@ export function parseBcaNotification(
     return null;
   }
 
+  // Detect Indonesian bank or e-wallet provider (defaults to BCA for backward compatibility)
+  const provider = detectBankOrEwalletProvider(combined);
+
   // Determine direction (income vs expense)
   const incomePatterns = [
-    /\b(?:menerima\s+transfer|transfer\s+masuk|dana\s+masuk|uang\s+masuk|bi-?fast\s+masuk|kredit|setoran\s+masuk|pemasukan|credit)\b/i,
+    /\b(?:menerima\s+transfer|transfer\s+masuk|dana\s+masuk|uang\s+masuk|saldo\s+masuk|bi-?fast\s+masuk|kredit|setoran\s+masuk|pemasukan|credit|kamu\s+terima|berhasil\s+masuk|terima\s+uang|transfer\s+diterima|diterima\s+dari|cashback|isi\s+saldo\s+berhasil|top\s*up\s+(?:saldo\s+)?berhasil(?:\s+masuk|\s+sebesar)?)\b/i,
     /\bCR\b/,
   ];
   const expensePatterns = [
-    /\b(?:transfer\s+ke|transfer\s+keluar|pembayaran|bayar|qris|virtual\s+account|\bva\b|debit|debet|tarik\s+tunai|pembelian|beli|top\s*up|tagihan|pengeluaran|m-?transfer\s+berhasil)\b/i,
+    /\b(?:transfer\s+ke|transfer\s+keluar|pembayaran|bayar|qris|virtual\s+account|\bva\b|debit|debet|tarik\s+tunai|pembelian|beli|top\s*up\s+(?:ke|pulsa|e-?wallet|gopay|ovo|dana|shopeepay|flazz|emoney)|tagihan|pengeluaran|m-?transfer\s+berhasil|transaksi\s+berhasil\s+di|kamu\s+bayar|berhasil\s+dikirim\s+ke|kirim\s+uang\s+ke|transaksi\s+keluar|terpotong)\b/i,
     /\bDB\b/,
   ];
 
@@ -248,26 +311,32 @@ export function parseBcaNotification(
     type = "expense";
   } else if (isIncome && isExpense) {
     // Disambiguate when subject says "Transaksi Berhasil" and body says "menerima transfer"
-    type = /\b(?:menerima|masuk|dari\s+[A-Z]|CR)\b/i.test(combined) &&
-      !/\b(?:qris|virtual\s+account|pembayaran|tarik\s+tunai|transfer\s+ke)\b/i.test(combined)
-      ? "income"
-      : "expense";
+    type =
+      /\b(?:menerima|masuk|kamu\s+terima|diterima\s+dari|dari\s+[A-Z]|CR)\b/i.test(
+        combined
+      ) &&
+      !/\b(?:qris|virtual\s+account|pembayaran|tarik\s+tunai|transfer\s+ke|kamu\s+bayar|berhasil\s+dikirim\s+ke)\b/i.test(
+        combined
+      )
+        ? "income"
+        : "expense";
   } else {
     return null;
   }
 
-  // Detect payment method
-  let paymentMethod = "Transfer BCA";
+  // Detect payment method (provider-aware while preserving exact BCA labels)
+  const pLabel = provider.label;
+  let paymentMethod = provider.isEwallet ? pLabel : `Transfer ${pLabel}`;
   if (/qris/i.test(lower)) {
-    paymentMethod = "QRIS BCA";
-  } else if (/virtual\s+account|\bbca\s+va\b|\bva\b/i.test(lower)) {
-    paymentMethod = "Virtual Account BCA";
+    paymentMethod = `QRIS ${pLabel}`;
+  } else if (/virtual\s+account|\bbca\s+va\b|\bbriva\b|\bmandiri\s+va\b|\bva\b/i.test(lower)) {
+    paymentMethod = `Virtual Account ${pLabel}`;
   } else if (/bi-?fast/i.test(lower)) {
-    paymentMethod = "BI-FAST BCA";
+    paymentMethod = `BI-FAST ${pLabel}`;
   } else if (/tarik\s+tunai|\batm\b/i.test(lower)) {
-    paymentMethod = "ATM / Debit BCA";
+    paymentMethod = `ATM / Debit ${pLabel}`;
   } else if (/debit|kartu\s+paspor/i.test(lower)) {
-    paymentMethod = "Debit BCA";
+    paymentMethod = `Debit ${pLabel}`;
   }
 
   // Extract merchant / counterparty
@@ -286,20 +355,22 @@ export function parseBcaNotification(
         combined
       );
     const vaMatch =
-      /(?:virtual\s+account|bca\s+va|\bva\b)\s*[:\-]?\s*([A-Za-z0-9 .,'&/_-]{2,70})/i.exec(
+      /(?:virtual\s+account|bca\s+va|briva|\bva\b)\s*[:\-]?\s*([A-Za-z0-9 .,'&/_-]{2,70})/i.exec(
         combined
       );
     const toMatch =
-      /(?:transfer\s+ke|penerima|tujuan|\bke\b)\s*[:\-]?\s*([A-Za-z0-9 .,'&/_-]{2,70})/i.exec(
+      /(?:transfer\s+ke|dikirim\s+ke|kirim\s+uang\s+ke|bayar\s+ke|penerima|tujuan|\bke\b)\s*[:\-]?\s*([A-Za-z0-9 .,'&/_-]{2,70})/i.exec(
         combined
       );
 
     if (/qris/i.test(lower) && qrisMerchant) {
       counterparty = cleanEntity(qrisMerchant[1]);
-    } else if (/virtual\s+account|\bva\b/i.test(lower) && vaMatch) {
+    } else if (/virtual\s+account|briva|\bva\b/i.test(lower) && vaMatch) {
       counterparty = cleanEntity(vaMatch[1]);
     } else if (toMatch) {
       counterparty = cleanEntity(toMatch[1]);
+    } else if (qrisMerchant) {
+      counterparty = cleanEntity(qrisMerchant[1]);
     }
   }
 
@@ -307,30 +378,40 @@ export function parseBcaNotification(
   if (type === "income") {
     title = counterparty
       ? `Transfer Masuk · ${counterparty}`
-      : "Dana Masuk BCA";
-  } else if (paymentMethod === "QRIS BCA") {
-    title = counterparty ? `QRIS · ${counterparty}` : "Pembayaran QRIS BCA";
-  } else if (paymentMethod === "Virtual Account BCA") {
-    title = counterparty ? `VA · ${counterparty}` : "Pembayaran Virtual Account BCA";
-  } else if (paymentMethod === "ATM / Debit BCA") {
-    title = counterparty ? `ATM/Debit · ${counterparty}` : "Tarik Tunai / Debit BCA";
+      : `Dana Masuk ${pLabel}`;
+  } else if (paymentMethod.startsWith("QRIS ")) {
+    title = counterparty ? `QRIS · ${counterparty}` : `Pembayaran QRIS ${pLabel}`;
+  } else if (paymentMethod.startsWith("Virtual Account ")) {
+    title = counterparty
+      ? `VA · ${counterparty}`
+      : `Pembayaran Virtual Account ${pLabel}`;
+  } else if (paymentMethod.startsWith("ATM / Debit ")) {
+    title = counterparty
+      ? `ATM/Debit · ${counterparty}`
+      : `Tarik Tunai / Debit ${pLabel}`;
+  } else if (provider.isEwallet) {
+    title = counterparty
+      ? `${pLabel} · ${counterparty}`
+      : `Pembayaran ${pLabel}`;
   } else {
-    title = counterparty ? `Transfer ke ${counterparty}` : "Transaksi Keluar BCA";
+    title = counterparty
+      ? `Transfer ke ${counterparty}`
+      : `Transaksi Keluar ${pLabel}`;
   }
 
   const occurredAt = extractBcaDate(combined, opts?.fallbackDate);
 
   // Extract reference number if available for stronger deduplication
-  const refMatch = /(?:no\.?\s*ref(?:erensi)?|ref(?:erence)?)\s*[:#\-]?\s*([A-Za-z0-9_-]{5,40})/i.exec(
+  const refMatch = /(?:no\.?\s*ref(?:erensi)?|ref(?:erence)?|id\s*transaksi)\s*[:#\-]?\s*([A-Za-z0-9_-]{5,40})/i.exec(
     combined
   );
   const dedupeKey = opts?.externalId?.trim()
     ? `ext:${opts.externalId.trim()}`
     : refMatch
       ? `ref:${refMatch[1]}`
-      : `notif:${title}|${paymentMethod}`;
+      : `notif:${provider.id}:${title}|${paymentMethod}`;
 
-  const notes = `Otomatis dari notifikasi BCA — ${combined
+  const notes = `Otomatis dari notifikasi ${pLabel} — ${combined
     .replace(/\s+/g, " ")
     .slice(0, 180)}`;
 
@@ -342,6 +423,7 @@ export function parseBcaNotification(
     paymentMethod,
     notes,
     dedupeKey,
+    providerName: pLabel,
   };
 }
 
@@ -640,6 +722,19 @@ export function suggestBcaCategoryId(
               "shopeefood",
               "resto",
               "warung",
+              "warteg",
+              "padang",
+              "nasi",
+              "bakso",
+              "soto",
+              "sate",
+              "mie",
+              "ayam",
+              "boba",
+              "es teh",
+              "sarapan",
+              "jajan",
+              "snack",
               "mcd",
               "kfc",
               "hokben",
@@ -648,6 +743,7 @@ export function suggestBcaCategoryId(
               "cafe",
               "bakery",
               "makan",
+              "minum",
               "dapur",
             ],
           },
@@ -656,7 +752,12 @@ export function suggestBcaCategoryId(
             matchTerms: [
               "gojek",
               "grab",
+              "maxim",
+              "ojol",
               "bluebird",
+              "bensin",
+              "pertamax",
+              "pertalite",
               "pertamina",
               "shell",
               "spbu",
@@ -669,6 +770,8 @@ export function suggestBcaCategoryId(
               "mrt",
               "transjakarta",
               "whoosh",
+              "servis motor",
+              "servis mobil",
             ],
           },
           {
@@ -685,12 +788,16 @@ export function suggestBcaCategoryId(
               "indosat",
               "bpjs",
               "pulsa",
+              "kuota",
               "paket data",
               "netflix",
               "spotify",
               "icloud",
               "wifi",
               "internet",
+              "kos",
+              "kontrakan",
+              "sewa",
               "biaya adm",
               "pajak bunga",
             ],
@@ -711,12 +818,18 @@ export function suggestBcaCategoryId(
               "ikea",
               "ace",
               "mr diy",
+              "laundry",
+              "sabun",
+              "belanja",
+              "skincare",
             ],
           },
           {
             categoryKeywords: ["kesehatan"],
             matchTerms: [
               "apotek",
+              "obat",
+              "vitamin",
               "kimia farma",
               "guardian",
               "watsons",

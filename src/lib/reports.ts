@@ -30,6 +30,16 @@ import {
 
 export type ReportScope = "all" | "personal";
 
+export type SafeToSpendSummary = {
+  dailyAllowance: number;
+  remainingBudget: number;
+  totalReferenceLimit: number;
+  spentThisMonth: number;
+  remainingDays: number;
+  basis: "budgets" | "income" | "balance";
+  status: "safe" | "caution" | "over";
+};
+
 export type DashboardSummary = {
   scope: ReportScope;
   month: string;
@@ -40,6 +50,7 @@ export type DashboardSummary = {
   currentMonthNet: number;
   savingRate: number;
   balanceGrowthPct: number | null;
+  safeToSpend: SafeToSpendSummary;
   activeWallets: WalletWithRole[];
   watchedWallets: WalletWithRole[];
   monthlySeries: Array<{
@@ -550,6 +561,49 @@ export async function getDashboardSummary(
     )
     .slice(0, 8);
 
+  const [yearNum, monthNum, dayNum] = todayIso.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(yearNum, monthNum, 0)).getUTCDate();
+  const remainingDays = Math.max(1, daysInMonth - dayNum + 1);
+
+  let basis: SafeToSpendSummary["basis"] = "balance";
+  let totalReferenceLimit = Math.max(0, totalBalance);
+  let spentThisMonth = currentMonthExpense;
+  let remainingBudget = Math.max(0, totalBalance);
+
+  if (monthlyBudgets.length > 0) {
+    basis = "budgets";
+    totalReferenceLimit = monthlyBudgets.reduce(
+      (sum, b) => sum + b.limitAmount,
+      0
+    );
+    spentThisMonth = monthlyBudgets.reduce((sum, b) => sum + b.spentAmount, 0);
+    remainingBudget = totalReferenceLimit - spentThisMonth;
+  } else if (currentMonthIncome > 0) {
+    basis = "income";
+    totalReferenceLimit = currentMonthIncome;
+    spentThisMonth = currentMonthExpense;
+    remainingBudget = currentMonthIncome - currentMonthExpense;
+  }
+
+  const dailyAllowance =
+    remainingBudget > 0 ? Math.floor(remainingBudget / remainingDays) : 0;
+  const safeToSpendStatus: SafeToSpendSummary["status"] =
+    remainingBudget <= 0
+      ? "over"
+      : totalReferenceLimit > 0 && remainingBudget / totalReferenceLimit <= 0.2
+        ? "caution"
+        : "safe";
+
+  const safeToSpend: SafeToSpendSummary = {
+    dailyAllowance,
+    remainingBudget,
+    totalReferenceLimit,
+    spentThisMonth,
+    remainingDays,
+    basis,
+    status: safeToSpendStatus,
+  };
+
   return {
     scope,
     month,
@@ -560,6 +614,7 @@ export async function getDashboardSummary(
     currentMonthNet,
     savingRate,
     balanceGrowthPct,
+    safeToSpend,
     activeWallets,
     watchedWallets,
     monthlySeries,

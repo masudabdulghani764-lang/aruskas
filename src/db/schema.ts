@@ -12,6 +12,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  googleSub: text("google_sub").unique(),
   monthlySavingsTarget: integer("monthly_savings_target").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
@@ -237,4 +238,36 @@ export const rateLimits = pgTable("rate_limits", {
   key: text("key").primaryKey(),
   count: integer("count").notNull().default(1),
   resetAt: bigint("reset_at", { mode: "number" }).notNull(),
+});
+
+export const splitBills = pgTable("split_bills", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  transactionId: text("transaction_id").references(() => transactions.id, {
+    onDelete: "set null",
+  }),
+  title: text("title").notNull(),
+  totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  bankName: text("bank_name"),
+  accountNumber: text("account_number"),
+  accountHolder: text("account_holder"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const splitBillParticipants = pgTable("split_bill_participants", {
+  id: text("id").primaryKey(),
+  splitBillId: text("split_bill_id")
+    .notNull()
+    .references(() => splitBills.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
+  isPaid: boolean("is_paid").notNull().default(false),
+  paidAt: text("paid_at"),
+  createdAt: text("created_at").notNull(),
 });

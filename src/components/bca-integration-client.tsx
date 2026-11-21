@@ -30,6 +30,7 @@ import {
   Textarea,
   cn,
 } from "@/components/ui/primitives";
+import { SUPPORTED_BANK_PROVIDERS } from "@/lib/bca-parser";
 import type {
   BcaCsvPreviewRow,
   BcaIntegrationView,
@@ -43,19 +44,29 @@ type GuideTab = "gmail" | "android" | "ios";
 
 const SAMPLE_NOTIFICATIONS = [
   {
-    label: "Transfer Masuk",
+    label: "BCA · Transfer Masuk",
     subject: "Notifikasi Transfer Masuk myBCA",
     text: "Anda menerima transfer sebesar Rp 2.500.000,00 dari PT NUSANTARA DIGITAL ke rekening BCA Anda pada tanggal 21/11/2026. No. Ref: BCA2026112101",
   },
   {
-    label: "Bayar QRIS",
-    subject: "Transaksi QRIS myBCA Berhasil",
-    text: "Pembayaran QRIS di KOPI KENANGAN GRAND INDONESIA sebesar Rp 42.000,00 pada 21/11/2026 berhasil. Ref: QRIS2026112102",
+    label: "Livin' Mandiri · QRIS",
+    subject: "Livin' by Mandiri - Transaksi QRIS Berhasil",
+    text: "Pembayaran QRIS Livin' by Mandiri di KOPI KENANGAN SUDIRMAN sebesar Rp 42.000 pada 21/11/2026 berhasil. Ref: MDR2026112102",
   },
   {
-    label: "Virtual Account",
-    subject: "Pembayaran BCA Virtual Account",
-    text: "Pembayaran Virtual Account TOKOPEDIA sebesar Rp 275.000,00 pada 21/11/2026 berhasil. No. Ref: VA2026112103",
+    label: "GoPay · Bayar",
+    subject: "Notifikasi GoPay",
+    text: "Kamu bayar Rp 68.500 pakai GoPay QRIS di WARUNG PADANG SEDERHANA pada 21/11/2026 berhasil. Ref: GPY2026112103",
+  },
+  {
+    label: "SeaBank · Transfer Masuk",
+    subject: "SeaBank - Dana Masuk",
+    text: "Transfer masuk SeaBank sebesar Rp 750.000 dari ANDI PRATAMA pada 21/11/2026 berhasil. No. Ref: SEA2026112104",
+  },
+  {
+    label: "BRImo · Virtual Account",
+    subject: "Transaksi BRImo Berhasil",
+    text: "Pembayaran BRIVA TOKOPEDIA melalui BRImo sebesar Rp 275.000,00 pada 21/11/2026 berhasil. Ref: BRI2026112105",
   },
 ] as const;
 
@@ -85,8 +96,8 @@ function syncNotifikasiBCA() {
   let label = GmailApp.getUserLabelByName(labelName);
   if (!label) label = GmailApp.createLabel(labelName);
 
-  // Cari email notifikasi dari BCA yang belum pernah disinkronkan
-  const query = 'from:(bca@bca.co.id OR noreply@bca.co.id OR mybca) -label:' + labelName + ' newer_than:7d';
+  // Cari email notifikasi dari BCA, Mandiri, BRI, BNI, Jago, SeaBank, GoPay, OVO, DANA, ShopeePay
+  const query = 'from:(bca.co.id OR bankmandiri.co.id OR bri.co.id OR bni.co.id OR jago.com OR seabank.co.id OR gopay OR ovo.id OR dana.id OR shopeepay) -label:' + labelName + ' newer_than:7d';
   const threads = GmailApp.search(query, 0, 20);
 
   for (const thread of threads) {
@@ -470,16 +481,31 @@ export function BcaIntegrationClient({
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-[#EADBC0] bg-[#FDF8EE] px-2.5 py-0.5 text-xs font-semibold text-[#92400E]">
             <Landmark className="h-3.5 w-3.5" />
-            <span>Otomatisasi Bank BCA · Tanpa Password/PIN BCA</span>
+            <span>Universal Bank &amp; E-Wallet Indonesia · Tanpa Password/PIN</span>
           </div>
           <h1 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917]">
-            Auto-Catat Transaksi Bank BCA
+            Auto-Catat Bank &amp; E-Wallet
           </h1>
           <p className="mt-1 text-sm text-[#57534E] max-w-2xl">
-            Catat uang masuk dan keluar dari BCA secara otomatis melalui
-            notifikasi Email/HP (real-time) atau impor file mutasi CSV KlikBCA /
-            myBCA dengan proteksi anti-duplikat.
+            Catat uang masuk dan keluar secara otomatis dari notifikasi Email/HP
+            untuk BCA, Livin&apos; Mandiri, BRImo, Wondr BNI, Bank Jago, SeaBank,
+            blu, GoPay, ShopeePay, OVO, dan DANA — atau impor CSV KlikBCA/myBCA.
           </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {SUPPORTED_BANK_PROVIDERS.map((p) => (
+              <span
+                key={p.id}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                  p.kind === "ewallet"
+                    ? "border-[#CBE0D2] bg-[#EFF6F1] text-[#14532D]"
+                    : "border-[#E3D4BA] bg-[#FAF1E0] text-[#57534E]"
+                )}
+              >
+                {p.label}
+              </span>
+            ))}
+          </div>
         </div>
 
         <Link
@@ -778,8 +804,12 @@ export function BcaIntegrationClient({
                   </li>
                   <li>
                     <strong>Trigger:</strong> <em>Notification Received</em> →
-                    pilih aplikasi <strong>myBCA</strong> atau{" "}
-                    <strong>BCA mobile</strong>.
+                    pilih aplikasi bank/e-wallet Anda (<strong>myBCA</strong>,{" "}
+                    <strong>Livin&apos; Mandiri</strong>, <strong>BRImo</strong>,{" "}
+                    <strong>Wondr BNI</strong>, <strong>Bank Jago</strong>,{" "}
+                    <strong>SeaBank</strong>, <strong>GoPay</strong>,{" "}
+                    <strong>OVO</strong>, <strong>DANA</strong>, atau{" "}
+                    <strong>ShopeePay</strong>).
                   </li>
                   <li>
                     <strong>Action:</strong> <em>HTTP Request (POST)</em> ke{" "}

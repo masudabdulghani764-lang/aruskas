@@ -251,7 +251,7 @@ export function AppShell({
                   )}
                 >
                   <Landmark className="h-3.5 w-3.5 text-[#B45309]" />
-                  <span>Auto BCA</span>
+                  <span>Auto Bank</span>
                 </Link>
               </nav>
             </div>
@@ -268,7 +268,7 @@ export function AppShell({
                 )}
               >
                 <Landmark className="h-3.5 w-3.5 text-[#B45309]" />
-                <span>BCA</span>
+                <span>Bank</span>
               </Link>
 
               <Button

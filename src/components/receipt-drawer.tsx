@@ -10,11 +10,13 @@ import {
   FileText,
   Paperclip,
   Pencil,
+  Share2,
   ShieldAlert,
   Trash2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SplitBillModal } from "@/components/split-bill-modal";
 import {
   Badge,
   Button,
@@ -100,6 +102,7 @@ export function ReceiptDrawer({
 }: ReceiptDrawerProps) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -416,6 +419,17 @@ export function ReceiptDrawer({
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>Hapus</span>
                 </Button>
+                {transaction.type === "expense" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setSplitModalOpen(true)}
+                    disabled={deleting}
+                  >
+                    <Share2 className="h-3.5 w-3.5 text-[#14532D]" />
+                    <span>Patungan</span>
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-xs text-[#78716C]">
@@ -860,6 +874,16 @@ export function ReceiptDrawer({
             </>
           )}
         </div>
+      )}
+      {transaction && transaction.type === "expense" && (
+        <SplitBillModal
+          open={splitModalOpen}
+          onClose={() => setSplitModalOpen(false)}
+          defaultTitle={transaction.title}
+          defaultTotalAmount={transaction.amount}
+          defaultOccurredAt={transaction.occurredAt}
+          defaultTransactionId={transaction.id}
+        />
       )}
     </Drawer>
   );

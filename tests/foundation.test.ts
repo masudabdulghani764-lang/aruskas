@@ -27,7 +27,7 @@ import {
 import { resolveSafeNext } from "@/lib/navigation";
 
 describe("Database Foundation & Schema", () => {
-  test("createDb(':memory:') creates all 14 PostgreSQL tables, enforces foreign keys, and supports 64-bit BIGINT Rupiah amounts", async () => {
+  test("createDb(':memory:') creates all 16 PostgreSQL tables, enforces foreign keys, and supports 64-bit BIGINT Rupiah amounts", async () => {
     const { db, close, queryRaw } = await createDb(":memory:");
     try {
       const tableResult = await queryRaw(
@@ -44,6 +44,8 @@ describe("Database Foundation & Schema", () => {
         "recurring_rules",
         "savings_goals",
         "sessions",
+        "split_bill_participants",
+        "split_bills",
         "transaction_attachments",
         "transactions",
         "users",

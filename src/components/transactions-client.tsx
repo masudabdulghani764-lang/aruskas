@@ -6,17 +6,23 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   CalendarClock,
+  Check,
+  Copy,
+  ExternalLink,
   Paperclip,
   Plus,
   ReceiptText,
   RotateCcw,
   Search,
+  Share2,
   SkipForward,
   Trash2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
 import { ReceiptDrawer } from "@/components/receipt-drawer";
+import { SplitBillModal } from "@/components/split-bill-modal";
 import {
   Badge,
   Button,
@@ -36,10 +42,11 @@ import {
   getTodayISO,
 } from "@/lib/format";
 import type { RecurringFrequency, RecurringRuleView, RecurringType } from "@/lib/recurring";
+import type { SplitBillView } from "@/lib/split-bills";
 import type { TransactionType, TransactionView } from "@/lib/transactions";
 import type { WalletWithRole } from "@/lib/wallets";
 
-type ActiveTab = "history" | "recurring";
+type ActiveTab = "history" | "recurring" | "patungan";
 type PeriodPreset = "this_month" | "last_month" | "three_months" | "this_year" | "custom";
 
 interface CategoryOption {
@@ -106,6 +113,7 @@ export function TransactionsClient({
   initialItems,
   initialSummary,
   initialRules,
+  initialSplitBills,
 }: {
   initialTab?: ActiveTab;
   currentUserId: string;
@@ -116,6 +124,7 @@ export function TransactionsClient({
   initialItems?: TransactionView[];
   initialSummary?: TransactionsSummary;
   initialRules?: RecurringRuleView[];
+  initialSplitBills?: SplitBillView[];
 }) {
   const { openQuickAdd, refreshTrigger, triggerRefresh } = useQuickAdd();
 
@@ -212,6 +221,14 @@ export function TransactionsClient({
   // Recurring rules state
   const [rules, setRules] = useState<RecurringRuleView[]>(initialRules ?? []);
   const [loadingRules, setLoadingRules] = useState(!hasInitialRules);
+
+  // Split bills state
+  const [splitBills, setSplitBills] = useState<SplitBillView[]>(
+    initialSplitBills ?? []
+  );
+  const [splitBillModalOpen, setSplitBillModalOpen] = useState(false);
+  const [busySplitId, setBusySplitId] = useState<string | null>(null);
+  const [copiedSplitSlug, setCopiedSplitSlug] = useState<string | null>(null);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [overrideDigits, setOverrideDigits] = useState<Record<string, string>>(
     {}
@@ -687,6 +704,69 @@ export function TransactionsClient({
     }
   }
 
+  async function handleToggleParticipantPaid(
+    billId: string,
+    participantId: string,
+    nextPaid: boolean
+  ) {
+    setBusySplitId(`${billId}:${participantId}`);
+    try {
+      const res = await fetch(`/api/split-bills/${encodeURIComponent(billId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId, isPaid: nextPaid }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Gagal memperbarui status peserta.");
+        return;
+      }
+      const updated = data.splitBill as SplitBillView;
+      setSplitBills((prev) =>
+        prev.map((b) => (b.id === updated.id ? updated : b))
+      );
+      toast.success(
+        nextPaid ? "Peserta ditandai sudah lunas." : "Status lunas dibatalkan."
+      );
+    } catch {
+      toast.error("Terjadi gangguan jaringan.");
+    } finally {
+      setBusySplitId(null);
+    }
+  }
+
+  async function handleDeleteSplitBill(billId: string) {
+    setBusySplitId(billId);
+    try {
+      const res = await fetch(`/api/split-bills/${encodeURIComponent(billId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Gagal menghapus patungan.");
+        return;
+      }
+      setSplitBills((prev) => prev.filter((b) => b.id !== billId));
+      toast.success("Patungan berhasil dihapus.");
+    } catch {
+      toast.error("Terjadi gangguan jaringan.");
+    } finally {
+      setBusySplitId(null);
+    }
+  }
+
+  async function handleCopySplitLink(slug: string) {
+    const url = `${window.location.origin}/patungan/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedSplitSlug(slug);
+      toast.success("Link patungan berhasil disalin.");
+      setTimeout(() => setCopiedSplitSlug(null), 2000);
+    } catch {
+      toast.error("Gagal menyalin link.");
+    }
+  }
+
   function resetFilters() {
     setPeriodPreset("this_month");
     setCustomFrom(defaultRange.from);
@@ -727,6 +807,15 @@ export function TransactionsClient({
               <Plus className="h-4 w-4" />
               <span>Tambah Jadwal Rutin</span>
             </Button>
+          ) : tab === "patungan" ? (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setSplitBillModalOpen(true)}
+            >
+              <Share2 className="h-4 w-4" />
+              <span>Buat Patungan Baru</span>
+            </Button>
           ) : (
             <Button
               variant="primary"
@@ -744,7 +833,7 @@ export function TransactionsClient({
       <div
         role="tablist"
         aria-label="Tampilan Buku Transaksi"
-        className="inline-flex rounded-xl border border-[#E7E2D8] bg-[#EFECE4]/70 p-1"
+        className="inline-flex flex-wrap rounded-xl border border-[#E7E2D8] bg-[#EFECE4]/70 p-1"
       >
         <button
           type="button"
@@ -782,9 +871,179 @@ export function TransactionsClient({
             </Badge>
           )}
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "patungan"}
+          onClick={() => setTab("patungan")}
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-4 py-2 text-xs sm:text-sm font-medium transition-colors cursor-pointer",
+            tab === "patungan"
+              ? "bg-[#FFFFFF] text-[#14532D] font-semibold shadow-2xs"
+              : "text-[#57534E] hover:text-[#1C1917]"
+          )}
+        >
+          <Users className="h-4 w-4" />
+          <span>Patungan</span>
+          {splitBills.length > 0 && (
+            <Badge variant="forest">
+              <span className="tnum">{splitBills.length}</span>
+            </Badge>
+          )}
+        </button>
       </div>
 
-      {tab === "history" ? (
+      {tab === "patungan" ? (
+        <div className="space-y-4">
+          {splitBills.length === 0 ? (
+            <Card padding="lg">
+              <EmptyState
+                icon={<Users className="h-5 w-5" />}
+                title="Belum ada patungan (Split Bill)"
+                description="Buat rincian patungan makan bersama, kado, atau liburan lalu bagikan link publiknya ke WhatsApp. Anda juga bisa klik transaksi pengeluaran mana pun lalu pilih 'Patungan'."
+                action={
+                  <Button
+                    variant="primary"
+                    onClick={() => setSplitBillModalOpen(true)}
+                  >
+                    <Share2 className="h-4 w-4" />
+                    <span>Buat Patungan Pertama</span>
+                  </Button>
+                }
+              />
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {splitBills.map((bill) => {
+                const pct =
+                  bill.totalAmount > 0
+                    ? Math.min(
+                        100,
+                        Math.round((bill.paidAmount / bill.totalAmount) * 100)
+                      )
+                    : 0;
+                return (
+                  <Card key={bill.id} padding="md" className="space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-base font-semibold text-[#1C1917]">
+                            {bill.title}
+                          </h3>
+                          <Badge
+                            variant={
+                              bill.paidCount === bill.totalCount
+                                ? "inflow"
+                                : "warning"
+                            }
+                          >
+                            {bill.paidCount}/{bill.totalCount} Lunas
+                          </Badge>
+                        </div>
+                        <p className="tnum mt-0.5 text-xs text-[#78716C]">
+                          {formatDateID(bill.occurredAt)} · Total{" "}
+                          <strong className="text-[#1C1917]">
+                            {formatIDR(bill.totalAmount)}
+                          </strong>
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => void handleCopySplitLink(bill.slug)}
+                        >
+                          {copiedSplitSlug === bill.slug ? (
+                            <Check className="h-3.5 w-3.5 text-[#15803D]" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          <span>Link</span>
+                        </Button>
+                        <a
+                          href={`/patungan/${bill.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E7E2D8] bg-[#FFFFFF] text-[#57534E] hover:bg-[#FAF1E0] hover:text-[#14532D]"
+                          title="Buka halaman publik"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                        <button
+                          type="button"
+                          disabled={busySplitId === bill.id}
+                          onClick={() => void handleDeleteSplitBill(bill.id)}
+                          aria-label={`Hapus patungan ${bill.title}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#78716C] hover:bg-[#FEE2E2] hover:text-[#B91C1C] cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#EFECE4]">
+                        <div
+                          className="h-full rounded-full bg-[#15803D]"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-[#78716C]">
+                        <span>Terkumpul {formatIDR(bill.paidAmount)}</span>
+                        <span>Sisa {formatIDR(bill.unpaidAmount)}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {bill.participants.map((p) => {
+                        const isBusy =
+                          busySplitId === `${bill.id}:${p.id}`;
+                        return (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between gap-2 rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] px-3 py-2 text-xs"
+                          >
+                            <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={p.isPaid}
+                                disabled={isBusy}
+                                onChange={(e) =>
+                                  void handleToggleParticipantPaid(
+                                    bill.id,
+                                    p.id,
+                                    e.target.checked
+                                  )
+                                }
+                                className="h-3.5 w-3.5 accent-[#14532D]"
+                              />
+                              <span
+                                className={cn(
+                                  "truncate font-medium",
+                                  p.isPaid
+                                    ? "line-through text-[#78716C]"
+                                    : "text-[#1C1917]"
+                                )}
+                              >
+                                {p.name}
+                              </span>
+                            </label>
+                            <span className="tnum font-semibold text-[#1C1917] shrink-0">
+                              {formatIDR(p.amount)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : tab === "history" ? (
         <div className="space-y-5">
           {/* Filter Bar */}
           <Card padding="md" className="space-y-4">
@@ -1457,6 +1716,15 @@ export function TransactionsClient({
         onDeleted={() => {
           setSelectedTx(null);
           triggerRefresh();
+        }}
+      />
+
+      {/* Create Split Bill Modal */}
+      <SplitBillModal
+        open={splitBillModalOpen}
+        onClose={() => setSplitBillModalOpen(false)}
+        onCreated={(created) => {
+          setSplitBills((prev) => [created, ...prev]);
         }}
       />
 

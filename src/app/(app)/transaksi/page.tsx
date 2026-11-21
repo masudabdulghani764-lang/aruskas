@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { listCategories } from "@/lib/categories";
 import { getCurrentMonthYM } from "@/lib/format";
 import { listRecurringRules } from "@/lib/recurring";
+import { listUserSplitBills } from "@/lib/split-bills";
 import { listTransactions } from "@/lib/transactions";
 import { listUserWallets } from "@/lib/wallets";
 
@@ -35,23 +36,33 @@ export default async function TransaksiPage({
 
   const resolvedParams = await searchParams;
   const initialTab =
-    resolvedParams.tab === "recurring" ? "recurring" : "history";
+    resolvedParams.tab === "recurring"
+      ? "recurring"
+      : resolvedParams.tab === "patungan"
+        ? "patungan"
+        : "history";
 
   const db = await getDb();
   const currentYM = getCurrentMonthYM();
   const initialFrom = `${currentYM}-01`;
   const initialTo = getMonthEndISO(currentYM);
 
-  const [initialWallets, rawCategories, initialTx, initialRules] =
-    await Promise.all([
-      listUserWallets(db, user.id),
-      listCategories(db, user.id),
-      listTransactions(db, user.id, {
-        from: initialFrom,
-        to: initialTo,
-      }),
-      listRecurringRules(db, user.id),
-    ]);
+  const [
+    initialWallets,
+    rawCategories,
+    initialTx,
+    initialRules,
+    initialSplitBills,
+  ] = await Promise.all([
+    listUserWallets(db, user.id),
+    listCategories(db, user.id),
+    listTransactions(db, user.id, {
+      from: initialFrom,
+      to: initialTo,
+    }),
+    listRecurringRules(db, user.id),
+    listUserSplitBills(db, user.id),
+  ]);
   const initialCategories = rawCategories.map((c) => ({
     id: c.id,
     userId: c.userId,
@@ -71,6 +82,7 @@ export default async function TransaksiPage({
       initialItems={initialTx.items}
       initialSummary={initialTx.summary}
       initialRules={initialRules}
+      initialSplitBills={initialSplitBills}
     />
   );
 }
