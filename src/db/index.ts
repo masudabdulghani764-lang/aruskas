@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { Database } from "bun:sqlite";
 import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -63,8 +64,11 @@ export function closeDb(): void {
  * or default `data/aruskas.db`.
  */
 export function getDb(): AppDb {
+  const defaultDir = process.env.VERCEL
+    ? os.tmpdir()
+    : path.join(process.cwd(), "data");
   const dbPath =
-    process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "aruskas.db");
+    process.env.DATABASE_PATH ?? path.join(defaultDir, "aruskas.db");
 
   if (!globalForDb.__aruskasDb || globalForDb.__aruskasDbPath !== dbPath) {
     closeDb();

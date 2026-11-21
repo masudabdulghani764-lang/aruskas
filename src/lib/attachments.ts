@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { AppError } from "@/lib/errors";
 
@@ -19,11 +20,14 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 function resolveUploadDir(baseDir?: string): string {
+  const defaultUploads = process.env.VERCEL
+    ? path.join(os.tmpdir(), "aruskas-uploads")
+    : path.join(process.cwd(), "data", "uploads");
   const configured =
     baseDir ??
     (process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim()
       ? process.env.UPLOAD_DIR.trim()
-      : path.join(process.cwd(), "data", "uploads"));
+      : defaultUploads);
   return path.resolve(configured);
 }
 
