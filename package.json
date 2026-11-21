@@ -6,6 +6,7 @@
     "dev": "bun --bun next dev --webpack",
     "build": "bun --bun next build --webpack",
     "start": "bun --bun next start",
+    "tunnel": "bin\\cloudflared.exe tunnel --url http://localhost:3000",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
