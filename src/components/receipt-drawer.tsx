@@ -148,8 +148,16 @@ export function ReceiptDrawer({
 
     async function loadCategories() {
       try {
-        const walletsRes = await fetch("/api/wallets", { cache: "no-store" });
+        const walletsRes = await fetch("/api/wallets?includeArchived=true", {
+          cache: "no-store",
+        });
         const walletsData = await walletsRes.json().catch(() => ({}));
+        if (!walletsRes.ok) {
+          throw new Error(walletsData.error ?? "Gagal memuat daftar dompet.");
+        }
+        if (cancelled) {
+          return;
+        }
         const walletList = Array.isArray(walletsData.wallets)
           ? (walletsData.wallets as WalletWithRole[])
           : [];

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -259,12 +259,21 @@ export function TransactionsClient({
     activeRange.from > activeRange.to;
 
   // Fetch filtered transactions
+  const txRequestSeqRef = useRef(0);
+  const txAbortRef = useRef<AbortController | null>(null);
+
   const loadTransactions = useCallback(async () => {
+    txAbortRef.current?.abort();
+    const seq = ++txRequestSeqRef.current;
+
     if (dateRangeInvalid) {
       setTxError("Tanggal awal tidak boleh melebihi tanggal akhir.");
       setLoadingTx(false);
       return;
     }
+
+    const controller = new AbortController();
+    txAbortRef.current = controller;
 
     setLoadingTx(true);
     setTxError(null);
@@ -292,8 +301,12 @@ export function TransactionsClient({
 
       const res = await fetch(`/api/transactions?${params.toString()}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));
+      if (seq !== txRequestSeqRef.current) {
+        return;
+      }
       if (!res.ok) {
         throw new Error(data.error ?? "Gagal memuat riwayat transaksi.");
       }
@@ -303,12 +316,21 @@ export function TransactionsClient({
         setSummary(data.summary as TransactionsSummary);
       }
     } catch (err) {
+      if (
+        controller.signal.aborted ||
+        (err instanceof DOMException && err.name === "AbortError") ||
+        seq !== txRequestSeqRef.current
+      ) {
+        return;
+      }
       const msg =
         err instanceof Error ? err.message : "Gagal memuat riwayat transaksi.";
       setTxError(msg);
       toast.error(msg);
     } finally {
-      setLoadingTx(false);
+      if (seq === txRequestSeqRef.current) {
+        setLoadingTx(false);
+      }
     }
   }, [
     activeRange.from,
@@ -322,6 +344,9 @@ export function TransactionsClient({
 
   useEffect(() => {
     void loadTransactions();
+    return () => {
+      txAbortRef.current?.abort();
+    };
   }, [loadTransactions, refreshTrigger]);
 
   // Fetch recurring rules

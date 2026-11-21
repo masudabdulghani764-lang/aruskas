@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownLeft,
@@ -195,12 +195,20 @@ export function DashboardClient({
   const [selectedTx, setSelectedTx] = useState<TransactionView | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     setChartMounted(true);
   }, []);
 
   const fetchDashboard = useCallback(
     async (targetScope: ReportScope, background: boolean) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const seq = ++requestSeqRef.current;
+
       if (background) {
         setRefreshing(true);
       } else {
@@ -211,14 +219,24 @@ export function DashboardClient({
       try {
         const res = await fetch(
           `/api/dashboard?scope=${encodeURIComponent(targetScope)}`,
-          { cache: "no-store" }
+          { cache: "no-store", signal: controller.signal }
         );
         const body = await res.json().catch(() => ({}));
+        if (seq !== requestSeqRef.current) {
+          return;
+        }
         if (!res.ok) {
           throw new Error(body.error ?? "Gagal memuat ringkasan dasbor.");
         }
         setData(body as DashboardSummary);
       } catch (err) {
+        if (
+          controller.signal.aborted ||
+          (err instanceof DOMException && err.name === "AbortError") ||
+          seq !== requestSeqRef.current
+        ) {
+          return;
+        }
         const msg =
           err instanceof Error
             ? err.message
@@ -226,8 +244,10 @@ export function DashboardClient({
         setFetchError(msg);
         toast.error(msg);
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (seq === requestSeqRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     []
@@ -235,6 +255,9 @@ export function DashboardClient({
 
   useEffect(() => {
     void fetchDashboard(scope, data !== null);
+    return () => {
+      abortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, refreshTrigger, fetchDashboard]);
 
