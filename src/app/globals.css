@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 :root {
-  --bg-canvas: #F7F5F0;
-  --bg-sheet: #FFFFFF;
-  --bg-subtle: #EFECE4;
-  --border-warm: #E7E2D8;
+  --bg-canvas: #F5E9D3;
+  --bg-sheet: #FFFDF8;
+  --bg-subtle: #F2E2C4;
+  --border-warm: #E3D4BA;
 
   --ink-primary: #1C1917;
   --ink-secondary: #57534E;
@@ -29,9 +29,10 @@
   body {
     background-color: var(--bg-canvas);
     background-image:
-      radial-gradient(ellipse 85% 50% at 12% 0%, #FFFFFF 0%, transparent 72%),
-      radial-gradient(ellipse 75% 48% at 88% 15%, #F2E7D3 0%, transparent 70%),
-      linear-gradient(180deg, #FFFFFF 0%, #FBF8F2 36%, #F3ECE0 74%, #FCFaf5 100%);
+      radial-gradient(ellipse 80% 55% at 0% 0%, #FFFFFF 0%, rgba(255, 255, 255, 0) 68%),
+      radial-gradient(ellipse 85% 60% at 100% 10%, #EED5AE 0%, rgba(238, 213, 174, 0) 65%),
+      radial-gradient(ellipse 70% 50% at 15% 95%, #F0D9B5 0%, rgba(240, 217, 181, 0) 65%),
+      linear-gradient(155deg, #FFFFFF 0%, #FAF0DD 38%, #F2DFC0 76%, #FDF8EE 100%);
     background-attachment: fixed;
     color: var(--ink-primary);
     font-family: var(--font-plus-jakarta), system-ui, -apple-system, sans-serif;
@@ -40,22 +41,25 @@
   }
 }
 
-/* Soft editorial Cream-to-White gradients for all sheet/card/canvas surfaces */
-.bg-\[\#FFFFFF\] {
-  background-color: #FFFFFF;
-  background-image: linear-gradient(155deg, #FFFFFF 0%, #FDFBF7 48%, #F4ECE0 100%);
+/* Explicit semantic class + overrides for visible warm editorial Cream-to-White gradients */
+.bg-cream-canvas,
+.bg-\[\#F7F5F0\] {
+  background-color: #F5E9D3;
+  background-image:
+    radial-gradient(ellipse 80% 55% at 0% 0%, #FFFFFF 0%, rgba(255, 255, 255, 0) 68%),
+    radial-gradient(ellipse 85% 60% at 100% 12%, #EED5AE 0%, rgba(238, 213, 174, 0) 65%),
+    radial-gradient(ellipse 70% 50% at 15% 95%, #F0D9B5 0%, rgba(240, 217, 181, 0) 65%),
+    linear-gradient(155deg, #FFFFFF 0%, #FAF0DD 38%, #F2DFC0 76%, #FDF8EE 100%);
 }
 
-.bg-\[\#F7F5F0\] {
-  background-color: #F7F5F0;
-  background-image:
-    radial-gradient(ellipse 85% 50% at 15% 0%, #FFFFFF 0%, transparent 72%),
-    linear-gradient(180deg, #FFFFFF 0%, #FAF7F0 42%, #F2EAE0 82%, #FBF9F4 100%);
+.bg-\[\#FFFFFF\]:not(input):not(select):not(textarea) {
+  background-color: #FFFDF8;
+  background-image: linear-gradient(150deg, #FFFFFF 0%, #FFFBF2 52%, #F5E6CC 100%);
 }
 
 .bg-\[\#FAF8F4\] {
-  background-color: #FAF8F4;
-  background-image: linear-gradient(145deg, #FFFFFF 0%, #FAF7F0 55%, #F1E8D9 100%);
+  background-color: #FAF0DD;
+  background-image: linear-gradient(145deg, #FFFFFF 0%, #F9EEDB 55%, #EEDAB9 100%);
 }
 
 .tnum {
@@ -85,6 +89,7 @@
 @media print {
   html,
   body,
+  .bg-cream-canvas,
   .bg-\[\#FFFFFF\],
   .bg-\[\#F7F5F0\],
   .bg-\[\#FAF8F4\] {

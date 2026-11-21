@@ -27,11 +27,11 @@ export default async function LandingPage() {
   const user = await getCurrentUser();
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] text-[#1C1917] scroll-smooth">
+    <div className="min-h-screen bg-cream-canvas text-[#1C1917] scroll-smooth">
       <ScrollProgressAndTopButton />
 
-      {/* Sticky Warm Ivory Top Bar */}
-      <header className="sticky top-0 z-30 border-b border-[#E5DFD3] bg-[#F7F5F0]/90 backdrop-blur-md">
+      {/* Sticky Warm Cream-White Top Bar */}
+      <header className="sticky top-0 z-30 border-b border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF]/95 via-[#FCF3E2]/95 to-[#F3E2C5]/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-8">
             <Link
@@ -107,8 +107,8 @@ export default async function LandingPage() {
       </header>
 
       <main>
-        {/* BAND 1: Editorial Hero with Subtle Warm Paper Tint */}
-        <section className="relative overflow-hidden border-b border-[#E7E2D8] bg-gradient-to-b from-[#FAF8F4] via-[#F7F5F0] to-[#F3EFE6]">
+        {/* BAND 1: Editorial Hero with Warm Cream-to-White Gradient */}
+        <section className="relative overflow-hidden border-b border-[#E3D4BA] bg-gradient-to-br from-[#FFFFFF] via-[#FAF0DC] to-[#EED8B5]">
           <div className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
             <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12">
               <ScrollReveal className="lg:col-span-6" delayMs={0} distance={18}>
@@ -266,7 +266,7 @@ export default async function LandingPage() {
         </section>
 
         {/* BAND 3: Varied Editorial Bento Grid */}
-        <section id="fitur" className="bg-[#F7F5F0] py-16 sm:py-20">
+        <section id="fitur" className="bg-cream-canvas py-16 sm:py-20">
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
             <ScrollReveal className="max-w-2xl">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#B45309]">
@@ -521,7 +521,7 @@ export default async function LandingPage() {
         </section>
 
         {/* BAND 5: Deep Forest Closing CTA */}
-        <section className="bg-[#F7F5F0] py-16 sm:py-20">
+        <section className="bg-cream-canvas py-16 sm:py-20">
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
             <ScrollReveal>
               <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-[#14532D] px-6 py-12 text-[#F7F5F0] sm:px-12 sm:py-14">

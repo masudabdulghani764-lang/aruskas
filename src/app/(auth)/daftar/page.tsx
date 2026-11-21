@@ -77,7 +77,7 @@ function DaftarForm() {
     : "/masuk";
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] px-4 py-10 flex flex-col justify-center">
+    <div className="min-h-screen bg-cream-canvas px-4 py-10 flex flex-col justify-center">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-6 flex items-center justify-between">
           <Link

@@ -102,11 +102,11 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-[#E7E2D8] transition-colors duration-150",
+        "rounded-2xl border border-[#E3D4BA] transition-colors duration-150",
         subtle
-          ? "bg-gradient-to-br from-[#FAF8F3] via-[#F4EFE4] to-[#EAE2D3]"
-          : "bg-gradient-to-br from-[#FFFFFF] via-[#FDFBF7] to-[#F3EBE0]",
-        interactive && "hover:border-[#D4CCC0]",
+          ? "bg-gradient-to-br from-[#FFFDF8] via-[#F7EBD5] to-[#EED8B6]"
+          : "bg-gradient-to-br from-[#FFFFFF] via-[#FFFBF2] to-[#F5E6CC]",
+        interactive && "hover:border-[#D4C2A3]",
         CARD_PADDING[padding],
         className
       )}

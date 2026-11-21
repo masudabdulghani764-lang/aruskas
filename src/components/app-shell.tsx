@@ -205,9 +205,9 @@ export function AppShell({
 
   return (
     <QuickAddContext.Provider value={contextValue}>
-      <div className="min-h-screen bg-[#F7F5F0] text-[#1C1917]">
+      <div className="min-h-screen bg-cream-canvas text-[#1C1917]">
         {/* Top Desktop & Mobile Header */}
-        <header className="no-print sticky top-0 z-30 border-b border-[#E7E2D8] bg-[#FFFFFF]/95 backdrop-blur-xs">
+        <header className="no-print sticky top-0 z-30 border-b border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF]/95 via-[#FCF3E2]/95 to-[#F4E4C6]/95 backdrop-blur-xs">
           <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-3 px-4 sm:px-6">
             <div className="flex items-center gap-7">
               <Link
@@ -362,7 +362,7 @@ export function AppShell({
         {/* Mobile Bottom Navigation Bar (5 tabs + quick `+` button) */}
         <nav
           aria-label="Navigasi seluler"
-          className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-[#E7E2D8] bg-[#FFFFFF]/95 backdrop-blur-xs md:hidden"
+          className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF]/95 via-[#FCF3E2]/95 to-[#F4E4C6]/95 backdrop-blur-xs md:hidden"
         >
           <div className="grid grid-cols-6 items-center h-16 px-1">
             {NAV_ITEMS.slice(0, 2).map((item) => {

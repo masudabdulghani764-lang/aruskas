@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#F7F5F0",
+  themeColor: "#F5E9D3",
 };
 
 export default function RootLayout({
@@ -41,7 +41,7 @@ export default function RootLayout({
       lang="id"
       className={`${newsreader.variable} ${plusJakartaSans.variable}`}
     >
-      <body className="min-h-screen bg-[#F7F5F0] text-[#1C1917] antialiased selection:bg-[#DCFCE7] selection:text-[#14532D]">
+      <body className="min-h-screen bg-cream-canvas text-[#1C1917] antialiased selection:bg-[#DCFCE7] selection:text-[#14532D]">
         {children}
         <Toaster
           position="bottom-right"
