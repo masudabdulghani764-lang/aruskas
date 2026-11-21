@@ -20,6 +20,7 @@ import {
   Textarea,
   cn,
 } from "@/components/ui/primitives";
+import { compressReceiptImageIfNeeded } from "@/lib/client-image";
 import { formatIDR, getTodayISO } from "@/lib/format";
 
 export type QuickAddType = "income" | "expense" | "transfer";
@@ -139,6 +140,22 @@ export function QuickAddModal({
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(
+    null
+  );
+  const [compressingImage, setCompressingImage] = useState(false);
+
+  useEffect(() => {
+    if (!attachment || !attachment.type.toLowerCase().startsWith("image/")) {
+      setAttachmentPreviewUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(attachment);
+    setAttachmentPreviewUrl(objectUrl);
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment]);
 
   const [wallets, setWallets] = useState<WalletOption[]>([]);
   const [categoriesByOwner, setCategoriesByOwner] = useState<
@@ -326,27 +343,41 @@ export function QuickAddModal({
     }
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    if (!file) {
+  function addQuickAmount(delta: number) {
+    const current = Number(amountDigits || "0");
+    const next = Math.min(Number.MAX_SAFE_INTEGER, current + delta);
+    setAmountDigits(String(next));
+    if (errorMsg) {
+      setErrorMsg(null);
+    }
+  }
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const rawFile = event.target.files?.[0] ?? null;
+    if (!rawFile) {
       setAttachment(null);
       return;
     }
 
-    if (!ALLOWED_MIMES.has(file.type.toLowerCase())) {
+    if (!ALLOWED_MIMES.has(rawFile.type.toLowerCase())) {
       setErrorMsg("Format lampiran harus JPG, PNG, WebP, atau PDF.");
       event.target.value = "";
       return;
     }
 
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      setErrorMsg("Ukuran lampiran maksimal 2 MB.");
-      event.target.value = "";
-      return;
+    setCompressingImage(true);
+    try {
+      const processed = await compressReceiptImageIfNeeded(rawFile);
+      if (processed.size > MAX_ATTACHMENT_BYTES) {
+        setErrorMsg("Ukuran lampiran maksimal 2 MB.");
+        event.target.value = "";
+        return;
+      }
+      setErrorMsg(null);
+      setAttachment(processed);
+    } finally {
+      setCompressingImage(false);
     }
-
-    setErrorMsg(null);
-    setAttachment(file);
   }
 
   function clearAttachment() {
@@ -538,16 +569,27 @@ export function QuickAddModal({
           </div>
         )}
 
-        {/* Nominal Input */}
-        <div className="space-y-1.5">
-          <label
-            htmlFor="quick-add-amount"
-            className="block text-xs font-medium text-[#57534E]"
-          >
-            Nominal <span className="text-[#B91C1C]">*</span>
-          </label>
+        {/* Hero Nominal Input + Quick Amount Chips */}
+        <div className="rounded-2xl border border-[#E3D4BA] bg-gradient-to-br from-[#FAF0DD]/70 via-[#FFFBF2] to-[#FFFFFF] p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="quick-add-amount"
+              className="block text-xs font-semibold uppercase tracking-wider text-[#57534E]"
+            >
+              Nominal Transaksi <span className="text-[#B91C1C]">*</span>
+            </label>
+            {amountDigits && (
+              <button
+                type="button"
+                onClick={() => setAmountDigits("")}
+                className="text-[11px] font-medium text-[#78716C] hover:text-[#B91C1C] cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
           <div className="relative flex items-center">
-            <span className="pointer-events-none absolute left-3.5 font-display text-lg text-[#78716C]">
+            <span className="pointer-events-none absolute left-3.5 font-display text-xl text-[#78716C]">
               Rp
             </span>
             <input
@@ -559,8 +601,27 @@ export function QuickAddModal({
               value={formatDigitsIDR(amountDigits)}
               onChange={handleAmountChange}
               disabled={noWritableWallets}
-              className="tnum font-display w-full rounded-xl border border-[#E7E2D8] bg-[#FFFFFF] py-3 pl-11 pr-4 text-2xl font-medium text-[#1C1917] placeholder:text-[#78716C]/50 transition-colors focus:border-[#14532D] focus:outline-none focus:ring-2 focus:ring-[#14532D]/15 disabled:bg-[#EFECE4]"
+              className="tnum font-display w-full rounded-xl border border-[#E3D4BA] bg-[#FFFFFF] py-3 pl-12 pr-4 text-2xl sm:text-3xl font-semibold text-[#1C1917] placeholder:text-[#78716C]/45 transition-colors focus:border-[#14532D] focus:outline-none focus:ring-2 focus:ring-[#14532D]/15 disabled:bg-[#EFECE4]"
             />
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { label: "+25rb", value: 25_000 },
+              { label: "+50rb", value: 50_000 },
+              { label: "+100rb", value: 100_000 },
+              { label: "+500rb", value: 500_000 },
+              { label: "+1jt", value: 1_000_000 },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                disabled={noWritableWallets}
+                onClick={() => addQuickAmount(chip.value)}
+                className="tnum rounded-lg border border-[#E3D4BA] bg-[#FFFFFF] px-2.5 py-1 text-xs font-semibold text-[#14532D] transition-colors hover:border-[#14532D] hover:bg-[#DCFCE7]/40 cursor-pointer disabled:opacity-50"
+              >
+                {chip.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -658,6 +719,39 @@ export function QuickAddModal({
           </p>
         )}
 
+        {/* Quick Category Chip Grid (1-Tap Mobile Selection) */}
+        {txType !== "transfer" && availableCategories.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="block text-xs font-medium text-[#57534E]">
+              Pilih Cepat Kategori
+            </span>
+            <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
+              {availableCategories.map((cat) => {
+                const selected = categoryId === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategoryId(cat.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                      selected
+                        ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF]"
+                        : "border-[#E3D4BA] bg-[#FFFFFF] text-[#57534E] hover:bg-[#FAF0DD]"
+                    )}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0 border border-white/40"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <span>{cat.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Date & Payment Method */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
@@ -685,6 +779,33 @@ export function QuickAddModal({
           </Select>
         </div>
 
+        {/* 1-Tap Payment Method Pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {["QRIS", "Transfer Bank", "Tunai", "E-Wallet", "Kartu Debit"].map(
+            (method) => {
+              const active = paymentMethod === method;
+              return (
+                <button
+                  key={method}
+                  type="button"
+                  disabled={noWritableWallets}
+                  onClick={() =>
+                    setPaymentMethod((prev) => (prev === method ? "" : method))
+                  }
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                    active
+                      ? "border-[#14532D] bg-[#DCFCE7] text-[#14532D] font-semibold"
+                      : "border-[#E3D4BA] bg-[#FAF0DD]/60 text-[#57534E] hover:bg-[#FAF0DD]"
+                  )}
+                >
+                  {method}
+                </button>
+              );
+            }
+          )}
+        </div>
+
         {/* Notes */}
         <Textarea
           label="Catatan (Opsional)"
@@ -696,49 +817,66 @@ export function QuickAddModal({
           placeholder="Tambahkan keterangan atau nomor referensi bila perlu..."
         />
 
-        {/* Optional Receipt Attachment */}
+        {/* Optional Receipt Attachment with Auto-Compression & Thumbnail Preview */}
         <div className="space-y-1.5">
           <label className="block text-xs font-medium text-[#57534E]">
-            Bukti Nota (Opsional · JPG, PNG, WebP, PDF maks. 2 MB)
+            Bukti Nota (Opsional · Foto Kamera HP Otomatis Dikompresi / PDF maks. 2 MB)
           </label>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={handleFileChange}
-            disabled={noWritableWallets}
+            onChange={(e) => void handleFileChange(e)}
+            disabled={noWritableWallets || compressingImage}
             className="sr-only"
             id="quick-add-attachment"
           />
 
           {attachment ? (
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-[#E7E2D8] bg-[#F7F5F0] px-3 py-2 text-xs">
-              <div className="flex min-w-0 items-center gap-2 text-[#1C1917]">
-                <FileText className="h-4 w-4 shrink-0 text-[#14532D]" />
-                <span className="truncate font-medium">{attachment.name}</span>
-                <span className="shrink-0 text-[#78716C] tnum">
-                  ({formatFileSize(attachment.size)})
-                </span>
+            <div className="space-y-2 rounded-xl border border-[#E3D4BA] bg-[#FAF0DD]/50 p-3 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 text-[#1C1917]">
+                  <FileText className="h-4 w-4 shrink-0 text-[#14532D]" />
+                  <span className="truncate font-medium">{attachment.name}</span>
+                  <span className="shrink-0 text-[#78716C] tnum">
+                    ({formatFileSize(attachment.size)})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearAttachment}
+                  aria-label="Hapus lampiran"
+                  className="rounded-md p-1 text-[#78716C] hover:bg-[#EFECE4] hover:text-[#B91C1C] cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={clearAttachment}
-                aria-label="Hapus lampiran"
-                className="rounded-md p-1 text-[#78716C] hover:bg-[#EFECE4] hover:text-[#B91C1C] cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              {attachmentPreviewUrl && (
+                <div className="overflow-hidden rounded-lg border border-[#E3D4BA] bg-[#FFFFFF]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={attachmentPreviewUrl}
+                    alt="Pratinjau struk"
+                    className="max-h-40 w-full object-contain"
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <label
               htmlFor="quick-add-attachment"
               className={cn(
-                "flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#E7E2D8] bg-[#F7F5F0]/60 px-3.5 py-2.5 text-xs font-medium text-[#57534E] transition-colors hover:border-[#14532D]/40 hover:bg-[#EFECE4]/60 cursor-pointer",
-                noWritableWallets && "pointer-events-none opacity-55"
+                "flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#E3D4BA] bg-[#FAF0DD]/45 px-3.5 py-2.5 text-xs font-medium text-[#57534E] transition-colors hover:border-[#14532D]/40 hover:bg-[#EFECE4]/60 cursor-pointer",
+                (noWritableWallets || compressingImage) &&
+                  "pointer-events-none opacity-55"
               )}
             >
               <Paperclip className="h-3.5 w-3.5 text-[#78716C]" />
-              <span>Lampirkan foto struk atau PDF nota</span>
+              <span>
+                {compressingImage
+                  ? "Mengoptimalkan ukuran foto struk..."
+                  : "Lampirkan foto struk kamera atau PDF nota"}
+              </span>
             </label>
           )}
         </div>

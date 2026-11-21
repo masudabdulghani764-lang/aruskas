@@ -256,19 +256,25 @@ function computeWalletSetMovement(
 async function getPriorMovementForWalletSet(
   db: AppDb,
   walletIds: string[],
-  selectedSet: Set<string>,
+  _selectedSet: Set<string>,
   beforeDateIso: string
 ): Promise<number> {
   if (walletIds.length === 0) {
     return 0;
   }
 
-  const rows = await db
+  const [agg] = await db
     .select({
-      type: transactions.type,
-      walletId: transactions.walletId,
-      targetWalletId: transactions.targetWalletId,
-      amount: transactions.amount,
+      inflow: sql<number>`coalesce(sum(case
+        when ${transactions.type} = 'income' and ${inArray(transactions.walletId, walletIds)} then ${transactions.amount}
+        when ${transactions.type} = 'transfer' and ${inArray(transactions.targetWalletId, walletIds)} then ${transactions.amount}
+        else 0
+      end), 0)`,
+      outflow: sql<number>`coalesce(sum(case
+        when ${transactions.type} = 'expense' and ${inArray(transactions.walletId, walletIds)} then ${transactions.amount}
+        when ${transactions.type} = 'transfer' and ${inArray(transactions.walletId, walletIds)} then ${transactions.amount}
+        else 0
+      end), 0)`,
     })
     .from(transactions)
     .where(
@@ -281,7 +287,7 @@ async function getPriorMovementForWalletSet(
       )
     );
 
-  return computeWalletSetMovement(rows, selectedSet);
+  return Number(agg?.inflow ?? 0) - Number(agg?.outflow ?? 0);
 }
 
 function addOneUtcDay(isoDate: string): string {
@@ -473,7 +479,7 @@ export async function getDashboardSummary(
       : Promise.resolve([]),
     listMonthlyBudgets(db, userId, month),
     activeWalletIds.length > 0
-      ? listTransactions(db, userId, {})
+      ? listTransactions(db, userId, { limit: 16 })
       : Promise.resolve({
           items: [] as TransactionView[],
           summary: { income: 0, expense: 0, net: 0, count: 0 },

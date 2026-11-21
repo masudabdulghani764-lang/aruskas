@@ -607,6 +607,40 @@ export async function listWalletInvites(
 }
 
 /**
+ * Updates the role (`editor` or `viewer`) of an existing non-owner member on a shared wallet.
+ */
+export async function updateWalletMemberRole(
+  db: AppDb,
+  walletId: string,
+  ownerId: string,
+  targetUserId: string,
+  newRole: "editor" | "viewer"
+): Promise<{ userId: string; role: "editor" | "viewer" }> {
+  await assertWalletAccess(db, walletId, ownerId, "owner");
+
+  if (targetUserId === ownerId) {
+    throw new AppError(400, "Peran pemilik dompet tidak dapat diubah.");
+  }
+
+  const [updated] = await db
+    .update(walletMembers)
+    .set({ role: newRole })
+    .where(
+      and(
+        eq(walletMembers.walletId, walletId),
+        eq(walletMembers.userId, targetUserId)
+      )
+    )
+    .returning({ userId: walletMembers.userId, role: walletMembers.role });
+
+  if (!updated) {
+    throw new AppError(404, "Anggota dompet tidak ditemukan.");
+  }
+
+  return { userId: updated.userId, role: newRole };
+}
+
+/**
  * Removes a member from a shared wallet and resets `isShared` when only the owner remains.
  */
 export async function removeWalletMember(

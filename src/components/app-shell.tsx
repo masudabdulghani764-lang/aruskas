@@ -256,7 +256,21 @@ export function AppShell({
               </nav>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <Link
+                href="/integrasi-bca"
+                className={cn(
+                  "md:hidden inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors",
+                  pathname === "/integrasi-bca" ||
+                    pathname.startsWith("/integrasi-bca/")
+                    ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF]"
+                    : "border-[#E3D4BA] bg-[#FAF0DD] text-[#14532D] hover:bg-[#EFECE4]"
+                )}
+              >
+                <Landmark className="h-3.5 w-3.5 text-[#B45309]" />
+                <span>BCA</span>
+              </Link>
+
               <Button
                 variant="primary"
                 size="sm"
@@ -362,7 +376,7 @@ export function AppShell({
         {/* Mobile Bottom Navigation Bar (5 tabs + quick `+` button) */}
         <nav
           aria-label="Navigasi seluler"
-          className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF]/95 via-[#FCF3E2]/95 to-[#F4E4C6]/95 backdrop-blur-xs md:hidden"
+          className="no-print fixed inset-x-0 bottom-0 z-30 border-t border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF]/95 via-[#FCF3E2]/95 to-[#F4E4C6]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xs md:hidden"
         >
           <div className="grid grid-cols-6 items-center h-16 px-1">
             {NAV_ITEMS.slice(0, 2).map((item) => {

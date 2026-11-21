@@ -11,6 +11,7 @@ import {
   CalendarClock,
   Check,
   Eye,
+  EyeOff,
   Landmark,
   Mail,
   PiggyBank,
@@ -194,6 +195,7 @@ export function DashboardClient({
 
   const [selectedTx, setSelectedTx] = useState<TransactionView | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [hideBalances, setHideBalances] = useState(false);
 
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -201,7 +203,33 @@ export function DashboardClient({
 
   useEffect(() => {
     setChartMounted(true);
+    try {
+      if (window.localStorage.getItem("aruskas_hide_balances") === "1") {
+        setHideBalances(true);
+      }
+    } catch {
+      // Ignore storage access errors
+    }
   }, []);
+
+  function toggleHideBalances() {
+    setHideBalances((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("aruskas_hide_balances", next ? "1" : "0");
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }
+
+  function displayIDR(amount: number, opts?: { signed?: boolean }): string {
+    if (hideBalances) {
+      return "Rp •••••••";
+    }
+    return formatIDR(amount, opts);
+  }
 
   const fetchDashboard = useCallback(
     async (targetScope: ReportScope, background: boolean) => {
@@ -604,18 +632,53 @@ export function DashboardClient({
         </div>
       )}
 
-      {/* Hero Balance Sheet */}
-      <Card padding="lg" className="relative overflow-hidden">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      {/* Hero Balance Sheet — Deep Botanical Forest & Warm Gold Focal Card */}
+      <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-gradient-to-br from-[#14532D] via-[#113B26] to-[#0D2E1D] p-6 sm:p-8 text-[#FAF8F4] shadow-[0_14px_34px_rgba(20,83,45,0.18)]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#E5B869]/15 blur-2xl"
+        />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C]">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#E5B869]">
                 Total Saldo{" "}
                 {scope === "personal" ? "Dompet Pribadi" : "Dompet Aktif"}
               </span>
 
+              <button
+                type="button"
+                onClick={toggleHideBalances}
+                aria-label={
+                  hideBalances ? "Tampilkan nominal saldo" : "Sembunyikan nominal saldo"
+                }
+                title={
+                  hideBalances ? "Tampilkan nominal saldo" : "Sembunyikan nominal saldo"
+                }
+                className="inline-flex items-center gap-1 rounded-full border border-[#2E6F4E] bg-[#17482F] px-2.5 py-0.5 text-[11px] font-medium text-[#D6EAE0] transition-colors hover:bg-[#1E5B3C] hover:text-[#FFFFFF] cursor-pointer"
+              >
+                {hideBalances ? (
+                  <>
+                    <Eye className="h-3 w-3 text-[#E5B869]" />
+                    <span>Tampilkan</span>
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-3 w-3 text-[#E5B869]" />
+                    <span>Privasi</span>
+                  </>
+                )}
+              </button>
+
               {hasGrowth ? (
-                <Badge variant={growthPositive ? "inflow" : "outflow"}>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                    growthPositive
+                      ? "border-[#86EFAC]/30 bg-[#DCFCE7]/15 text-[#86EFAC]"
+                      : "border-[#FCA5A5]/30 bg-[#FEE2E2]/15 text-[#FECACA]"
+                  )}
+                >
                   {growthPositive ? (
                     <TrendingUp className="h-3 w-3" />
                   ) : (
@@ -625,23 +688,24 @@ export function DashboardClient({
                     {growthPositive ? "+" : ""}
                     {data.balanceGrowthPct}% bulan ini
                   </span>
-                </Badge>
+                </span>
               ) : (
-                <Badge variant="neutral">
+                <span className="inline-flex items-center rounded-full border border-[#2E6F4E] bg-[#17482F] px-2.5 py-0.5 text-xs text-[#C6DDD0]">
                   <span className="tnum">
-                    Bulan lalu: {formatIDR(data.previousMonthNet, { signed: true })}
+                    Bulan lalu:{" "}
+                    {displayIDR(data.previousMonthNet, { signed: true })}
                   </span>
-                </Badge>
+                </span>
               )}
             </div>
 
-            <p className="tnum font-display text-4xl sm:text-5xl font-medium tracking-tight text-[#1C1917]">
-              {formatIDR(data.totalBalance)}
+            <p className="tnum font-display text-4xl sm:text-5xl font-medium tracking-tight text-[#FFFFFF]">
+              {displayIDR(data.totalBalance)}
             </p>
 
-            <p className="text-xs sm:text-sm text-[#57534E]">
+            <p className="text-xs sm:text-sm text-[#C6DDD0]">
               Mencakup{" "}
-              <span className="tnum font-semibold text-[#1C1917]">
+              <span className="tnum font-semibold text-[#FFFFFF]">
                 {data.activeWallets.length}
               </span>{" "}
               dompet dengan akses catat.
@@ -660,7 +724,7 @@ export function DashboardClient({
             <div
               role="group"
               aria-label="Cakupan saldo dasbor"
-              className="inline-flex rounded-xl border border-[#E7E2D8] bg-[#EFECE4]/70 p-1"
+              className="inline-flex rounded-xl border border-[#2E6F4E] bg-[#0F3522]/80 p-1"
             >
               <button
                 type="button"
@@ -668,8 +732,8 @@ export function DashboardClient({
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   scope === "all"
-                    ? "bg-[#FFFFFF] text-[#14532D] font-semibold shadow-2xs"
-                    : "text-[#57534E] hover:text-[#1C1917]"
+                    ? "bg-[#FAF0DD] text-[#14532D] font-semibold shadow-2xs"
+                    : "text-[#C6DDD0] hover:text-[#FFFFFF]"
                 )}
               >
                 Semua Dompet Aktif
@@ -680,26 +744,25 @@ export function DashboardClient({
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   scope === "personal"
-                    ? "bg-[#FFFFFF] text-[#14532D] font-semibold shadow-2xs"
-                    : "text-[#57534E] hover:text-[#1C1917]"
+                    ? "bg-[#FAF0DD] text-[#14532D] font-semibold shadow-2xs"
+                    : "text-[#C6DDD0] hover:text-[#FFFFFF]"
                 )}
               >
                 Dompet Pribadi
               </button>
             </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              pill
+            <button
+              type="button"
               onClick={() => openQuickAdd("expense")}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[#E5B869] bg-[#FAF0DD] px-5 text-sm font-semibold text-[#14532D] shadow-xs transition-colors hover:bg-[#FFFFFF] cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               <span>Catat Kas</span>
-            </Button>
+            </button>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* 3 KPI Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -713,7 +776,7 @@ export function DashboardClient({
             </span>
           </div>
           <p className="tnum font-display mt-2.5 text-2xl sm:text-3xl font-medium text-[#15803D]">
-            {formatIDR(data.currentMonthIncome)}
+            {displayIDR(data.currentMonthIncome)}
           </p>
           <p className="mt-1 text-xs text-[#78716C]">
             Pemasukan {formatMonthID(data.month)} (tanpa transfer internal)
@@ -730,7 +793,7 @@ export function DashboardClient({
             </span>
           </div>
           <p className="tnum font-display mt-2.5 text-2xl sm:text-3xl font-medium text-[#B91C1C]">
-            {formatIDR(data.currentMonthExpense)}
+            {displayIDR(data.currentMonthExpense)}
           </p>
           <p className="mt-1 text-xs text-[#78716C]">
             Pengeluaran {formatMonthID(data.month)} (tanpa transfer internal)

@@ -8,9 +8,11 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Paperclip,
   Pencil,
   ShieldAlert,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,6 +24,7 @@ import {
   Textarea,
   cn,
 } from "@/components/ui/primitives";
+import { compressReceiptImageIfNeeded } from "@/lib/client-image";
 import { formatDateID, formatIDR } from "@/lib/format";
 import type { TransactionView } from "@/lib/transactions";
 import type { WalletWithRole } from "@/lib/wallets";
@@ -107,6 +110,10 @@ export function ReceiptDrawer({
   const [occurredAt, setOccurredAt] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [notes, setNotes] = useState("");
+  const [editAttachment, setEditAttachment] = useState<File | null>(null);
+  const [removeExistingAttachment, setRemoveExistingAttachment] =
+    useState(false);
+  const [compressingEditImage, setCompressingEditImage] = useState(false);
 
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -118,6 +125,8 @@ export function ReceiptDrawer({
     setErrorMsg(null);
     setSubmitting(false);
     setDeleting(false);
+    setEditAttachment(null);
+    setRemoveExistingAttachment(false);
 
     if (!transaction) {
       return;
@@ -257,25 +266,49 @@ export function ReceiptDrawer({
 
     setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = {
-        title: trimmedTitle,
-        amount: parsedAmount,
-        occurredAt,
-        paymentMethod: paymentMethod.trim() || null,
-        notes: notes.trim() || null,
-      };
-      if (transaction.type !== "transfer") {
-        payload.categoryId = categoryId;
-      }
-
-      const res = await fetch(
-        `/api/transactions/${encodeURIComponent(transaction.id)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+      let res: Response;
+      if (editAttachment) {
+        const fd = new FormData();
+        fd.set("title", trimmedTitle);
+        fd.set("amount", String(parsedAmount));
+        fd.set("occurredAt", occurredAt);
+        fd.set("paymentMethod", paymentMethod.trim());
+        fd.set("notes", notes.trim());
+        if (transaction.type !== "transfer") {
+          fd.set("categoryId", categoryId);
         }
-      );
+        fd.set("attachment", editAttachment);
+        res = await fetch(
+          `/api/transactions/${encodeURIComponent(transaction.id)}`,
+          {
+            method: "PATCH",
+            body: fd,
+          }
+        );
+      } else {
+        const payload: Record<string, unknown> = {
+          title: trimmedTitle,
+          amount: parsedAmount,
+          occurredAt,
+          paymentMethod: paymentMethod.trim() || null,
+          notes: notes.trim() || null,
+        };
+        if (transaction.type !== "transfer") {
+          payload.categoryId = categoryId;
+        }
+        if (removeExistingAttachment) {
+          payload.removeAttachment = true;
+        }
+
+        res = await fetch(
+          `/api/transactions/${encodeURIComponent(transaction.id)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          }
+        );
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = data.error ?? "Gagal memperbarui transaksi.";
@@ -514,6 +547,88 @@ export function ReceiptDrawer({
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Tambahkan keterangan transaksi..."
               />
+
+              {/* Edit / Replace / Remove Receipt Attachment */}
+              <div className="space-y-2">
+                <span className="block text-xs font-medium text-[#57534E]">
+                  Lampiran Struk / Nota
+                </span>
+                <input
+                  id="receipt-edit-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="sr-only"
+                  disabled={compressingEditImage || submitting}
+                  onChange={async (e) => {
+                    const raw = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!raw) return;
+                    setCompressingEditImage(true);
+                    try {
+                      const compressed = await compressReceiptImageIfNeeded(raw);
+                      if (compressed.size > 2 * 1024 * 1024) {
+                        setErrorMsg("Ukuran lampiran maksimal 2 MB.");
+                        return;
+                      }
+                      setEditAttachment(compressed);
+                      setRemoveExistingAttachment(false);
+                      setErrorMsg(null);
+                    } finally {
+                      setCompressingEditImage(false);
+                    }
+                  }}
+                />
+                {editAttachment ? (
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-[#E3D4BA] bg-[#FAF0DD]/60 px-3 py-2 text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <FileText className="h-4 w-4 shrink-0 text-[#14532D]" />
+                      <span className="truncate font-medium text-[#1C1917]">
+                        {editAttachment.name}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditAttachment(null)}
+                      className="rounded-md p-1 text-[#78716C] hover:text-[#B91C1C] cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : transaction.hasAttachment && !removeExistingAttachment ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E3D4BA] bg-[#FAF0DD]/50 px-3 py-2 text-xs">
+                    <span className="truncate font-medium text-[#1C1917]">
+                      {transaction.attachmentName ?? "Struk terlampir"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="receipt-edit-file"
+                        className="font-semibold text-[#14532D] hover:underline cursor-pointer"
+                      >
+                        Ganti
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setRemoveExistingAttachment(true)}
+                        className="font-semibold text-[#B91C1C] hover:underline cursor-pointer"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="receipt-edit-file"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#E3D4BA] bg-[#FAF0DD]/40 px-3.5 py-2.5 text-xs font-medium text-[#57534E] hover:border-[#14532D]/40 cursor-pointer"
+                  >
+                    <Paperclip className="h-3.5 w-3.5 text-[#78716C]" />
+                    <span>
+                      {compressingEditImage
+                        ? "Mengoptimalkan foto struk..."
+                        : "Tambah / ganti foto struk atau PDF"}
+                    </span>
+                  </label>
+                )}
+              </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E7E2D8]">
                 <Button

@@ -14,6 +14,9 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -179,35 +182,61 @@ function CategoryBreakdownPanel({
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Proportion Bars */}
-          <div className="space-y-2.5">
-            {items.map((item) => (
-              <div key={item.categoryId} className="space-y-1">
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full print:[print-color-adjust:exact]"
-                      style={{ backgroundColor: item.categoryColor }}
-                    />
-                    <span className="truncate font-medium text-[#1C1917]">
-                      {item.categoryName}
+          {/* Donut Ring Chart + Proportion Bars */}
+          <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-12">
+            <div className="no-print mx-auto h-36 w-36 sm:col-span-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={items}
+                    dataKey="total"
+                    nameKey="categoryName"
+                    innerRadius={38}
+                    outerRadius={62}
+                    paddingAngle={2}
+                    stroke="#FFFDF8"
+                    strokeWidth={2}
+                  >
+                    {items.map((item) => (
+                      <Cell
+                        key={item.categoryId}
+                        fill={item.categoryColor || "#14532D"}
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="space-y-2.5 sm:col-span-8 print:col-span-12">
+              {items.map((item) => (
+                <div key={item.categoryId} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full print:[print-color-adjust:exact]"
+                        style={{ backgroundColor: item.categoryColor }}
+                      />
+                      <span className="truncate font-medium text-[#1C1917]">
+                        {item.categoryName}
+                      </span>
+                    </div>
+                    <span className="tnum shrink-0 font-medium text-[#57534E]">
+                      {item.percentage}%
                     </span>
                   </div>
-                  <span className="tnum shrink-0 font-medium text-[#57534E]">
-                    {item.percentage}%
-                  </span>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#EFECE4]">
+                    <div
+                      className="h-full rounded-full print:[print-color-adjust:exact]"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, item.percentage))}%`,
+                        backgroundColor: item.categoryColor,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-[#EFECE4]">
-                  <div
-                    className="h-full rounded-full print:[print-color-adjust:exact]"
-                    style={{
-                      width: `${Math.min(100, Math.max(0, item.percentage))}%`,
-                      backgroundColor: item.categoryColor,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Category Summary Table */}

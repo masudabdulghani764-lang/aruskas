@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { deleteAttachmentQuietly } from "@/lib/attachments";
+import {
+  deleteAttachmentQuietly,
+  prepareAttachmentForDb,
+} from "@/lib/attachments";
 import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
-import { handleApiError } from "@/lib/errors";
+import { AppError, handleApiError } from "@/lib/errors";
 import {
   deleteTransaction,
   getTransactionById,
   updateTransaction,
+  type UpdateTransactionInput,
 } from "@/lib/transactions";
 import { indonesianEnumErrorMap } from "@/lib/wallets";
 
@@ -75,9 +79,18 @@ const updateTransactionSchema = z.object(
         "Format tanggal transaksi tidak valid (gunakan YYYY-MM-DD)."
       )
       .optional(),
+    removeAttachment: z.boolean().optional(),
   },
   { invalid_type_error: "Format data permintaan tidak valid." }
 );
+
+function formStr(formData: FormData, key: string): string | undefined {
+  const val = formData.get(key);
+  if (typeof val !== "string") {
+    return undefined;
+  }
+  return val;
+}
 
 export async function GET(
   _request: Request,
@@ -101,14 +114,76 @@ export async function PATCH(
   try {
     const user = await requireCurrentUser();
     const { id } = await context.params;
-    const body = await parseJsonBody(request);
-    const parsed = updateTransactionSchema.parse(body);
+    const contentType = request.headers.get("content-type") ?? "";
+
+    let updateInput: UpdateTransactionInput;
+
+    if (contentType.includes("multipart/form-data")) {
+      let formData: FormData;
+      try {
+        formData = await request.formData();
+      } catch {
+        throw new AppError(400, "Format form-data tidak valid.");
+      }
+
+      const rawAmountStr = formStr(formData, "amount");
+      const rawAmount =
+        rawAmountStr !== undefined && rawAmountStr.trim() !== ""
+          ? Number(rawAmountStr.trim())
+          : undefined;
+
+      const parsed = updateTransactionSchema.parse({
+        walletId: formStr(formData, "walletId"),
+        targetWalletId: formStr(formData, "targetWalletId"),
+        categoryId: formStr(formData, "categoryId"),
+        type: formStr(formData, "type"),
+        amount: rawAmount,
+        title: formStr(formData, "title"),
+        notes: formStr(formData, "notes"),
+        paymentMethod: formStr(formData, "paymentMethod"),
+        occurredAt: formStr(formData, "occurredAt"),
+        removeAttachment: formStr(formData, "removeAttachment") === "true",
+      });
+
+      const { removeAttachment, ...rest } = parsed;
+      updateInput = { ...rest };
+
+      const fileEntry = formData.get("attachment");
+      if (fileEntry instanceof File && fileEntry.size > 0) {
+        const buffer = new Uint8Array(await fileEntry.arrayBuffer());
+        const saved = prepareAttachmentForDb({
+          name: fileEntry.name,
+          type: fileEntry.type,
+          buffer,
+        });
+        updateInput.attachmentPath = saved.path;
+        updateInput.attachmentName = saved.name;
+        updateInput.attachmentMime = saved.mime;
+        updateInput.attachmentData = saved.dataBase64;
+      } else if (removeAttachment) {
+        updateInput.attachmentPath = null;
+        updateInput.attachmentName = null;
+        updateInput.attachmentMime = null;
+        updateInput.attachmentData = null;
+      }
+    } else {
+      const body = await parseJsonBody(request);
+      const parsed = updateTransactionSchema.parse(body);
+      const { removeAttachment, ...rest } = parsed;
+      updateInput = { ...rest };
+      if (removeAttachment) {
+        updateInput.attachmentPath = null;
+        updateInput.attachmentName = null;
+        updateInput.attachmentMime = null;
+        updateInput.attachmentData = null;
+      }
+    }
 
     const transaction = await updateTransaction(
       await getDb(),
       id,
       user.id,
-      parsed
+      updateInput
     );
     return NextResponse.json({ transaction });
   } catch (err) {

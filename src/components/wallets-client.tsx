@@ -153,6 +153,9 @@ export function WalletsClient({
     null
   );
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(
+    null
+  );
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
@@ -535,6 +538,41 @@ export function WalletsClient({
       toast.error("Terjadi gangguan jaringan saat mengeluarkan anggota.");
     } finally {
       setRemovingUserId(null);
+    }
+  }
+
+  async function handleChangeMemberRole(
+    userId: string,
+    newRole: "editor" | "viewer"
+  ) {
+    if (!managedWallet || managedWallet.role !== "owner") {
+      return;
+    }
+
+    setUpdatingRoleUserId(userId);
+    try {
+      const res = await fetch(
+        `/api/wallets/${encodeURIComponent(managedWallet.id)}/members/${encodeURIComponent(userId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: newRole }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Gagal mengubah peran anggota.");
+        return;
+      }
+
+      toast.success(
+        `Peran anggota berhasil diubah menjadi ${newRole === "editor" ? "Editor" : "Pemantau"}.`
+      );
+      triggerRefresh();
+    } catch {
+      toast.error("Terjadi gangguan jaringan saat mengubah peran anggota.");
+    } finally {
+      setUpdatingRoleUserId(null);
     }
   }
 
@@ -1184,7 +1222,23 @@ export function WalletsClient({
                       </div>
 
                       {!isSelf && member.role !== "owner" && (
-                        <div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <select
+                            aria-label={`Ubah peran ${member.name}`}
+                            disabled={updatingRoleUserId === member.userId}
+                            value={member.role}
+                            onChange={(e) =>
+                              void handleChangeMemberRole(
+                                member.userId,
+                                e.target.value as "editor" | "viewer"
+                              )
+                            }
+                            className="h-8 rounded-lg border border-[#E3D4BA] bg-[#FFFFFF] px-2 text-xs font-medium text-[#1C1917] focus:border-[#14532D] focus:outline-none cursor-pointer"
+                          >
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Pemantau</option>
+                          </select>
+
                           {isConfirming ? (
                             <div className="flex items-center gap-1.5">
                               <Button

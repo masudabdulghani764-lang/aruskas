@@ -89,10 +89,37 @@ export function formatMonthID(ym: string): string {
   return `${monthLabel} ${year}`;
 }
 
+function getWibDateParts(now: Date = new Date()): {
+  year: string;
+  month: string;
+  day: string;
+} {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+
+  const year = parts.find((p) => p.type === "year")?.value ?? String(now.getFullYear());
+  const month =
+    parts.find((p) => p.type === "month")?.value ??
+    String(now.getMonth() + 1).padStart(2, "0");
+  const day =
+    parts.find((p) => p.type === "day")?.value ??
+    String(now.getDate()).padStart(2, "0");
+
+  return { year, month, day };
+}
+
 /**
- * Returns the `YYYY-MM` string for the provided date (defaults to today).
+ * Returns the `YYYY-MM` string for the provided date (defaults to today in WIB `Asia/Jakarta`).
  */
-export function getCurrentMonthYM(date: Date = new Date()): string {
+export function getCurrentMonthYM(date?: Date): string {
+  if (!date) {
+    const { year, month } = getWibDateParts();
+    return `${year}-${month}`;
+  }
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
@@ -118,9 +145,13 @@ export function getPreviousMonthYM(ym: string): string {
 }
 
 /**
- * Returns the `YYYY-MM-DD` ISO date string for the provided date (defaults to today).
+ * Returns the `YYYY-MM-DD` ISO date string for the provided date (defaults to today in WIB `Asia/Jakarta`).
  */
-export function getTodayISO(date: Date = new Date()): string {
+export function getTodayISO(date?: Date): string {
+  if (!date) {
+    const { year, month, day } = getWibDateParts();
+    return `${year}-${month}-${day}`;
+  }
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");

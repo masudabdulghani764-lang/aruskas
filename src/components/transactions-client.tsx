@@ -153,6 +153,7 @@ export function TransactionsClient({
 
   // Ledger state
   const [items, setItems] = useState<TransactionView[]>(initialItems ?? []);
+  const [visibleCount, setVisibleCount] = useState<number>(40);
   const [summary, setSummary] = useState<TransactionsSummary>(
     initialSummary ?? {
       income: 0,
@@ -163,6 +164,46 @@ export function TransactionsClient({
   );
   const [loadingTx, setLoadingTx] = useState(!hasInitialTx);
   const [txError, setTxError] = useState<string | null>(null);
+
+  const visibleItems = useMemo(
+    () => items.slice(0, visibleCount),
+    [items, visibleCount]
+  );
+
+  const groupedByDate = useMemo(() => {
+    const todayIso = getTodayISO();
+    const groups: Array<{
+      date: string;
+      label: string;
+      dailyNet: number;
+      rows: TransactionView[];
+    }> = [];
+    const map = new Map<string, (typeof groups)[number]>();
+
+    for (const tx of visibleItems) {
+      let group = map.get(tx.occurredAt);
+      if (!group) {
+        const prefix =
+          tx.occurredAt === todayIso ? "Hari Ini · " : "";
+        group = {
+          date: tx.occurredAt,
+          label: `${prefix}${formatDateID(tx.occurredAt)}`,
+          dailyNet: 0,
+          rows: [],
+        };
+        map.set(tx.occurredAt, group);
+        groups.push(group);
+      }
+      if (tx.type === "income") {
+        group.dailyNet += tx.amount;
+      } else if (tx.type === "expense") {
+        group.dailyNet -= tx.amount;
+      }
+      group.rows.push(tx);
+    }
+
+    return groups;
+  }, [visibleItems]);
 
   // Receipt Drawer
   const [selectedTx, setSelectedTx] = useState<TransactionView | null>(null);
@@ -345,6 +386,7 @@ export function TransactionsClient({
       }
 
       setItems(Array.isArray(data.items) ? (data.items as TransactionView[]) : []);
+      setVisibleCount(40);
       if (data.summary) {
         setSummary(data.summary as TransactionsSummary);
       }
@@ -962,186 +1004,236 @@ export function TransactionsClient({
             </Card>
           ) : (
             <Card padding="none" className="overflow-hidden">
-              {/* Desktop Crisp Table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-[#E7E2D8] bg-[#F7F5F0]/80 text-[11px] font-semibold uppercase tracking-wider text-[#78716C]">
-                      <th className="py-3 pl-5 pr-3">Tanggal</th>
-                      <th className="py-3 px-3">Transaksi</th>
-                      <th className="py-3 px-3">Kategori</th>
-                      <th className="py-3 px-3">Dompet</th>
-                      <th className="py-3 px-3">Pencatat</th>
-                      <th className="py-3 pl-3 pr-5 text-right">Nominal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E7E2D8] text-sm">
-                    {items.map((tx) => {
-                      const isIncome = tx.type === "income";
-                      const isTransfer = tx.type === "transfer";
-                      const amountStr = isIncome
-                        ? formatIDR(tx.amount, { signed: true })
-                        : isTransfer
-                          ? formatIDR(tx.amount)
-                          : formatIDR(-tx.amount, { signed: true });
-                      const amountClass = isIncome
-                        ? "text-[#15803D]"
-                        : isTransfer
-                          ? "text-[#44403C]"
-                          : "text-[#B91C1C]";
-
-                      return (
-                        <tr
-                          key={tx.id}
-                          onClick={() => {
-                            setSelectedTx(tx);
-                            setDrawerOpen(true);
-                          }}
-                          className="transition-colors hover:bg-[#F7F5F0] cursor-pointer"
-                        >
-                          <td className="tnum whitespace-nowrap py-3.5 pl-5 pr-3 text-xs text-[#57534E]">
-                            {formatDateID(tx.occurredAt)}
-                          </td>
-
-                          <td className="py-3.5 px-3 max-w-[260px]">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate font-medium text-[#1C1917]">
-                                {tx.title}
-                              </span>
-                              {tx.hasAttachment && (
-                                <Paperclip
-                                  aria-label="Ada lampiran nota"
-                                  className="h-3.5 w-3.5 shrink-0 text-[#78716C]"
-                                />
+              {/* Grouped by Date — Desktop & Mobile */}
+              <div className="divide-y divide-[#E3D4BA]">
+                {groupedByDate.map((group) => (
+                  <div key={group.date}>
+                    {/* Daily Date Group Header */}
+                    <div className="flex items-center justify-between gap-2 bg-[#FAF0DD]/80 px-4 py-2 text-xs border-b border-[#E3D4BA]/70">
+                      <span className="font-semibold text-[#1C1917]">
+                        {group.label}
+                      </span>
+                      <div className="flex items-center gap-2 text-[11px] text-[#78716C]">
+                        <span className="tnum">
+                          {group.rows.length} transaksi
+                        </span>
+                        {group.dailyNet !== 0 && (
+                          <>
+                            <span>·</span>
+                            <span
+                              className={cn(
+                                "tnum font-semibold",
+                                group.dailyNet > 0
+                                  ? "text-[#15803D]"
+                                  : "text-[#B91C1C]"
                               )}
-                            </div>
-                            {tx.notes && (
-                              <p className="truncate text-xs text-[#78716C] mt-0.5">
-                                {tx.notes}
-                              </p>
-                            )}
-                          </td>
-
-                          <td className="py-3.5 px-3 whitespace-nowrap">
-                            {isTransfer ? (
-                              <Badge variant="neutral">
-                                <ArrowLeftRight className="h-3 w-3" />
-                                <span>Transfer</span>
-                              </Badge>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E7E2D8] bg-[#F7F5F0] px-2.5 py-0.5 text-xs font-medium text-[#57534E]">
-                                <span
-                                  className="h-2 w-2 rounded-full"
-                                  style={{
-                                    backgroundColor:
-                                      tx.categoryColor ?? "#78716C",
-                                  }}
-                                />
-                                <span>
-                                  {tx.categoryName ?? "Tanpa Kategori"}
-                                </span>
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="py-3.5 px-3 text-xs text-[#57534E] max-w-[200px]">
-                            <span className="block truncate">
-                              {isTransfer
-                                ? `${tx.walletName} → ${tx.targetWalletName ?? tx.counterpartyWalletName ?? "-"}`
-                                : tx.walletName}
+                            >
+                              {formatIDR(group.dailyNet, { signed: true })}
                             </span>
-                          </td>
-
-                          <td className="py-3.5 px-3 whitespace-nowrap text-xs text-[#78716C]">
-                            {tx.recorderName}
-                          </td>
-
-                          <td
-                            className={cn(
-                              "tnum whitespace-nowrap py-3.5 pl-3 pr-5 text-right font-semibold",
-                              amountClass
-                            )}
-                          >
-                            {amountStr}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Card Rows */}
-              <div className="divide-y divide-[#E7E2D8] md:hidden">
-                {items.map((tx) => {
-                  const isIncome = tx.type === "income";
-                  const isTransfer = tx.type === "transfer";
-                  const amountStr = isIncome
-                    ? formatIDR(tx.amount, { signed: true })
-                    : isTransfer
-                      ? formatIDR(tx.amount)
-                      : formatIDR(-tx.amount, { signed: true });
-                  const amountClass = isIncome
-                    ? "text-[#15803D]"
-                    : isTransfer
-                      ? "text-[#44403C]"
-                      : "text-[#B91C1C]";
-
-                  return (
-                    <button
-                      key={tx.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedTx(tx);
-                        setDrawerOpen(true);
-                      }}
-                      className="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-[#F7F5F0] cursor-pointer"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-medium text-[#1C1917]">
-                            {tx.title}
-                          </span>
-                          {tx.hasAttachment && (
-                            <Paperclip className="h-3.5 w-3.5 shrink-0 text-[#78716C]" />
-                          )}
-                        </div>
-                        {tx.notes && (
-                          <p className="truncate text-xs text-[#78716C]">
-                            {tx.notes}
-                          </p>
+                          </>
                         )}
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#78716C]">
-                          <span className="tnum">
-                            {formatDateID(tx.occurredAt)}
-                          </span>
-                          <span>·</span>
-                          <span>
-                            {isTransfer
-                              ? `${tx.walletName} → ${tx.targetWalletName ?? tx.counterpartyWalletName ?? "-"}`
-                              : tx.walletName}
-                          </span>
-                          <span>·</span>
-                          <span>
-                            {isTransfer
-                              ? "Transfer"
-                              : (tx.categoryName ?? "Tanpa Kategori")}
-                          </span>
-                        </div>
                       </div>
+                    </div>
 
-                      <div className="shrink-0 text-right">
-                        <p className={cn("tnum text-sm font-semibold", amountClass)}>
-                          {amountStr}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-[#78716C]">
-                          {tx.recorderName}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
+                    {/* Desktop Crisp Table Rows for this Date */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <tbody className="divide-y divide-[#E7E2D8] text-sm">
+                          {group.rows.map((tx) => {
+                            const isIncome = tx.type === "income";
+                            const isTransfer = tx.type === "transfer";
+                            const amountStr = isIncome
+                              ? formatIDR(tx.amount, { signed: true })
+                              : isTransfer
+                                ? formatIDR(tx.amount)
+                                : formatIDR(-tx.amount, { signed: true });
+                            const amountClass = isIncome
+                              ? "text-[#15803D]"
+                              : isTransfer
+                                ? "text-[#44403C]"
+                                : "text-[#B91C1C]";
+
+                            return (
+                              <tr
+                                key={tx.id}
+                                onClick={() => {
+                                  setSelectedTx(tx);
+                                  setDrawerOpen(true);
+                                }}
+                                className="transition-colors hover:bg-[#FAF0DD]/45 cursor-pointer"
+                              >
+                                <td className="py-3.5 pl-5 pr-3 w-[34%] max-w-[280px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="truncate font-medium text-[#1C1917]">
+                                      {tx.title}
+                                    </span>
+                                    {tx.hasAttachment && (
+                                      <Paperclip
+                                        aria-label="Ada lampiran nota"
+                                        className="h-3.5 w-3.5 shrink-0 text-[#78716C]"
+                                      />
+                                    )}
+                                  </div>
+                                  {tx.notes && (
+                                    <p className="truncate text-xs text-[#78716C] mt-0.5">
+                                      {tx.notes}
+                                    </p>
+                                  )}
+                                </td>
+
+                                <td className="py-3.5 px-3 whitespace-nowrap w-[20%]">
+                                  {isTransfer ? (
+                                    <Badge variant="neutral">
+                                      <ArrowLeftRight className="h-3 w-3" />
+                                      <span>Transfer</span>
+                                    </Badge>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E3D4BA] bg-[#FAF0DD]/50 px-2.5 py-0.5 text-xs font-medium text-[#57534E]">
+                                      <span
+                                        className="h-2 w-2 rounded-full"
+                                        style={{
+                                          backgroundColor:
+                                            tx.categoryColor ?? "#78716C",
+                                        }}
+                                      />
+                                      <span>
+                                        {tx.categoryName ?? "Tanpa Kategori"}
+                                      </span>
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td className="py-3.5 px-3 text-xs text-[#57534E] w-[22%] max-w-[200px]">
+                                  <span className="block truncate">
+                                    {isTransfer
+                                      ? `${tx.walletName} → ${tx.targetWalletName ?? tx.counterpartyWalletName ?? "-"}`
+                                      : tx.walletName}
+                                  </span>
+                                </td>
+
+                                <td className="py-3.5 px-3 whitespace-nowrap text-xs text-[#78716C] w-[10%]">
+                                  {tx.recorderName}
+                                </td>
+
+                                <td
+                                  className={cn(
+                                    "tnum whitespace-nowrap py-3.5 pl-3 pr-5 text-right font-semibold w-[14%]",
+                                    amountClass
+                                  )}
+                                >
+                                  {amountStr}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Card Rows for this Date */}
+                    <div className="divide-y divide-[#E7E2D8] md:hidden">
+                      {group.rows.map((tx) => {
+                        const isIncome = tx.type === "income";
+                        const isTransfer = tx.type === "transfer";
+                        const amountStr = isIncome
+                          ? formatIDR(tx.amount, { signed: true })
+                          : isTransfer
+                            ? formatIDR(tx.amount)
+                            : formatIDR(-tx.amount, { signed: true });
+                        const amountClass = isIncome
+                          ? "text-[#15803D]"
+                          : isTransfer
+                            ? "text-[#44403C]"
+                            : "text-[#B91C1C]";
+
+                        return (
+                          <button
+                            key={tx.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTx(tx);
+                              setDrawerOpen(true);
+                            }}
+                            className="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-[#FAF0DD]/45 cursor-pointer"
+                          >
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate text-sm font-medium text-[#1C1917]">
+                                  {tx.title}
+                                </span>
+                                {tx.hasAttachment && (
+                                  <Paperclip className="h-3.5 w-3.5 shrink-0 text-[#78716C]" />
+                                )}
+                              </div>
+                              {tx.notes && (
+                                <p className="truncate text-xs text-[#78716C]">
+                                  {tx.notes}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#78716C]">
+                                <span>
+                                  {isTransfer
+                                    ? `${tx.walletName} → ${tx.targetWalletName ?? tx.counterpartyWalletName ?? "-"}`
+                                    : tx.walletName}
+                                </span>
+                                <span>·</span>
+                                <span className="inline-flex items-center gap-1">
+                                  {!isTransfer && (
+                                    <span
+                                      className="h-1.5 w-1.5 rounded-full"
+                                      style={{
+                                        backgroundColor:
+                                          tx.categoryColor ?? "#78716C",
+                                      }}
+                                    />
+                                  )}
+                                  <span>
+                                    {isTransfer
+                                      ? "Transfer"
+                                      : (tx.categoryName ?? "Tanpa Kategori")}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right">
+                              <p
+                                className={cn(
+                                  "tnum text-sm font-semibold",
+                                  amountClass
+                                )}
+                              >
+                                {amountStr}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-[#78716C]">
+                                {tx.recorderName}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
+
+              {/* Pagination Footer ("Tampilkan Lebih Banyak") */}
+              {items.length > visibleCount && (
+                <div className="flex flex-col items-center justify-between gap-2 border-t border-[#E3D4BA] bg-[#FAF0DD]/45 px-4 py-3.5 sm:flex-row">
+                  <p className="tnum text-xs text-[#57534E]">
+                    Menampilkan <strong>{visibleItems.length}</strong> dari{" "}
+                    <strong>{items.length}</strong> transaksi
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setVisibleCount((prev) => prev + 40)}
+                  >
+                    Tampilkan Lebih Banyak (+40)
+                  </Button>
+                </div>
+              )}
             </Card>
           )}
         </div>

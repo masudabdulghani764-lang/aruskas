@@ -19,7 +19,13 @@ import { createSavingsGoal } from "@/lib/goals";
 import { createRecurringRule } from "@/lib/recurring";
 import { enforceRateLimit, isAllowedOrigin } from "@/lib/security";
 import { createTransaction, listTransactions } from "@/lib/transactions";
-import { createWallet, listUserWallets } from "@/lib/wallets";
+import {
+  acceptWalletInvite,
+  createWallet,
+  createWalletInvite,
+  listUserWallets,
+  updateWalletMemberRole,
+} from "@/lib/wallets";
 
 describe("Production Security Hardening, Backup Restore & Cron", () => {
   test("enforceRateLimit blocks requests exceeding threshold with AppError 429", async () => {
@@ -222,6 +228,27 @@ describe("Production Security Hardening, Backup Restore & Cron", () => {
 
       const targetTx = await listTransactions(db, target.user.id, {});
       expect(targetTx.items).toHaveLength(2);
+
+      // Verify updateWalletMemberRole switches editor <-> viewer cleanly
+      const invite = await createWalletInvite(db, bca.id, source.user.id, {
+        email: target.user.email,
+        role: "editor",
+      });
+      await acceptWalletInvite(db, invite.token, target.user);
+
+      const changed = await updateWalletMemberRole(
+        db,
+        bca.id,
+        source.user.id,
+        target.user.id,
+        "viewer"
+      );
+      expect(changed.role).toBe("viewer");
+
+      const afterSwitch = (await listUserWallets(db, target.user.id)).find(
+        (w) => w.id === bca.id
+      );
+      expect(afterSwitch?.role).toBe("viewer");
     } finally {
       await close();
     }
