@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CheckCircle2,
   FileSpreadsheet,
+  Instagram,
   Lock,
   Printer,
   ReceiptText,
@@ -577,7 +578,18 @@ export default async function LandingPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-5 text-xs font-medium text-[#57534E]">
+          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-[#57534E]">
+            <a
+              href="https://instagram.com/_ud_ag"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Instagram @_ud_ag"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#D4CBB9] bg-[#FAF8F4] px-3 py-1.5 text-xs font-semibold text-[#1C1917] transition-colors hover:border-[#14532D] hover:bg-[#14532D] hover:text-[#FFFFFF]"
+            >
+              <Instagram className="h-3.5 w-3.5" />
+              <span>@_ud_ag</span>
+            </a>
+
             {user ? (
               <Link
                 href="/dashboard"
