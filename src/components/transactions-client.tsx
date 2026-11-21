@@ -99,21 +99,49 @@ function formatDigitsIDR(digits: string): string {
 export function TransactionsClient({
   initialTab = "history",
   currentUserId,
+  initialFrom,
+  initialTo,
+  initialWallets,
+  initialCategories,
+  initialItems,
+  initialSummary,
+  initialRules,
 }: {
   initialTab?: ActiveTab;
   currentUserId: string;
+  initialFrom?: string;
+  initialTo?: string;
+  initialWallets?: WalletWithRole[];
+  initialCategories?: CategoryOption[];
+  initialItems?: TransactionView[];
+  initialSummary?: TransactionsSummary;
+  initialRules?: RecurringRuleView[];
 }) {
   const { openQuickAdd, refreshTrigger, triggerRefresh } = useQuickAdd();
+
+  const hasInitialMeta = initialWallets !== undefined && initialCategories !== undefined;
+  const hasInitialTx = initialItems !== undefined && initialSummary !== undefined;
+  const hasInitialRules = initialRules !== undefined;
 
   const [tab, setTab] = useState<ActiveTab>(initialTab);
 
   // Shared metadata (wallets & categories)
-  const [wallets, setWallets] = useState<WalletWithRole[]>([]);
-  const [ownCategories, setOwnCategories] = useState<CategoryOption[]>([]);
-  const [filterCategories, setFilterCategories] = useState<CategoryOption[]>([]);
+  const [wallets, setWallets] = useState<WalletWithRole[]>(initialWallets ?? []);
+  const [ownCategories, setOwnCategories] = useState<CategoryOption[]>(
+    initialCategories ?? []
+  );
+  const [filterCategories, setFilterCategories] = useState<CategoryOption[]>(
+    initialCategories ?? []
+  );
 
   // Ledger filters
-  const defaultRange = useMemo(() => resolvePresetRange("this_month"), []);
+  const defaultRange = useMemo(
+    () =>
+      initialFrom && initialTo
+        ? { from: initialFrom, to: initialTo }
+        : resolvePresetRange("this_month"),
+    [initialFrom, initialTo]
+  );
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>("this_month");
   const [customFrom, setCustomFrom] = useState(defaultRange.from);
   const [customTo, setCustomTo] = useState(defaultRange.to);
@@ -124,14 +152,16 @@ export function TransactionsClient({
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Ledger state
-  const [items, setItems] = useState<TransactionView[]>([]);
-  const [summary, setSummary] = useState<TransactionsSummary>({
-    income: 0,
-    expense: 0,
-    net: 0,
-    count: 0,
-  });
-  const [loadingTx, setLoadingTx] = useState(true);
+  const [items, setItems] = useState<TransactionView[]>(initialItems ?? []);
+  const [summary, setSummary] = useState<TransactionsSummary>(
+    initialSummary ?? {
+      income: 0,
+      expense: 0,
+      net: 0,
+      count: 0,
+    }
+  );
+  const [loadingTx, setLoadingTx] = useState(!hasInitialTx);
   const [txError, setTxError] = useState<string | null>(null);
 
   // Receipt Drawer
@@ -139,8 +169,8 @@ export function TransactionsClient({
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Recurring rules state
-  const [rules, setRules] = useState<RecurringRuleView[]>([]);
-  const [loadingRules, setLoadingRules] = useState(true);
+  const [rules, setRules] = useState<RecurringRuleView[]>(initialRules ?? []);
+  const [loadingRules, setLoadingRules] = useState(!hasInitialRules);
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [overrideDigits, setOverrideDigits] = useState<Record<string, string>>(
     {}
@@ -193,8 +223,11 @@ export function TransactionsClient({
   }, []);
 
   useEffect(() => {
+    if (hasInitialMeta && refreshTrigger === 0) {
+      return;
+    }
     void loadMeta();
-  }, [loadMeta, refreshTrigger]);
+  }, [loadMeta, refreshTrigger, hasInitialMeta]);
 
   // Sync filterCategories when walletFilter changes (supports shared wallet owner categories)
   useEffect(() => {
@@ -342,12 +375,38 @@ export function TransactionsClient({
     debouncedSearch,
   ]);
 
+  const hasLeftInitialTxRef = useRef(false);
+
   useEffect(() => {
+    const isInitialQuery =
+      hasInitialTx &&
+      !hasLeftInitialTxRef.current &&
+      refreshTrigger === 0 &&
+      periodPreset === "this_month" &&
+      typeFilter === "all" &&
+      walletFilter === "" &&
+      categoryFilter === "" &&
+      debouncedSearch === "";
+
+    if (isInitialQuery) {
+      return;
+    }
+    hasLeftInitialTxRef.current = true;
+
     void loadTransactions();
     return () => {
       txAbortRef.current?.abort();
     };
-  }, [loadTransactions, refreshTrigger]);
+  }, [
+    loadTransactions,
+    refreshTrigger,
+    hasInitialTx,
+    periodPreset,
+    typeFilter,
+    walletFilter,
+    categoryFilter,
+    debouncedSearch,
+  ]);
 
   // Fetch recurring rules
   const loadRecurring = useCallback(async () => {
@@ -375,8 +434,11 @@ export function TransactionsClient({
   }, []);
 
   useEffect(() => {
+    if (hasInitialRules && refreshTrigger === 0) {
+      return;
+    }
     void loadRecurring();
-  }, [loadRecurring, refreshTrigger]);
+  }, [loadRecurring, refreshTrigger, hasInitialRules]);
 
   // Owner wallets & categories for "+ Tambah Jadwal Rutin" modal
   const ownerWallets = useMemo(

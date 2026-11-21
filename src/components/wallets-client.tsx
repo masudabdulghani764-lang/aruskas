@@ -102,12 +102,23 @@ function sanitizeDigitsAllowZero(raw: string): string {
  * Dompet & Keluarga client view with incoming invitations, active & watched wallet grids,
  * create wallet modal, and owner-only wallet & family member management modal.
  */
-export function WalletsClient({ currentUserId }: { currentUserId: string }) {
+export function WalletsClient({
+  currentUserId,
+  initialWallets,
+  initialInvites,
+}: {
+  currentUserId: string;
+  initialWallets?: WalletWithRole[];
+  initialInvites?: PendingInviteView[];
+}) {
   const { openQuickAdd, refreshTrigger, triggerRefresh } = useQuickAdd();
 
-  const [wallets, setWallets] = useState<WalletWithRole[]>([]);
-  const [pendingInvites, setPendingInvites] = useState<PendingInviteView[]>([]);
-  const [loading, setLoading] = useState(true);
+  const hasInitialData = initialWallets !== undefined;
+  const [wallets, setWallets] = useState<WalletWithRole[]>(initialWallets ?? []);
+  const [pendingInvites, setPendingInvites] = useState<PendingInviteView[]>(
+    initialInvites ?? []
+  );
+  const [loading, setLoading] = useState(!hasInitialData);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
@@ -187,8 +198,11 @@ export function WalletsClient({ currentUserId }: { currentUserId: string }) {
   }, []);
 
   useEffect(() => {
+    if (hasInitialData && refreshTrigger === 0) {
+      return;
+    }
     void loadData();
-  }, [loadData, refreshTrigger]);
+  }, [loadData, refreshTrigger, hasInitialData]);
 
   const activeWallets = useMemo(
     () =>

@@ -2,13 +2,12 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { Button, type ButtonSize, type ButtonVariant } from "@/components/ui/primitives";
 
 export interface LandingDemoCtaProps {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
+  variant?: "secondary" | "primary" | "forest-outline" | "ivory";
+  size?: "md" | "lg";
   label?: string;
   nextPath?: string;
   className?: string;
@@ -16,15 +15,14 @@ export interface LandingDemoCtaProps {
 }
 
 /**
- * 1-click button that logs into the seeded 6-month Indonesian demo workspace
- * (`demo@aruskas.id`) and navigates straight to the app.
+ * Lightweight 1-click demo login button (zero framer-motion dependency so `/` loads fast).
  */
 export function LandingDemoCta({
   variant = "secondary",
   size = "lg",
   label = "Coba Akun Demo (1-Klik)",
   nextPath = "/dashboard",
-  className,
+  className = "",
   showIcon = true,
 }: LandingDemoCtaProps) {
   const router = useRouter();
@@ -52,19 +50,40 @@ export function LandingDemoCta({
     }
   }
 
+  const sizeClass =
+    size === "md"
+      ? "h-10 px-4 text-sm rounded-xl"
+      : "h-11 px-5 text-sm rounded-xl";
+
+  const variantClass =
+    variant === "primary"
+      ? "bg-[#14532D] text-[#FFFFFF] hover:bg-[#166534] border border-transparent"
+      : variant === "ivory"
+        ? "bg-[#F7F5F0] text-[#113B26] hover:bg-[#FFFFFF] border border-transparent font-semibold"
+        : variant === "forest-outline"
+          ? "bg-[#1B5E3A]/60 text-[#F7F5F0] border border-[#3B825B] hover:bg-[#1E6A42]"
+          : "bg-[#FFFFFF] text-[#1C1917] border border-[#D9D1C3] hover:bg-[#EFECE4] hover:border-[#C9BFA9]";
+
+  const iconColor =
+    variant === "forest-outline"
+      ? "text-[#E5B869]"
+      : variant === "primary"
+        ? "text-[#DCFCE7]"
+        : "text-[#B45309]";
+
   return (
-    <Button
+    <button
       type="button"
-      variant={variant}
-      size={size}
-      loading={loading}
+      disabled={loading}
       onClick={handleDemoLogin}
-      className={className}
+      className={`inline-flex items-center justify-center gap-2 font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${sizeClass} ${variantClass} ${className}`}
     >
-      {showIcon && !loading && (
-        <Sparkles className="h-4 w-4 text-[#14532D] shrink-0" />
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+      ) : (
+        showIcon && <Sparkles className={`h-4 w-4 shrink-0 ${iconColor}`} />
       )}
       <span>{loading ? "Menyiapkan Demo..." : label}</span>
-    </Button>
+    </button>
   );
 }

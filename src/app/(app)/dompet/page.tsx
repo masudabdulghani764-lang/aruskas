@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { WalletsClient } from "@/components/wallets-client";
+import { getDb } from "@/db";
 import { getCurrentUser } from "@/lib/auth";
+import { listPendingInvitesForEmail, listUserWallets } from "@/lib/wallets";
 
 export const metadata: Metadata = {
   title: "Dompet & Keluarga",
@@ -15,5 +17,15 @@ export default async function DompetPage() {
     redirect("/masuk");
   }
 
-  return <WalletsClient currentUserId={user.id} />;
+  const db = getDb();
+  const initialWallets = listUserWallets(db, user.id, { includeArchived: true });
+  const initialInvites = listPendingInvitesForEmail(db, user.email);
+
+  return (
+    <WalletsClient
+      currentUserId={user.id}
+      initialWallets={initialWallets}
+      initialInvites={initialInvites}
+    />
+  );
 }

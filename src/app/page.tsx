@@ -1,90 +1,67 @@
 import Link from "next/link";
 import {
-  ArrowLeftRight,
   ArrowRight,
   CheckCircle2,
   FileSpreadsheet,
+  Lock,
+  Printer,
+  ReceiptText,
+  Repeat,
+  ShieldCheck,
   Target,
   Users,
+  Wallet,
 } from "lucide-react";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
+import { LandingShowcase } from "@/components/landing-showcase";
 import { getCurrentUser } from "@/lib/auth";
-import { formatIDR } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const FEATURE_PILLARS = [
-  {
-    title: "Pencatatan Masuk & Keluar Presisi",
-    description:
-      "Catat pemasukan, pengeluaran, dan transfer antar dompet dengan pembaruan saldo atomik, lampiran nota, serta pengingat tagihan berulang.",
-    icon: ArrowLeftRight,
-  },
-  {
-    title: "Dompet Bersama Keluarga",
-    description:
-      "Kelola kas rumah tangga bersama pasangan atau anggota keluarga dengan peran Pemilik, Editor, dan Pemantau sambil menjaga privasi dompet pribadi.",
-    icon: Users,
-  },
-  {
-    title: "Anggaran & Target Tabungan",
-    description:
-      "Tetapkan batas anggaran bulanan per kategori dengan peringatan 80% serta lacak progres dana darurat atau tujuan tabungan secara terukur.",
-    icon: Target,
-  },
-  {
-    title: "Laporan Visual + CSV/PDF A4",
-    description:
-      "Pantau saldo awal hingga saldo akhir, rasio menabung, grafik tren 6 bulan, ekspor CSV siap buka di Excel, dan cetak PDF berformat kertas A4.",
-    icon: FileSpreadsheet,
-  },
-] as const;
-
-const SAMPLE_TRANSACTIONS = [
-  {
-    title: "Gaji Bulanan",
-    meta: "BCA Utama · 1 Nov 2026",
-    amount: formatIDR(14_500_000, { signed: true }),
-    amountColor: "text-[#15803D]",
-    tag: "Pemasukan",
-  },
-  {
-    title: "Belanja Mingguan Pasar & Dapur",
-    meta: "Kas Rumah Tangga (Bersama) · 14 Nov 2026",
-    amount: formatIDR(-645_000, { signed: true }),
-    amountColor: "text-[#B91C1C]",
-    tag: "Pengeluaran",
-  },
-  {
-    title: "Setoran Dana Darurat",
-    meta: "BCA Utama → Tabungan · 18 Nov 2026",
-    amount: formatIDR(2_500_000),
-    amountColor: "text-[#44403C]",
-    tag: "Transfer",
-  },
-] as const;
 
 export default async function LandingPage() {
   const user = await getCurrentUser();
 
   return (
     <div className="min-h-screen bg-[#F7F5F0] text-[#1C1917]">
-      {/* Top Bar */}
-      <header className="border-b border-[#E7E2D8] bg-[#FFFFFF]/90 backdrop-blur-xs">
+      {/* Sticky Warm Ivory Top Bar */}
+      <header className="sticky top-0 z-30 border-b border-[#E5DFD3] bg-[#F7F5F0]/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
-          <Link
-            href="/"
-            className="font-display text-2xl font-semibold tracking-tight text-[#14532D]"
-          >
-            ArusKas.
-          </Link>
+          <div className="flex items-center gap-8">
+            <Link
+              href="/"
+              className="font-display text-2xl font-semibold tracking-tight text-[#14532D]"
+            >
+              ArusKas<span className="text-[#B45309]">.</span>
+            </Link>
 
-          <nav className="flex items-center gap-2.5 sm:gap-3">
+            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-[#57534E]">
+              <a
+                href="#keunggulan"
+                className="transition-colors hover:text-[#14532D]"
+              >
+                Keunggulan
+              </a>
+              <a
+                href="#fitur"
+                className="transition-colors hover:text-[#14532D]"
+              >
+                Fitur Lengkap
+              </a>
+              <a
+                href="#cara-kerja"
+                className="transition-colors hover:text-[#14532D]"
+              >
+                Cara Kerja
+              </a>
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-2.5 sm:gap-3">
             {user ? (
               <>
                 <span className="hidden sm:inline text-xs text-[#78716C]">
-                  Masuk sebagai{" "}
-                  <strong className="font-medium text-[#1C1917]">
+                  Halo,{" "}
+                  <strong className="font-semibold text-[#1C1917]">
                     {user.name}
                   </strong>
                 </span>
@@ -100,7 +77,7 @@ export default async function LandingPage() {
               <>
                 <Link
                   href="/masuk"
-                  className="inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-medium text-[#57534E] transition-colors hover:bg-[#EFECE4] hover:text-[#1C1917]"
+                  className="inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-medium text-[#57534E] transition-colors hover:bg-[#EAE4D8] hover:text-[#1C1917]"
                 >
                   Masuk
                 </Link>
@@ -112,223 +89,478 @@ export default async function LandingPage() {
                 </Link>
               </>
             )}
-          </nav>
+          </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <main className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
-        <section className="grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-12">
-          <div className="lg:col-span-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#E7E2D8] bg-[#FFFFFF] px-3 py-1 text-xs font-medium text-[#57534E]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#14532D]" />
-              <span>Laporan Keuangan Pribadi & Keluarga</span>
-            </div>
-
-            <h1 className="font-display mt-5 text-4xl font-medium tracking-tight text-[#1C1917] leading-[1.12] sm:text-5xl">
-              Kelola Arus Kas Pribadi &amp; Keluarga dengan Tenang.
-            </h1>
-
-            <p className="mt-5 text-base leading-relaxed text-[#57534E] sm:text-lg">
-              Pembukuan harian yang rapi, jujur terhadap angka, dan nyaman
-              dibaca. Pantau seluruh dompet, kas bersama keluarga, anggaran
-              bulanan, hingga laporan cetak A4 dalam satu ruang kerja hangat.
-            </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              {user ? (
-                <Link
-                  href="/dashboard"
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
-                >
-                  <span>Buka Dashboard</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              ) : (
-                <Link
-                  href="/daftar"
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
-                >
-                  <span>Mulai Gratis</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              )}
-
-              <LandingDemoCta variant="secondary" size="lg" />
-
-              {!user && (
-                <Link
-                  href="/masuk"
-                  className="inline-flex h-11 items-center rounded-xl px-4 text-sm font-medium text-[#57534E] transition-colors hover:bg-[#EFECE4] hover:text-[#1C1917]"
-                >
-                  Masuk
-                </Link>
-              )}
-            </div>
-
-            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[#78716C]">
-              <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[#14532D]" />
-                Akun demo siap pakai dengan data 6 bulan
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[#14532D]" />
-                Format Rupiah presisi &amp; ekspor CSV/PDF
-              </span>
-            </div>
-          </div>
-
-          {/* Right-side Warm Ivory Paper Statement Showcase Card */}
-          <div className="lg:col-span-6">
-            <div className="rounded-2xl border border-[#E7E2D8] bg-[#FFFFFF] p-5 sm:p-7">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E7E2D8] pb-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-[#78716C]">
-                    Pratinjau Lembar Keuangan
-                  </p>
-                  <p className="mt-0.5 text-sm font-semibold text-[#1C1917]">
-                    Periode November 2026
-                  </p>
+      <main>
+        {/* BAND 1: Editorial Hero with Subtle Warm Paper Tint */}
+        <section className="relative overflow-hidden border-b border-[#E7E2D8] bg-gradient-to-b from-[#FAF8F4] via-[#F7F5F0] to-[#F3EFE6]">
+          <div className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
+            <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12">
+              <div className="lg:col-span-6">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#EADBC0] bg-[#FDF8EE] px-3.5 py-1 text-xs font-semibold text-[#92400E]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#B45309]" />
+                  <span>Laporan Keuangan Pribadi &amp; Keluarga</span>
                 </div>
-                <span className="inline-flex items-center rounded-full border border-[#BBF7D0] bg-[#DCFCE7] px-2.5 py-0.5 text-xs font-medium text-[#14532D] tnum">
-                  Rasio Tabungan 34%
-                </span>
-              </div>
 
-              <div className="mt-5">
-                <p className="text-xs font-medium text-[#78716C]">
-                  Total Saldo Aktif (4 Dompet)
+                <h1 className="font-display mt-5 text-4xl font-medium tracking-tight text-[#1C1917] leading-[1.1] sm:text-5xl lg:text-[54px]">
+                  Kelola Arus Kas{" "}
+                  <span className="italic text-[#14532D]">dengan Tenang</span>{" "}
+                  &amp; Transparan.
+                </h1>
+
+                <p className="mt-5 max-w-xl text-base leading-relaxed text-[#57534E] sm:text-lg">
+                  Catat uang masuk, uang keluar, transfer antar dompet, hingga
+                  kas bersama keluarga dalam satu lembar kerja yang hangat,
+                  jujur pada angka, dan siap cetak laporan A4 kapan saja.
                 </p>
-                <p className="font-display tnum mt-1 text-3xl font-medium tracking-tight text-[#1C1917] sm:text-4xl">
-                  {formatIDR(31_450_000)}
-                </p>
-                <p className="mt-1 text-xs text-[#78716C]">
-                  Termasuk Kas Rumah Tangga bersama pasangan · +8,4% dari bulan
-                  lalu
-                </p>
-              </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-[#E7E2D8] bg-[#F7F5F0] p-3.5">
-                  <p className="text-xs text-[#78716C]">Uang Masuk</p>
-                  <p className="tnum mt-1 text-base font-semibold text-[#15803D] sm:text-lg">
-                    {formatIDR(18_200_000, { signed: true })}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[#E7E2D8] bg-[#F7F5F0] p-3.5">
-                  <p className="text-xs text-[#78716C]">Uang Keluar</p>
-                  <p className="tnum mt-1 text-base font-semibold text-[#B91C1C] sm:text-lg">
-                    {formatIDR(-11_980_000, { signed: true })}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-5 border-t border-[#E7E2D8] pt-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[#78716C]">
-                    Aktivitas Terbaru
-                  </p>
-                  <span className="text-xs text-[#78716C]">Rekonsiliasi 100%</span>
-                </div>
-
-                <ul className="divide-y divide-[#E7E2D8]">
-                  {SAMPLE_TRANSACTIONS.map((item) => (
-                    <li
-                      key={item.title}
-                      className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
+                <div className="mt-8 flex flex-wrap items-center gap-3">
+                  {user ? (
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[#1C1917]">
-                          {item.title}
-                        </p>
-                        <p className="truncate text-xs text-[#78716C] tnum">
-                          {item.meta}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p
-                          className={`tnum text-sm font-semibold ${item.amountColor}`}
-                        >
-                          {item.amount}
-                        </p>
-                        <p className="text-[11px] text-[#78716C]">{item.tag}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                      <span>Buka Dashboard</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/daftar"
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
+                    >
+                      <span>Mulai Gratis</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  )}
+
+                  <LandingDemoCta variant="secondary" size="lg" />
+                </div>
+
+                {/* Editorial Trust Strip */}
+                <div className="mt-8 grid grid-cols-3 gap-3 border-t border-[#E5DFD3] pt-6">
+                  <div>
+                    <p className="font-display tnum text-xl font-semibold text-[#14532D] sm:text-2xl">
+                      100%
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#78716C]">
+                      Saldo atomik anti-selisih
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-display tnum text-xl font-semibold text-[#B45309] sm:text-2xl">
+                      3 Peran
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#78716C]">
+                      Pemilik, Editor, Pemantau
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-display tnum text-xl font-semibold text-[#1C1917] sm:text-2xl">
+                      CSV &amp; A4
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#78716C]">
+                      Siap Excel &amp; cetak PDF
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-5 rounded-xl border border-[#E7E2D8] bg-[#EFECE4]/55 p-3.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#1C1917]">
-                    Anggaran Makanan &amp; Minuman
-                  </span>
-                  <span className="tnum font-medium text-[#15803D]">
-                    74% terpakai
-                  </span>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#E7E2D8]">
-                  <div className="h-full w-[74%] rounded-full bg-[#15803D]" />
-                </div>
+              <div className="lg:col-span-6">
+                <LandingShowcase />
               </div>
             </div>
           </div>
         </section>
 
-        {/* 4 Feature Pillars */}
-        <section className="mt-16 border-t border-[#E7E2D8] pt-14 sm:mt-20 sm:pt-16">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#14532D]">
-              Empat Pilar Utama
-            </p>
-            <h2 className="font-display mt-2 text-2xl font-medium tracking-tight text-[#1C1917] sm:text-3xl">
-              Dirancang agar catatan keuangan keluarga selalu selaras dan
-              mudah diaudit.
-            </h2>
-          </div>
+        {/* BAND 2: Deep Botanical Forest Contrast Strip */}
+        <section
+          id="keunggulan"
+          className="bg-[#113B26] text-[#F7F5F0] py-14 sm:py-16"
+        >
+          <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="max-w-2xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#E5B869]">
+                  Mengapa ArusKas
+                </p>
+                <h2 className="font-display mt-2 text-2xl font-medium tracking-tight text-[#FAF8F4] sm:text-3xl">
+                  Dibangun seperti buku kas sungguhan—presisi di belakang layar,
+                  nyaman dilihat setiap hari.
+                </h2>
+              </div>
+              <p className="text-xs text-[#B8D4C5] max-w-sm">
+                Tanpa iklan, tanpa tampilan ramai yang melelahkan mata, dan
+                data tersimpan aman per akun.
+              </p>
+            </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {FEATURE_PILLARS.map((pillar) => {
-              const Icon = pillar.icon;
-              return (
-                <article
-                  key={pillar.title}
-                  className="flex flex-col rounded-2xl border border-[#E7E2D8] bg-[#FFFFFF] p-5 sm:p-6 transition-colors hover:border-[#D4CCC0]"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#E7E2D8] bg-[#EFECE4]/70 text-[#14532D]">
-                    <Icon className="h-5 w-5" />
+            <div className="mt-9 grid grid-cols-1 gap-5 md:grid-cols-3">
+              <div className="rounded-2xl border border-[#245A3E] bg-[#17482F] p-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E5B869]/15 text-[#E5B869]">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
+                  Rekonsiliasi Saldo Otomatis
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
+                  Edit nominal, ubah tipe transaksi, atau transfer antar dompet
+                  selalu menghitung ulang saldo dalam satu transaksi atomik.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-[#245A3E] bg-[#17482F] p-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#86EFAC]/15 text-[#86EFAC]">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
+                  Kolaborasi Keluarga yang Privat
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
+                  Undang pasangan lewat email atau tautan sekali pakai. Dompet
+                  pribadi Anda tetap tersembunyi walau mentransfer ke kas
+                  bersama.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-[#245A3E] bg-[#17482F] p-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FDBA74]/15 text-[#FDBA74]">
+                  <Printer className="h-5 w-5" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
+                  Laporan Resmi Siap Audit
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
+                  Unduh CSV aman untuk Excel Indonesia atau cetak langsung ke
+                  PDF berformat kertas A4 lengkap dengan Saldo Awal &amp; Akhir.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* BAND 3: Varied Editorial Bento Grid */}
+        <section id="fitur" className="bg-[#F7F5F0] py-16 sm:py-20">
+          <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#B45309]">
+                Fitur Lengkap Siap Pakai
+              </p>
+              <h2 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917] sm:text-4xl">
+                Semua alat untuk memahami ke mana setiap Rupiah mengalir.
+              </h2>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-12">
+              {/* Bento 1 (7 cols) - Crisp White + Forest Top Accent */}
+              <article className="lg:col-span-7 overflow-hidden rounded-2xl border border-[#E2DACB] bg-[#FFFFFF] p-6 sm:p-7 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DCFCE7] px-3 py-1 text-xs font-semibold text-[#14532D]">
+                      <ReceiptText className="h-3.5 w-3.5" />
+                      Buku Kas &amp; Struk Digital
+                    </span>
+                    <span className="rounded-md border border-[#E7E2D8] bg-[#FAF8F4] px-2 py-0.5 font-mono text-[11px] text-[#57534E]">
+                      Shortcut: N
+                    </span>
                   </div>
-                  <h3 className="mt-4 text-base font-semibold text-[#1C1917] leading-snug">
-                    {pillar.title}
+                  <h3 className="font-display mt-4 text-2xl font-medium text-[#1C1917]">
+                    Catat Uang Masuk, Keluar &amp; Transfer dalam Hitungan Detik
                   </h3>
                   <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
-                    {pillar.description}
+                    Lampirkan foto struk atau PDF hingga 2MB, tandai metode
+                    pembayaran, filter cepat berdasarkan rentang tanggal &amp;
+                    kategori, plus jadwal tagihan berulang agar tidak pernah
+                    lupa bayar listrik atau cicilan.
                   </p>
-                </article>
-              );
-            })}
+                </div>
+
+                {/* Mini receipt strip */}
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-[#EFECE4] pt-5">
+                  <div className="rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] p-3.5">
+                    <div className="flex items-center justify-between text-xs text-[#78716C]">
+                      <span>Detail Struk</span>
+                      <span className="text-[#15803D] font-medium">
+                        Terlampir PDF
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-sm font-semibold text-[#1C1917]">
+                      Tagihan Listrik &amp; Internet
+                    </p>
+                    <p className="tnum mt-0.5 text-sm font-semibold text-[#B91C1C]">
+                      -Rp 890.000
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#EADBC0] bg-[#FDF8EE] p-3.5">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-[#92400E]">
+                      <Repeat className="h-3.5 w-3.5" />
+                      Pengingat Rutin
+                    </div>
+                    <p className="mt-1.5 text-xs leading-relaxed text-[#57534E]">
+                      Tagihan jatuh tempo muncul di banner—sesuaikan nominal
+                      dulu sebelum dicatat.
+                    </p>
+                  </div>
+                </div>
+              </article>
+
+              {/* Bento 2 (5 cols) - Warm Ochre Parchment Tint */}
+              <article className="lg:col-span-5 rounded-2xl border border-[#E8D8BC] bg-[#FDF8EE] p-6 sm:p-7 flex flex-col justify-between">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEF3C7] border border-[#FDE68A] px-3 py-1 text-xs font-semibold text-[#92400E]">
+                    <Users className="h-3.5 w-3.5" />
+                    Dompet Bersama Keluarga
+                  </span>
+                  <h3 className="font-display mt-4 text-2xl font-medium text-[#1C1917]">
+                    Satu Kas Rumah Tangga, Hak Akses Jelas
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
+                    Pisahkan dompet pribadi dengan kas keluarga. Setiap anggota
+                    punya peran jelas dan histori pencatat tampil transparan.
+                  </p>
+                </div>
+
+                <div className="mt-6 space-y-2 border-t border-[#E8D8BC]/80 pt-5 text-xs">
+                  <div className="flex items-center justify-between rounded-lg bg-[#FFFFFF] px-3 py-2 border border-[#EADBC0]">
+                    <span className="font-semibold text-[#1C1917]">Pemilik</span>
+                    <span className="text-[#57534E]">
+                      Kelola dompet, anggota &amp; semua transaksi
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-[#FFFFFF] px-3 py-2 border border-[#EADBC0]">
+                    <span className="font-semibold text-[#14532D]">Editor</span>
+                    <span className="text-[#57534E]">
+                      Catat &amp; edit transaksi miliknya sendiri
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-[#FFFFFF] px-3 py-2 border border-[#EADBC0]">
+                    <span className="font-semibold text-[#92400E]">
+                      Pemantau
+                    </span>
+                    <span className="text-[#57534E]">
+                      Lihat laporan kas tanpa mengubah saldo
+                    </span>
+                  </div>
+                </div>
+              </article>
+
+              {/* Bento 3 (5 cols) - Calm Sage Tint */}
+              <article className="lg:col-span-5 rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1] p-6 sm:p-7 flex flex-col justify-between">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DCFCE7] border border-[#BBF7D0] px-3 py-1 text-xs font-semibold text-[#14532D]">
+                    <Target className="h-3.5 w-3.5" />
+                    Anggaran &amp; Target
+                  </span>
+                  <h3 className="font-display mt-4 text-2xl font-medium text-[#1C1917]">
+                    Jaga Pengeluaran &amp; Wujudkan Dana Darurat
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#47594E]">
+                    Salin anggaran bulan lalu dalam satu klik, terima indikator
+                    warna otomatis saat menyentuh 80%, dan setor target tabungan
+                    langsung dari dompet.
+                  </p>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-[#CBE0D2] bg-[#FFFFFF] p-4 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[#1C1917]">
+                      Status Anggaran Bulanan
+                    </span>
+                    <span className="tnum font-semibold text-[#D97706]">
+                      84% · Waspada
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#EFECE4]">
+                    <div className="h-full w-[84%] rounded-full bg-gradient-to-r from-[#15803D] to-[#D97706]" />
+                  </div>
+                  <p className="text-[11px] text-[#78716C]">
+                    Otomatis berubah hijau → amber → merah sesuai realisasi.
+                  </p>
+                </div>
+              </article>
+
+              {/* Bento 4 (7 cols) - Crisp White with Terracotta/Forest Statement Preview */}
+              <article className="lg:col-span-7 rounded-2xl border border-[#E2DACB] bg-[#FFFFFF] p-6 sm:p-7 flex flex-col justify-between">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFEDD5] border border-[#FED7AA] px-3 py-1 text-xs font-semibold text-[#9A3412]">
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    Laporan Arus Kas &amp; Ekspor
+                  </span>
+                  <h3 className="font-display mt-4 text-2xl font-medium text-[#1C1917]">
+                    Grafik Tren, Komposisi Kategori, CSV Excel &amp; PDF A4
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
+                    Filter laporan per bulan, kuartal, tahun, atau rentang
+                    kustom—untuk semua dompet maupun satu rekening tertentu
+                    lengkap dengan baris rekonsiliasi transfer masuk &amp;
+                    keluar.
+                  </p>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] p-4">
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <p className="text-[#78716C]">Saldo Awal</p>
+                      <p className="tnum mt-1 font-semibold text-[#1C1917]">
+                        Rp 25.230.000
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#78716C]">Perubahan Bersih</p>
+                      <p className="tnum mt-1 font-semibold text-[#15803D]">
+                        +Rp 6.220.000
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#78716C]">Saldo Akhir</p>
+                      <p className="font-display tnum mt-0.5 text-base font-semibold text-[#14532D]">
+                        Rp 31.450.000
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* BAND 4: Warm Sand Linen 3-Step Workflow */}
+        <section
+          id="cara-kerja"
+          className="border-y border-[#E2DACB] bg-[#EFECE4] py-16 sm:py-20"
+        >
+          <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
+            <div className="max-w-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#14532D]">
+                Mulai Dalam 2 Menit
+              </p>
+              <h2 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917]">
+                Tiga langkah sederhana merapikan pembukuan harian.
+              </h2>
+            </div>
+
+            <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
+              {[
+                {
+                  num: "01",
+                  title: "Siapkan Dompet & Keluarga",
+                  desc: "Saat mendaftar, Dompet Utama dan 12 kategori Indonesia langsung siap. Tambah rekening bank, e-wallet, atau undang pasangan ke kas bersama.",
+                  icon: Wallet,
+                },
+                {
+                  num: "02",
+                  title: "Catat Masuk, Keluar & Transfer",
+                  desc: "Tekan tombol N di mana saja untuk mencatat transaksi, melampirkan foto struk, atau mengonfirmasi tagihan rutin yang jatuh tempo.",
+                  icon: ReceiptText,
+                },
+                {
+                  num: "03",
+                  title: "Evaluasi & Cetak Laporan",
+                  desc: "Lihat tren 6 bulan, pantau batas anggaran kategori, lalu ekspor ke Excel (CSV) atau cetak laporan resmi berformat kertas A4.",
+                  icon: FileSpreadsheet,
+                },
+              ].map((step) => {
+                const Icon = step.icon;
+                return (
+                  <div
+                    key={step.num}
+                    className="rounded-2xl border border-[#DDD5C7] bg-[#FAF8F4] p-6"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-display tnum text-3xl font-semibold text-[#B45309]">
+                        {step.num}
+                      </span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EFECE4] text-[#14532D]">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                    </div>
+                    <h3 className="mt-4 text-base font-semibold text-[#1C1917]">
+                      {step.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
+                      {step.desc}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* BAND 5: Deep Forest Closing CTA */}
+        <section className="bg-[#F7F5F0] py-16 sm:py-20">
+          <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
+            <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-[#14532D] px-6 py-12 text-[#F7F5F0] sm:px-12 sm:py-14">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#E5B869]/15 blur-2xl"
+              />
+              <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-xl">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#E5B869]">
+                    Siap Digunakan Sekarang
+                  </p>
+                  <h2 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#FFFFFF] sm:text-4xl">
+                    Mulai rapikan laporan keuangan pribadi &amp; keluarga hari
+                    ini.
+                  </h2>
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#C6DDD0]">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[#E5B869]" />
+                      Gratis &amp; siap multi-user
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[#E5B869]" />
+                      Akun demo 6 bulan sekali klik
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {user ? (
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#F7F5F0] px-5 text-sm font-semibold text-[#113B26] transition-colors hover:bg-[#FFFFFF]"
+                    >
+                      <span>Buka Dashboard</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/daftar"
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#F7F5F0] px-5 text-sm font-semibold text-[#113B26] transition-colors hover:bg-[#FFFFFF]"
+                    >
+                      <span>Buat Akun Gratis</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  )}
+                  <LandingDemoCta variant="forest-outline" size="lg" />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Clean Editorial Footer */}
-      <footer className="border-t border-[#E7E2D8] bg-[#FFFFFF]/60">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-4 px-4 py-8 text-xs sm:flex-row sm:items-center sm:px-6 sm:text-sm">
+      {/* Warm Stone Editorial Footer */}
+      <footer className="border-t border-[#DDD5C7] bg-[#EAE4D8]">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-4 px-4 py-9 text-xs sm:flex-row sm:items-center sm:px-6 sm:text-sm">
           <div>
-            <span className="font-display text-lg font-semibold text-[#14532D]">
-              ArusKas.
+            <span className="font-display text-xl font-semibold text-[#14532D]">
+              ArusKas<span className="text-[#B45309]">.</span>
             </span>
-            <p className="mt-1 text-xs text-[#78716C]">
+            <p className="mt-1 text-xs text-[#57534E]">
               Laporan keuangan pribadi &amp; keluarga — tenang, presisi, dan
-              siap cetak.
+              siap cetak A4.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-[#57534E]">
+          <div className="flex flex-wrap items-center gap-5 text-xs font-medium text-[#57534E]">
             {user ? (
               <Link
                 href="/dashboard"
-                className="text-[#14532D] hover:underline underline-offset-4"
+                className="text-[#14532D] font-semibold hover:underline underline-offset-4"
               >
                 Buka Dashboard
               </Link>
@@ -342,7 +574,7 @@ export default async function LandingPage() {
                 </Link>
                 <Link
                   href="/daftar"
-                  className="text-[#14532D] hover:underline underline-offset-4"
+                  className="text-[#14532D] font-semibold hover:underline underline-offset-4"
                 >
                   Mulai Gratis
                 </Link>
