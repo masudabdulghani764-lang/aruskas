@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
 import { LandingShowcase } from "@/components/landing-showcase";
+import {
+  ScrollProgressAndTopButton,
+  ScrollReveal,
+} from "@/components/scroll-reveal";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +26,9 @@ export default async function LandingPage() {
   const user = await getCurrentUser();
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] text-[#1C1917]">
+    <div className="min-h-screen bg-[#F7F5F0] text-[#1C1917] scroll-smooth">
+      <ScrollProgressAndTopButton />
+
       {/* Sticky Warm Ivory Top Bar */}
       <header className="sticky top-0 z-30 border-b border-[#E5DFD3] bg-[#F7F5F0]/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
@@ -98,7 +104,7 @@ export default async function LandingPage() {
         <section className="relative overflow-hidden border-b border-[#E7E2D8] bg-gradient-to-b from-[#FAF8F4] via-[#F7F5F0] to-[#F3EFE6]">
           <div className="mx-auto max-w-[1200px] px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
             <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12">
-              <div className="lg:col-span-6">
+              <ScrollReveal className="lg:col-span-6" delayMs={0} distance={18}>
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#EADBC0] bg-[#FDF8EE] px-3.5 py-1 text-xs font-semibold text-[#92400E]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#B45309]" />
                   <span>Laporan Keuangan Pribadi &amp; Keluarga</span>
@@ -165,11 +171,11 @@ export default async function LandingPage() {
                     </p>
                   </div>
                 </div>
-              </div>
+              </ScrollReveal>
 
-              <div className="lg:col-span-6">
+              <ScrollReveal className="lg:col-span-6" delayMs={100} distance={24}>
                 <LandingShowcase />
-              </div>
+              </ScrollReveal>
             </div>
           </div>
         </section>
@@ -180,7 +186,7 @@ export default async function LandingPage() {
           className="bg-[#113B26] text-[#F7F5F0] py-14 sm:py-16"
         >
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <ScrollReveal className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div className="max-w-2xl">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#E5B869]">
                   Mengapa ArusKas
@@ -194,48 +200,54 @@ export default async function LandingPage() {
                 Tanpa iklan, tanpa tampilan ramai yang melelahkan mata, dan
                 data tersimpan aman per akun.
               </p>
-            </div>
+            </ScrollReveal>
 
             <div className="mt-9 grid grid-cols-1 gap-5 md:grid-cols-3">
-              <div className="rounded-2xl border border-[#245A3E] bg-[#17482F] p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E5B869]/15 text-[#E5B869]">
-                  <ShieldCheck className="h-5 w-5" />
+              <ScrollReveal delayMs={0}>
+                <div className="h-full rounded-2xl border border-[#245A3E] bg-[#17482F] p-6 transition-transform duration-300 hover:-translate-y-0.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#E5B869]/15 text-[#E5B869]">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
+                    Rekonsiliasi Saldo Otomatis
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
+                    Edit nominal, ubah tipe transaksi, atau transfer antar dompet
+                    selalu menghitung ulang saldo dalam satu transaksi atomik.
+                  </p>
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
-                  Rekonsiliasi Saldo Otomatis
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
-                  Edit nominal, ubah tipe transaksi, atau transfer antar dompet
-                  selalu menghitung ulang saldo dalam satu transaksi atomik.
-                </p>
-              </div>
+              </ScrollReveal>
 
-              <div className="rounded-2xl border border-[#245A3E] bg-[#17482F] p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#86EFAC]/15 text-[#86EFAC]">
-                  <Lock className="h-5 w-5" />
+              <ScrollReveal delayMs={90}>
+                <div className="h-full rounded-2xl border border-[#245A3E] bg-[#17482F] p-6 transition-transform duration-300 hover:-translate-y-0.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#86EFAC]/15 text-[#86EFAC]">
+                    <Lock className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
+                    Kolaborasi Keluarga yang Privat
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
+                    Undang pasangan lewat email atau tautan sekali pakai. Dompet
+                    pribadi Anda tetap tersembunyi walau mentransfer ke kas
+                    bersama.
+                  </p>
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
-                  Kolaborasi Keluarga yang Privat
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
-                  Undang pasangan lewat email atau tautan sekali pakai. Dompet
-                  pribadi Anda tetap tersembunyi walau mentransfer ke kas
-                  bersama.
-                </p>
-              </div>
+              </ScrollReveal>
 
-              <div className="rounded-2xl border border-[#245A3E] bg-[#17482F] p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FDBA74]/15 text-[#FDBA74]">
-                  <Printer className="h-5 w-5" />
+              <ScrollReveal delayMs={180}>
+                <div className="h-full rounded-2xl border border-[#245A3E] bg-[#17482F] p-6 transition-transform duration-300 hover:-translate-y-0.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FDBA74]/15 text-[#FDBA74]">
+                    <Printer className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
+                    Laporan Resmi Siap Audit
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
+                    Unduh CSV aman untuk Excel Indonesia atau cetak langsung ke
+                    PDF berformat kertas A4 lengkap dengan Saldo Awal &amp; Akhir.
+                  </p>
                 </div>
-                <h3 className="mt-4 text-base font-semibold text-[#FAF8F4]">
-                  Laporan Resmi Siap Audit
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-[#C6DDD0]">
-                  Unduh CSV aman untuk Excel Indonesia atau cetak langsung ke
-                  PDF berformat kertas A4 lengkap dengan Saldo Awal &amp; Akhir.
-                </p>
-              </div>
+              </ScrollReveal>
             </div>
           </div>
         </section>
@@ -243,18 +255,19 @@ export default async function LandingPage() {
         {/* BAND 3: Varied Editorial Bento Grid */}
         <section id="fitur" className="bg-[#F7F5F0] py-16 sm:py-20">
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-            <div className="max-w-2xl">
+            <ScrollReveal className="max-w-2xl">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#B45309]">
                 Fitur Lengkap Siap Pakai
               </p>
               <h2 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917] sm:text-4xl">
                 Semua alat untuk memahami ke mana setiap Rupiah mengalir.
               </h2>
-            </div>
+            </ScrollReveal>
 
             <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-12">
               {/* Bento 1 (7 cols) - Crisp White + Forest Top Accent */}
-              <article className="lg:col-span-7 overflow-hidden rounded-2xl border border-[#E2DACB] bg-[#FFFFFF] p-6 sm:p-7 flex flex-col justify-between">
+              <ScrollReveal className="lg:col-span-7" delayMs={0}>
+                <article className="h-full overflow-hidden rounded-2xl border border-[#E2DACB] bg-[#FFFFFF] p-6 sm:p-7 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-0.5">
                 <div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DCFCE7] px-3 py-1 text-xs font-semibold text-[#14532D]">
@@ -304,9 +317,11 @@ export default async function LandingPage() {
                   </div>
                 </div>
               </article>
+              </ScrollReveal>
 
               {/* Bento 2 (5 cols) - Warm Ochre Parchment Tint */}
-              <article className="lg:col-span-5 rounded-2xl border border-[#E8D8BC] bg-[#FDF8EE] p-6 sm:p-7 flex flex-col justify-between">
+              <ScrollReveal className="lg:col-span-5" delayMs={90}>
+                <article className="h-full rounded-2xl border border-[#E8D8BC] bg-[#FDF8EE] p-6 sm:p-7 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-0.5">
                 <div>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FEF3C7] border border-[#FDE68A] px-3 py-1 text-xs font-semibold text-[#92400E]">
                     <Users className="h-3.5 w-3.5" />
@@ -344,9 +359,11 @@ export default async function LandingPage() {
                   </div>
                 </div>
               </article>
+              </ScrollReveal>
 
               {/* Bento 3 (5 cols) - Calm Sage Tint */}
-              <article className="lg:col-span-5 rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1] p-6 sm:p-7 flex flex-col justify-between">
+              <ScrollReveal className="lg:col-span-5" delayMs={60}>
+                <article className="h-full rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1] p-6 sm:p-7 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-0.5">
                 <div>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DCFCE7] border border-[#BBF7D0] px-3 py-1 text-xs font-semibold text-[#14532D]">
                     <Target className="h-3.5 w-3.5" />
@@ -379,9 +396,11 @@ export default async function LandingPage() {
                   </p>
                 </div>
               </article>
+              </ScrollReveal>
 
               {/* Bento 4 (7 cols) - Crisp White with Terracotta/Forest Statement Preview */}
-              <article className="lg:col-span-7 rounded-2xl border border-[#E2DACB] bg-[#FFFFFF] p-6 sm:p-7 flex flex-col justify-between">
+              <ScrollReveal className="lg:col-span-7" delayMs={140}>
+                <article className="h-full rounded-2xl border border-[#E2DACB] bg-[#FFFFFF] p-6 sm:p-7 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-0.5">
                 <div>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFEDD5] border border-[#FED7AA] px-3 py-1 text-xs font-semibold text-[#9A3412]">
                     <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -421,6 +440,7 @@ export default async function LandingPage() {
                   </div>
                 </div>
               </article>
+              </ScrollReveal>
             </div>
           </div>
         </section>
@@ -431,14 +451,14 @@ export default async function LandingPage() {
           className="border-y border-[#E2DACB] bg-[#EFECE4] py-16 sm:py-20"
         >
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-            <div className="max-w-xl">
+            <ScrollReveal className="max-w-xl">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#14532D]">
                 Mulai Dalam 2 Menit
               </p>
               <h2 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917]">
                 Tiga langkah sederhana merapikan pembukuan harian.
               </h2>
-            </div>
+            </ScrollReveal>
 
             <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-3">
               {[
@@ -460,28 +480,27 @@ export default async function LandingPage() {
                   desc: "Lihat tren 6 bulan, pantau batas anggaran kategori, lalu ekspor ke Excel (CSV) atau cetak laporan resmi berformat kertas A4.",
                   icon: FileSpreadsheet,
                 },
-              ].map((step) => {
+              ].map((step, idx) => {
                 const Icon = step.icon;
                 return (
-                  <div
-                    key={step.num}
-                    className="rounded-2xl border border-[#DDD5C7] bg-[#FAF8F4] p-6"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-display tnum text-3xl font-semibold text-[#B45309]">
-                        {step.num}
-                      </span>
-                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EFECE4] text-[#14532D]">
-                        <Icon className="h-4 w-4" />
-                      </span>
+                  <ScrollReveal key={step.num} delayMs={idx * 90}>
+                    <div className="h-full rounded-2xl border border-[#DDD5C7] bg-[#FAF8F4] p-6 transition-transform duration-300 hover:-translate-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-display tnum text-3xl font-semibold text-[#B45309]">
+                          {step.num}
+                        </span>
+                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EFECE4] text-[#14532D]">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                      </div>
+                      <h3 className="mt-4 text-base font-semibold text-[#1C1917]">
+                        {step.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
+                        {step.desc}
+                      </p>
                     </div>
-                    <h3 className="mt-4 text-base font-semibold text-[#1C1917]">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
-                      {step.desc}
-                    </p>
-                  </div>
+                  </ScrollReveal>
                 );
               })}
             </div>
@@ -491,7 +510,8 @@ export default async function LandingPage() {
         {/* BAND 5: Deep Forest Closing CTA */}
         <section className="bg-[#F7F5F0] py-16 sm:py-20">
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
-            <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-[#14532D] px-6 py-12 text-[#F7F5F0] sm:px-12 sm:py-14">
+            <ScrollReveal>
+              <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-[#14532D] px-6 py-12 text-[#F7F5F0] sm:px-12 sm:py-14">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#E5B869]/15 blur-2xl"
@@ -539,6 +559,7 @@ export default async function LandingPage() {
                 </div>
               </div>
             </div>
+            </ScrollReveal>
           </div>
         </section>
       </main>
