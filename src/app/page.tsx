@@ -63,20 +63,26 @@ export default async function LandingPage() {
             </nav>
           </div>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {user ? (
               <>
-                <span className="hidden sm:inline text-xs text-[#78716C]">
-                  Halo,{" "}
-                  <strong className="font-semibold text-[#1C1917]">
-                    {user.name}
-                  </strong>
-                </span>
+                <Link
+                  href="/masuk"
+                  className="inline-flex h-9 items-center rounded-xl px-3 text-xs sm:text-sm font-medium text-[#57534E] transition-colors hover:bg-[#EAE4D8] hover:text-[#1C1917]"
+                >
+                  Masuk / Ganti Akun
+                </Link>
+                <Link
+                  href="/daftar"
+                  className="hidden sm:inline-flex h-9 items-center rounded-xl px-3 text-sm font-medium text-[#57534E] transition-colors hover:bg-[#EAE4D8] hover:text-[#1C1917]"
+                >
+                  Daftar
+                </Link>
                 <Link
                   href="/dashboard"
                   className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#14532D] px-4 text-xs sm:text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
                 >
-                  <span>Buka Dashboard</span>
+                  <span>Dashboard ({user.name.split(" ")[0]})</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </>
@@ -124,25 +130,31 @@ export default async function LandingPage() {
                 </p>
 
                 <div className="mt-8 flex flex-wrap items-center gap-3">
-                  {user ? (
-                    <Link
-                      href="/dashboard"
-                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
-                    >
-                      <span>Buka Dashboard</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <Link
-                      href="/daftar"
-                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
-                    >
-                      <span>Mulai Gratis</span>
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  )}
+                  <Link
+                    href="/daftar"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#14532D] px-5 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534]"
+                  >
+                    <span>Mulai Gratis</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+
+                  <Link
+                    href="/masuk"
+                    className="inline-flex h-11 items-center rounded-xl border border-[#D9D1C3] bg-[#FFFFFF] px-4 text-sm font-medium text-[#1C1917] transition-colors hover:bg-[#EFECE4]"
+                  >
+                    Masuk Akun
+                  </Link>
 
                   <LandingDemoCta variant="secondary" size="lg" />
+
+                  {user && (
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex h-11 items-center gap-1.5 rounded-xl px-3.5 text-sm font-semibold text-[#14532D] hover:underline underline-offset-4"
+                    >
+                      <span>Buka Dashboard Aktif →</span>
+                    </Link>
+                  )}
                 </div>
 
                 {/* Editorial Trust Strip */}
@@ -590,28 +602,25 @@ export default async function LandingPage() {
               <span>@_ud_ag</span>
             </a>
 
-            {user ? (
+            <Link
+              href="/masuk"
+              className="hover:text-[#1C1917] hover:underline underline-offset-4"
+            >
+              Masuk
+            </Link>
+            <Link
+              href="/daftar"
+              className="text-[#14532D] font-semibold hover:underline underline-offset-4"
+            >
+              Daftar Gratis
+            </Link>
+            {user && (
               <Link
                 href="/dashboard"
                 className="text-[#14532D] font-semibold hover:underline underline-offset-4"
               >
                 Buka Dashboard
               </Link>
-            ) : (
-              <>
-                <Link
-                  href="/masuk"
-                  className="hover:text-[#1C1917] hover:underline underline-offset-4"
-                >
-                  Masuk
-                </Link>
-                <Link
-                  href="/daftar"
-                  className="text-[#14532D] font-semibold hover:underline underline-offset-4"
-                >
-                  Mulai Gratis
-                </Link>
-              </>
             )}
           </div>
         </div>
