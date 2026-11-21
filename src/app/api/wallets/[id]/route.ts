@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
-import { updateWallet } from "@/lib/wallets";
+import { indonesianEnumErrorMap, updateWallet } from "@/lib/wallets";
 
 const updateWalletSchema = z.object({
   name: z
@@ -14,7 +14,10 @@ const updateWalletSchema = z.object({
     .optional(),
   type: z
     .enum(["cash", "bank", "ewallet", "savings"], {
-      invalid_type_error: "Tipe dompet tidak valid.",
+      errorMap: indonesianEnumErrorMap(
+        "Tipe dompet wajib dipilih.",
+        "Tipe dompet tidak valid."
+      ),
     })
     .optional(),
   archived: z

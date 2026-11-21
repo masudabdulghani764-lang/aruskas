@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
 import type { AppDb } from "@/db";
 import { users, walletInvites, walletMembers, wallets } from "@/db/schema";
 import type { SafeUser } from "@/lib/auth";
@@ -693,4 +694,28 @@ export function maskInviteEmail(email: string | null): string | null {
   const domain = email.slice(atIndex + 1);
   const prefix = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
   return `${prefix}***@${domain}`;
+}
+
+/**
+ * Builds a Zod v3 errorMap returning natural Indonesian messages for enum fields.
+ */
+export function indonesianEnumErrorMap(
+  requiredMessage: string,
+  invalidMessage: string
+): z.ZodErrorMap {
+  return (issue, ctx) => {
+    if (
+      issue.code === z.ZodIssueCode.invalid_type &&
+      issue.received === "undefined"
+    ) {
+      return { message: requiredMessage };
+    }
+    if (
+      issue.code === z.ZodIssueCode.invalid_enum_value ||
+      issue.code === z.ZodIssueCode.invalid_type
+    ) {
+      return { message: invalidMessage };
+    }
+    return { message: ctx.defaultError };
+  };
 }

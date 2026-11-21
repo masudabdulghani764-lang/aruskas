@@ -1,12 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { eq } from "drizzle-orm";
-import { GET as getInvitePreviewRoute } from "@/app/api/invites/[token]/route";
 import { createDb, getDb } from "@/db";
 import { walletInvites, walletMembers, wallets } from "@/db/schema";
-import { registerUser } from "@/lib/auth";
+import { SESSION_COOKIE_NAME, registerUser } from "@/lib/auth";
 import { AppError } from "@/lib/errors";
 import {
   acceptWalletInvite,
@@ -21,6 +20,31 @@ import {
   removeWalletMember,
   updateWallet,
 } from "@/lib/wallets";
+
+let mockSessionCookie: string | undefined;
+
+mock.module("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      name === SESSION_COOKIE_NAME && mockSessionCookie
+        ? { name, value: mockSessionCookie }
+        : undefined,
+  }),
+}));
+
+import { GET as listMyInvitesRoute } from "@/app/api/invites/route";
+import { POST as acceptInviteRoute } from "@/app/api/invites/[token]/accept/route";
+import { GET as getInvitePreviewRoute } from "@/app/api/invites/[token]/route";
+import { PATCH as updateWalletRoute } from "@/app/api/wallets/[id]/route";
+import {
+  GET as listWalletInvitesRoute,
+  POST as createWalletInviteRoute,
+} from "@/app/api/wallets/[id]/invites/route";
+import { DELETE as removeWalletMemberRoute } from "@/app/api/wallets/[id]/members/[userId]/route";
+import {
+  GET as listWalletsRoute,
+  POST as createWalletRoute,
+} from "@/app/api/wallets/route";
 
 async function expectAppError(
   fn: () => unknown | Promise<unknown>,
@@ -613,6 +637,383 @@ describe("Wallets, Shared Family RBAC & Single-Use Invitation Flow", () => {
       );
       expect(usedRes.status).toBe(410);
     } finally {
+      if (prevDbPath === undefined) {
+        delete process.env.DATABASE_PATH;
+      } else {
+        process.env.DATABASE_PATH = prevDbPath;
+      }
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore Windows SQLite file lock on temp dir cleanup
+      }
+    }
+  });
+
+  test("authenticated route handlers enforce 401, 400 malformed JSON, Indonesian Zod validation errors, and full HTTP lifecycle", async () => {
+    const prevDbPath = process.env.DATABASE_PATH;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aruskas-routes-"));
+    const tempDbPath = path.join(tempDir, "test.db");
+    process.env.DATABASE_PATH = tempDbPath;
+    mockSessionCookie = undefined;
+
+    function jsonRequest(
+      url: string,
+      method: string,
+      payload: unknown
+    ): Request {
+      return new Request(url, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+
+    function badJsonRequest(url: string, method: string): Request {
+      return new Request(url, {
+        method,
+        headers: { "content-type": "application/json" },
+        body: "{tidak-valid",
+      });
+    }
+
+    try {
+      const db = getDb();
+      const owner = await registerUser(db, {
+        name: "Rama",
+        email: "rama@aruskas.test",
+        password: "Password123!",
+      });
+      const partner = await registerUser(db, {
+        name: "Nadia",
+        email: "nadia@aruskas.test",
+        password: "Password123!",
+      });
+
+      // 1. Unauthenticated requests -> 401 across all authenticated routes
+      expect(
+        (await listWalletsRoute(new Request("http://localhost/api/wallets")))
+          .status
+      ).toBe(401);
+      expect(
+        (
+          await createWalletRoute(
+            jsonRequest("http://localhost/api/wallets", "POST", {})
+          )
+        ).status
+      ).toBe(401);
+      expect(
+        (
+          await updateWalletRoute(
+            jsonRequest("http://localhost/api/wallets/w1", "PATCH", {}),
+            { params: Promise.resolve({ id: "w1" }) }
+          )
+        ).status
+      ).toBe(401);
+      expect(
+        (
+          await listWalletInvitesRoute(
+            new Request("http://localhost/api/wallets/w1/invites"),
+            { params: Promise.resolve({ id: "w1" }) }
+          )
+        ).status
+      ).toBe(401);
+      expect(
+        (
+          await createWalletInviteRoute(
+            jsonRequest("http://localhost/api/wallets/w1/invites", "POST", {}),
+            { params: Promise.resolve({ id: "w1" }) }
+          )
+        ).status
+      ).toBe(401);
+      expect(
+        (
+          await removeWalletMemberRoute(
+            new Request("http://localhost/api/wallets/w1/members/u2", {
+              method: "DELETE",
+            }),
+            { params: Promise.resolve({ id: "w1", userId: "u2" }) }
+          )
+        ).status
+      ).toBe(401);
+      expect((await listMyInvitesRoute()).status).toBe(401);
+      expect(
+        (
+          await acceptInviteRoute(
+            new Request("http://localhost/api/invites/tok/accept", {
+              method: "POST",
+            }),
+            { params: Promise.resolve({ token: "tok" }) }
+          )
+        ).status
+      ).toBe(401);
+
+      // Authenticate as owner
+      mockSessionCookie = owner.token;
+
+      // 2. Malformed JSON -> 400
+      const badPostWallet = await createWalletRoute(
+        badJsonRequest("http://localhost/api/wallets", "POST")
+      );
+      expect(badPostWallet.status).toBe(400);
+
+      const badPatchWallet = await updateWalletRoute(
+        badJsonRequest("http://localhost/api/wallets/w1", "PATCH"),
+        { params: Promise.resolve({ id: "w1" }) }
+      );
+      expect(badPatchWallet.status).toBe(400);
+
+      const badPostInvite = await createWalletInviteRoute(
+        badJsonRequest("http://localhost/api/wallets/w1/invites", "POST"),
+        { params: Promise.resolve({ id: "w1" }) }
+      );
+      expect(badPostInvite.status).toBe(400);
+
+      // 3. Indonesian Zod validation errors (no English leaks)
+      const invalidEnumWallet = await createWalletRoute(
+        jsonRequest("http://localhost/api/wallets", "POST", {
+          name: "Dompet Kripto",
+          type: "crypto",
+          initialBalance: 0,
+        })
+      );
+      expect(invalidEnumWallet.status).toBe(400);
+      const invalidEnumWalletBody = (await invalidEnumWallet.json()) as {
+        error: string;
+      };
+      expect(invalidEnumWalletBody.error).toBe("Tipe dompet tidak valid.");
+
+      const missingTypeWallet = await createWalletRoute(
+        jsonRequest("http://localhost/api/wallets", "POST", {
+          name: "Dompet Tanpa Tipe",
+          initialBalance: 0,
+        })
+      );
+      expect(missingTypeWallet.status).toBe(400);
+      expect(
+        ((await missingTypeWallet.json()) as { error: string }).error
+      ).toBe("Tipe dompet wajib dipilih.");
+
+      const nonStringNameWallet = await createWalletRoute(
+        jsonRequest("http://localhost/api/wallets", "POST", {
+          name: 12345,
+          type: "cash",
+          initialBalance: 0,
+        })
+      );
+      expect(nonStringNameWallet.status).toBe(400);
+      expect(
+        ((await nonStringNameWallet.json()) as { error: string }).error
+      ).toBe("Nama dompet harus berupa teks.");
+
+      // Create valid wallet via POST /api/wallets -> 201
+      const createdRes = await createWalletRoute(
+        jsonRequest("http://localhost/api/wallets", "POST", {
+          name: "Rekening Bersama",
+          type: "bank",
+          initialBalance: 5000000,
+        })
+      );
+      expect(createdRes.status).toBe(201);
+      const createdJson = (await createdRes.json()) as {
+        wallet: { id: string; name: string; balance: number };
+      };
+      const walletId = createdJson.wallet.id;
+      expect(createdJson.wallet.name).toBe("Rekening Bersama");
+      expect(createdJson.wallet.balance).toBe(5000000);
+
+      // Invalid enum & non-string on PATCH /api/wallets/[id]
+      const invalidPatchType = await updateWalletRoute(
+        jsonRequest(`http://localhost/api/wallets/${walletId}`, "PATCH", {
+          type: "crypto",
+        }),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(invalidPatchType.status).toBe(400);
+      expect(
+        ((await invalidPatchType.json()) as { error: string }).error
+      ).toBe("Tipe dompet tidak valid.");
+
+      const invalidPatchName = await updateWalletRoute(
+        jsonRequest(`http://localhost/api/wallets/${walletId}`, "PATCH", {
+          name: 999,
+        }),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(invalidPatchName.status).toBe(400);
+      expect(
+        ((await invalidPatchName.json()) as { error: string }).error
+      ).toBe("Nama dompet harus berupa teks.");
+
+      // Archive then unarchive via PATCH /api/wallets/[id] & verify GET /api/wallets
+      const archivedRes = await updateWalletRoute(
+        jsonRequest(`http://localhost/api/wallets/${walletId}`, "PATCH", {
+          archived: true,
+        }),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(archivedRes.status).toBe(200);
+
+      const listActiveRes = await listWalletsRoute(
+        new Request("http://localhost/api/wallets")
+      );
+      expect(listActiveRes.status).toBe(200);
+      const activeList = (
+        (await listActiveRes.json()) as { wallets: Array<{ id: string }> }
+      ).wallets;
+      expect(activeList.some((w) => w.id === walletId)).toBe(false);
+
+      const listAllRes = await listWalletsRoute(
+        new Request("http://localhost/api/wallets?includeArchived=true")
+      );
+      expect(listAllRes.status).toBe(200);
+      const allList = (
+        (await listAllRes.json()) as { wallets: Array<{ id: string }> }
+      ).wallets;
+      expect(allList.some((w) => w.id === walletId)).toBe(true);
+
+      await updateWalletRoute(
+        jsonRequest(`http://localhost/api/wallets/${walletId}`, "PATCH", {
+          archived: false,
+        }),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+
+      // Invalid enum & non-string email on POST /api/wallets/[id]/invites
+      const invalidInviteRole = await createWalletInviteRoute(
+        jsonRequest(
+          `http://localhost/api/wallets/${walletId}/invites`,
+          "POST",
+          { role: "owner" }
+        ),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(invalidInviteRole.status).toBe(400);
+      expect(
+        ((await invalidInviteRole.json()) as { error: string }).error
+      ).toBe("Peran undangan harus editor atau viewer.");
+
+      const missingInviteRole = await createWalletInviteRoute(
+        jsonRequest(
+          `http://localhost/api/wallets/${walletId}/invites`,
+          "POST",
+          {}
+        ),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(missingInviteRole.status).toBe(400);
+      expect(
+        ((await missingInviteRole.json()) as { error: string }).error
+      ).toBe("Peran undangan wajib dipilih.");
+
+      const nonStringEmailNum = await createWalletInviteRoute(
+        jsonRequest(
+          `http://localhost/api/wallets/${walletId}/invites`,
+          "POST",
+          { email: 123, role: "editor" }
+        ),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(nonStringEmailNum.status).toBe(400);
+      expect(
+        ((await nonStringEmailNum.json()) as { error: string }).error
+      ).toBe("Email harus berupa teks.");
+
+      const nonStringEmailObj = await createWalletInviteRoute(
+        jsonRequest(
+          `http://localhost/api/wallets/${walletId}/invites`,
+          "POST",
+          { email: {}, role: "editor" }
+        ),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(nonStringEmailObj.status).toBe(400);
+      expect(
+        ((await nonStringEmailObj.json()) as { error: string }).error
+      ).toBe("Email harus berupa teks.");
+
+      // Whitespace-only email normalizes to null on POST /api/wallets/[id]/invites -> 201
+      const whitespaceInviteRes = await createWalletInviteRoute(
+        jsonRequest(
+          `http://localhost/api/wallets/${walletId}/invites`,
+          "POST",
+          { email: "   ", role: "viewer" }
+        ),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(whitespaceInviteRes.status).toBe(201);
+      const whitespaceInviteJson = (await whitespaceInviteRes.json()) as {
+        invite: { email: string | null };
+      };
+      expect(whitespaceInviteJson.invite.email).toBeNull();
+
+      // Email-targeted invite via POST /api/wallets/[id]/invites -> 201
+      const targetedInviteRes = await createWalletInviteRoute(
+        jsonRequest(
+          `http://localhost/api/wallets/${walletId}/invites`,
+          "POST",
+          { email: partner.user.email, role: "editor" }
+        ),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(targetedInviteRes.status).toBe(201);
+      const targetedToken = (
+        (await targetedInviteRes.json()) as { invite: { token: string } }
+      ).invite.token;
+
+      const walletInvitesRes = await listWalletInvitesRoute(
+        new Request(`http://localhost/api/wallets/${walletId}/invites`),
+        { params: Promise.resolve({ id: walletId }) }
+      );
+      expect(walletInvitesRes.status).toBe(200);
+      expect(
+        ((await walletInvitesRes.json()) as { invites: unknown[] }).invites
+      ).toHaveLength(2);
+
+      // Partner checks GET /api/invites, accepts via POST /api/invites/[token]/accept, and reuse returns 410
+      mockSessionCookie = partner.token;
+      const myInvitesRes = await listMyInvitesRoute();
+      expect(myInvitesRes.status).toBe(200);
+      const myInvites = (
+        (await myInvitesRes.json()) as { invites: Array<{ token: string }> }
+      ).invites;
+      expect(myInvites).toHaveLength(1);
+      expect(myInvites[0].token).toBe(targetedToken);
+
+      const acceptRes = await acceptInviteRoute(
+        new Request(`http://localhost/api/invites/${targetedToken}/accept`, {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ token: targetedToken }) }
+      );
+      expect(acceptRes.status).toBe(200);
+      expect(await acceptRes.json()).toEqual({
+        walletId,
+        walletName: "Rekening Bersama",
+        role: "editor",
+      });
+
+      const reuseRes = await acceptInviteRoute(
+        new Request(`http://localhost/api/invites/${targetedToken}/accept`, {
+          method: "POST",
+        }),
+        { params: Promise.resolve({ token: targetedToken }) }
+      );
+      expect(reuseRes.status).toBe(410);
+
+      // Owner removes partner via DELETE /api/wallets/[id]/members/[userId]
+      mockSessionCookie = owner.token;
+      const removeRes = await removeWalletMemberRoute(
+        new Request(
+          `http://localhost/api/wallets/${walletId}/members/${partner.user.id}`,
+          { method: "DELETE" }
+        ),
+        { params: Promise.resolve({ id: walletId, userId: partner.user.id }) }
+      );
+      expect(removeRes.status).toBe(200);
+      expect(await removeRes.json()).toEqual({ ok: true });
+    } finally {
+      mockSessionCookie = undefined;
       if (prevDbPath === undefined) {
         delete process.env.DATABASE_PATH;
       } else {

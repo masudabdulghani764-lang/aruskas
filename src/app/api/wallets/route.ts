@@ -3,17 +3,26 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
-import { createWallet, listUserWallets } from "@/lib/wallets";
+import {
+  createWallet,
+  indonesianEnumErrorMap,
+  listUserWallets,
+} from "@/lib/wallets";
 
 const createWalletSchema = z.object({
   name: z
-    .string({ required_error: "Nama dompet wajib diisi." })
+    .string({
+      required_error: "Nama dompet wajib diisi.",
+      invalid_type_error: "Nama dompet harus berupa teks.",
+    })
     .trim()
     .min(1, "Nama dompet wajib diisi.")
     .max(80, "Nama dompet maksimal 80 karakter."),
   type: z.enum(["cash", "bank", "ewallet", "savings"], {
-    required_error: "Tipe dompet wajib dipilih.",
-    invalid_type_error: "Tipe dompet tidak valid.",
+    errorMap: indonesianEnumErrorMap(
+      "Tipe dompet wajib dipilih.",
+      "Tipe dompet tidak valid."
+    ),
   }),
   initialBalance: z
     .number({

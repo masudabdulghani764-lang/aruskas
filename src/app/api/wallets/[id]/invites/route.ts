@@ -3,19 +3,28 @@ import { z } from "zod";
 import { getDb } from "@/db";
 import { parseJsonBody, requireCurrentUser } from "@/lib/auth";
 import { handleApiError } from "@/lib/errors";
-import { createWalletInvite, listWalletInvites } from "@/lib/wallets";
+import {
+  createWalletInvite,
+  indonesianEnumErrorMap,
+  listWalletInvites,
+} from "@/lib/wallets";
 
 const createInviteSchema = z.object({
   email: z
-    .union([
-      z.string().trim().email("Format email tidak valid."),
-      z.literal(""),
-    ])
+    .string({ invalid_type_error: "Email harus berupa teks." })
+    .trim()
+    .refine(
+      (val) => val === "" || z.string().email().safeParse(val).success,
+      "Format email tidak valid."
+    )
+    .transform((val) => (val === "" ? null : val))
     .optional()
     .nullable(),
   role: z.enum(["editor", "viewer"], {
-    required_error: "Peran undangan wajib dipilih.",
-    invalid_type_error: "Peran undangan harus editor atau viewer.",
+    errorMap: indonesianEnumErrorMap(
+      "Peran undangan wajib dipilih.",
+      "Peran undangan harus editor atau viewer."
+    ),
   }),
 });
 
