@@ -16,14 +16,34 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const APP_URL = (
+  process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://aruskas-bay.vercel.app"
+).replace(/\/+$/, "");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(APP_URL),
   title: {
     default: "ArusKas — Laporan Keuangan Pribadi & Keluarga",
     template: "%s | ArusKas",
   },
   description:
-    "Kelola arus kas pribadi dan keluarga dengan tenang. Catat pemasukan, pengeluaran, transfer antar dompet, dompet bersama keluarga, anggaran bulanan, dan laporan siap cetak PDF & CSV.",
+    "Kelola arus kas pribadi dan keluarga dengan tenang. Auto-catat 12 bank & e-wallet Indonesia, Smart Paste 1 baris, Batas Aman Belanja harian, Patungan WhatsApp, dompet bersama, dan laporan A4.",
   manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    locale: "id_ID",
+    url: APP_URL,
+    siteName: "ArusKas",
+    title: "ArusKas — Laporan Keuangan Pribadi & Keluarga",
+    description:
+      "Auto-catat 12 Bank & E-Wallet, Smart Paste 1 Baris, Batas Aman Belanja Harian, Patungan WhatsApp, dan Dompet Keluarga. Gratis & tanpa iklan.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ArusKas — Laporan Keuangan Pribadi & Keluarga",
+    description:
+      "Auto-catat 12 Bank & E-Wallet, Smart Paste 1 Baris, Batas Aman Belanja Harian, Patungan WhatsApp, dan Dompet Keluarga.",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

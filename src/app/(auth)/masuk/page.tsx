@@ -132,12 +132,20 @@ function MasukForm() {
             />
 
             <div className="space-y-1.5">
-              <label
-                htmlFor="login-password"
-                className="block text-xs font-medium text-[#57534E]"
-              >
-                Kata Sandi <span className="text-[#B91C1C]">*</span>
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label
+                  htmlFor="login-password"
+                  className="block text-xs font-medium text-[#57534E]"
+                >
+                  Kata Sandi <span className="text-[#B91C1C]">*</span>
+                </label>
+                <Link
+                  href="/lupa-sandi"
+                  className="text-xs font-medium text-[#14532D] hover:underline underline-offset-4"
+                >
+                  Lupa kata sandi?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   id="login-password"
@@ -207,6 +215,16 @@ function MasukForm() {
               className="font-semibold text-[#14532D] hover:underline underline-offset-4"
             >
               Daftar gratis
+            </Link>
+          </p>
+
+          <p className="mt-4 text-center text-[11px] text-[#78716C]">
+            <Link href="/kebijakan-privasi" className="hover:underline">
+              Kebijakan Privasi
+            </Link>{" "}
+            ·{" "}
+            <Link href="/syarat-ketentuan" className="hover:underline">
+              Syarat &amp; Ketentuan
             </Link>
           </p>
         </Card>

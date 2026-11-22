@@ -3,12 +3,16 @@ import {
   ArrowRight,
   CheckCircle2,
   FileSpreadsheet,
+  HandCoins,
   Instagram,
+  Landmark,
   Lock,
   Printer,
   ReceiptText,
   Repeat,
+  Share2,
   ShieldCheck,
+  Sparkles,
   Target,
   Users,
   Wallet,
@@ -30,8 +34,8 @@ export default async function LandingPage() {
     <div className="min-h-screen bg-cream-canvas text-[#1C1917] scroll-smooth">
       <ScrollProgressAndTopButton />
 
-      {/* Sticky Warm Cream-White Top Bar */}
-      <header className="sticky top-0 z-30 border-b border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF]/95 via-[#FCF3E2]/95 to-[#F3E2C5]/95 backdrop-blur-md">
+      {/* Sticky Warm Cream-White Top Bar (opaque GPU layer — 60fps scroll safe) */}
+      <header className="sticky top-0 z-30 transform-gpu border-b border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF] via-[#FCF3E2] to-[#F3E2C5]">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-8">
             <Link
@@ -458,6 +462,83 @@ export default async function LandingPage() {
           </div>
         </section>
 
+        {/* BAND 3.5: 5 Fitur Unggulan Terbaru */}
+        <section className="border-t border-[#E3D4BA] bg-cream-canvas py-16 sm:py-20">
+          <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
+            <ScrollReveal className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#B45309]">
+                Dirancang Khusus Pengguna Indonesia
+              </p>
+              <h2 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917] sm:text-4xl">
+                Lebih cepat dicatat, lebih tenang dipakai setiap hari.
+              </h2>
+            </ScrollReveal>
+
+            <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  icon: Landmark,
+                  badge: "12 Bank & E-Wallet",
+                  title: "Auto-Catat Notifikasi Bank & QRIS",
+                  desc: "Kenali otomatis notifikasi BCA, Livin' Mandiri, BRImo, Wondr BNI, blu, Bank Jago, SeaBank, GoPay, ShopeePay, OVO, dan DANA — tanpa pernah meminta PIN/password bank.",
+                },
+                {
+                  icon: Sparkles,
+                  badge: "Smart Paste 1 Baris",
+                  title: "Ketik Bebas Seperti Chat",
+                  desc: 'Cukup ketik "Makan Padang 38rb QRIS" atau tempel pesan mutasi di modal Catat Kas — nominal, kategori, tanggal, dan metode pembayaran langsung terisi otomatis.',
+                },
+                {
+                  icon: Target,
+                  badge: "Daily Safe-to-Spend",
+                  title: "Batas Aman Belanja Hari Ini",
+                  desc: "Tahu persis berapa rupiah yang aman dibelanjakan hari ini berdasarkan sisa anggaran bulanan dibagi sisa hari di bulan berjalan, lengkap dengan Mode Privasi.",
+                },
+                {
+                  icon: Share2,
+                  badge: "Viral Split Bill",
+                  title: "Patungan Instan & Link WhatsApp",
+                  desc: "Bagi tagihan makan bareng atau liburan secara rata maupun kustom, lalu bagikan link publik ke grup WhatsApp lengkap nomor rekening dan status lunas per orang.",
+                },
+                {
+                  icon: HandCoins,
+                  badge: "Hutang & Piutang",
+                  title: "Pantau Cicilan & Pinjaman Teman",
+                  desc: "Catat kewajiban hutang maupun piutang, pantau progres pelunasan, dan sinkronkan pembayaran cicilan langsung ke saldo dompet Anda.",
+                },
+                {
+                  icon: ShieldCheck,
+                  badge: "Kontrol Penuh",
+                  title: "Login Google, Backup JSON & Privasi",
+                  desc: "Masuk 1-klik dengan Google atau email terenkripsi Argon2id, backup/restore seluruh data dalam JSON kapan saja, dan hapus akun mandiri tanpa ribet.",
+                },
+              ].map((feat, idx) => {
+                const Icon = feat.icon;
+                return (
+                  <ScrollReveal key={feat.title} delayMs={idx * 60}>
+                    <div className="h-full rounded-2xl border border-[#E3D4BA] bg-gradient-to-br from-[#FFFFFF] to-[#F6E8CF] p-6 shadow-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#14532D] text-[#FAF0DD]">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="rounded-full border border-[#CBE0D2] bg-[#EFF6F1] px-2.5 py-0.5 text-[11px] font-semibold text-[#14532D]">
+                          {feat.badge}
+                        </span>
+                      </div>
+                      <h3 className="mt-4 text-base font-semibold text-[#1C1917]">
+                        {feat.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-[#57534E]">
+                        {feat.desc}
+                      </p>
+                    </div>
+                  </ScrollReveal>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         {/* BAND 4: Warm Sand Linen 3-Step Workflow */}
         <section
           id="cara-kerja"
@@ -524,11 +605,13 @@ export default async function LandingPage() {
         <section className="bg-cream-canvas py-16 sm:py-20">
           <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
             <ScrollReveal>
-              <div className="relative overflow-hidden rounded-3xl border border-[#245A3E] bg-[#14532D] px-6 py-12 text-[#F7F5F0] sm:px-12 sm:py-14">
               <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#E5B869]/15 blur-2xl"
-              />
+                className="relative overflow-hidden rounded-3xl border border-[#245A3E] px-6 py-12 text-[#F7F5F0] sm:px-12 sm:py-14"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at 92% 12%, rgba(229, 184, 105, 0.22) 0%, rgba(229, 184, 105, 0) 55%), linear-gradient(135deg, #14532D 0%, #113B26 55%, #0D2E1D 100%)",
+                }}
+              >
               <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-xl">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#E5B869]">
@@ -602,6 +685,18 @@ export default async function LandingPage() {
               <span>@_ud_ag</span>
             </a>
 
+            <Link
+              href="/kebijakan-privasi"
+              className="hover:text-[#1C1917] hover:underline underline-offset-4"
+            >
+              Kebijakan Privasi
+            </Link>
+            <Link
+              href="/syarat-ketentuan"
+              className="hover:text-[#1C1917] hover:underline underline-offset-4"
+            >
+              Syarat &amp; Ketentuan
+            </Link>
             <Link
               href="/masuk"
               className="hover:text-[#1C1917] hover:underline underline-offset-4"

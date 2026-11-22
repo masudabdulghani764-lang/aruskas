@@ -9,6 +9,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  HandCoins,
   Paperclip,
   Plus,
   ReceiptText,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
+import { DebtsPanel } from "@/components/debts-panel";
 import { ReceiptDrawer } from "@/components/receipt-drawer";
 import { SplitBillModal } from "@/components/split-bill-modal";
 import {
@@ -41,12 +43,13 @@ import {
   getPreviousMonthYM,
   getTodayISO,
 } from "@/lib/format";
+import type { DebtView } from "@/lib/debts";
 import type { RecurringFrequency, RecurringRuleView, RecurringType } from "@/lib/recurring";
 import type { SplitBillView } from "@/lib/split-bills";
 import type { TransactionType, TransactionView } from "@/lib/transactions";
 import type { WalletWithRole } from "@/lib/wallets";
 
-type ActiveTab = "history" | "recurring" | "patungan";
+type ActiveTab = "history" | "recurring" | "patungan" | "hutang";
 type PeriodPreset = "this_month" | "last_month" | "three_months" | "this_year" | "custom";
 
 interface CategoryOption {
@@ -114,6 +117,7 @@ export function TransactionsClient({
   initialSummary,
   initialRules,
   initialSplitBills,
+  initialDebts,
 }: {
   initialTab?: ActiveTab;
   currentUserId: string;
@@ -125,6 +129,7 @@ export function TransactionsClient({
   initialSummary?: TransactionsSummary;
   initialRules?: RecurringRuleView[];
   initialSplitBills?: SplitBillView[];
+  initialDebts?: DebtView[];
 }) {
   const { openQuickAdd, refreshTrigger, triggerRefresh } = useQuickAdd();
 
@@ -227,6 +232,7 @@ export function TransactionsClient({
     initialSplitBills ?? []
   );
   const [splitBillModalOpen, setSplitBillModalOpen] = useState(false);
+  const [debtModalOpen, setDebtModalOpen] = useState(false);
   const [busySplitId, setBusySplitId] = useState<string | null>(null);
   const [copiedSplitSlug, setCopiedSplitSlug] = useState<string | null>(null);
   const [rulesError, setRulesError] = useState<string | null>(null);
@@ -816,6 +822,15 @@ export function TransactionsClient({
               <Share2 className="h-4 w-4" />
               <span>Buat Patungan Baru</span>
             </Button>
+          ) : tab === "hutang" ? (
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setDebtModalOpen(true)}
+            >
+              <HandCoins className="h-4 w-4" />
+              <span>Catat Hutang / Piutang</span>
+            </Button>
           ) : (
             <Button
               variant="primary"
@@ -892,9 +907,33 @@ export function TransactionsClient({
             </Badge>
           )}
         </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "hutang"}
+          onClick={() => setTab("hutang")}
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-4 py-2 text-xs sm:text-sm font-medium transition-colors cursor-pointer",
+            tab === "hutang"
+              ? "bg-[#FFFFFF] text-[#14532D] font-semibold shadow-2xs"
+              : "text-[#57534E] hover:text-[#1C1917]"
+          )}
+        >
+          <HandCoins className="h-4 w-4" />
+          <span>Hutang &amp; Piutang</span>
+        </button>
       </div>
 
-      {tab === "patungan" ? (
+      {tab === "hutang" ? (
+        <DebtsPanel
+          initialDebts={initialDebts ?? []}
+          wallets={wallets}
+          createOpenExternal={debtModalOpen}
+          onCreateOpenChange={setDebtModalOpen}
+          onWalletMutated={triggerRefresh}
+        />
+      ) : tab === "patungan" ? (
         <div className="space-y-4">
           {splitBills.length === 0 ? (
             <Card padding="lg">

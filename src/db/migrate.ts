@@ -233,6 +233,36 @@ export const SCHEMA_SQL = `
     ON split_bills(transaction_id);
   CREATE INDEX IF NOT EXISTS idx_split_bill_participants_bill
     ON split_bill_participants(split_bill_id);
+
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
+    ON password_reset_tokens(user_id);
+
+  CREATE TABLE IF NOT EXISTS debts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('payable', 'receivable')),
+    person_name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    total_amount BIGINT NOT NULL CHECK (total_amount > 0),
+    paid_amount BIGINT NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
+    due_date TEXT,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_debts_user_status
+    ON debts(user_id, status, created_at DESC);
 `;
 
 /**

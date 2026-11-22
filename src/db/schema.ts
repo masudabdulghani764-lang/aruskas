@@ -271,3 +271,33 @@ export const splitBillParticipants = pgTable("split_bill_participants", {
   paidAt: text("paid_at"),
   createdAt: text("created_at").notNull(),
 });
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const debts = pgTable("debts", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: text("type", { enum: ["payable", "receivable"] }).notNull(),
+  personName: text("person_name").notNull(),
+  title: text("title").notNull(),
+  totalAmount: bigint("total_amount", { mode: "number" }).notNull(),
+  paidAmount: bigint("paid_amount", { mode: "number" }).notNull().default(0),
+  dueDate: text("due_date"),
+  notes: text("notes"),
+  status: text("status", { enum: ["open", "settled"] })
+    .notNull()
+    .default("open"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

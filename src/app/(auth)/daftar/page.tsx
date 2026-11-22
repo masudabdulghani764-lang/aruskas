@@ -209,6 +209,24 @@ function DaftarForm() {
               Masuk di sini
             </Link>
           </p>
+
+          <p className="mt-4 text-center text-[11px] text-[#78716C] leading-relaxed">
+            Dengan mendaftar, Anda menyetujui{" "}
+            <Link
+              href="/syarat-ketentuan"
+              className="font-medium text-[#14532D] hover:underline"
+            >
+              Syarat &amp; Ketentuan
+            </Link>{" "}
+            serta{" "}
+            <Link
+              href="/kebijakan-privasi"
+              className="font-medium text-[#14532D] hover:underline"
+            >
+              Kebijakan Privasi
+            </Link>{" "}
+            ArusKas.
+          </p>
         </Card>
       </div>
     </div>

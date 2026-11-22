@@ -1,8 +1,17 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { getDb, type AppDb } from "@/db";
-import { sessions, users, walletMembers, wallets } from "@/db/schema";
+import {
+  recurringRules,
+  savingsGoals,
+  sessions,
+  transactions,
+  users,
+  walletInvites,
+  walletMembers,
+  wallets,
+} from "@/db/schema";
 import { AppError, isPgUniqueViolation } from "@/lib/errors";
 import { seedDefaultCategoriesForUser } from "@/lib/seed";
 
@@ -528,4 +537,92 @@ export async function findOrCreateGoogleUser(
     expiresAt: session.expiresAt,
     isNewUser: true,
   };
+}
+
+/**
+ * Permanently deletes a non-demo user account and all associated financial data atomically.
+ * Requires exact confirmation text ("HAPUS AKUN") and password verification for password-based accounts.
+ */
+export async function deleteUserAccount(
+  db: AppDb,
+  userId: string,
+  input: { confirmText: string; currentPassword?: string }
+): Promise<void> {
+  if (input.confirmText.trim().toUpperCase() !== "HAPUS AKUN") {
+    throw new AppError(
+      400,
+      'Ketik "HAPUS AKUN" untuk mengonfirmasi penghapusan akun permanen.'
+    );
+  }
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) {
+    throw new AppError(404, "Pengguna tidak ditemukan.");
+  }
+
+  if (user.email.toLowerCase() === DEMO_EMAIL) {
+    throw new AppError(403, "Akun demo tidak dapat dihapus.");
+  }
+
+  // Require password check for accounts not created via Google OAuth
+  if (!user.googleSub) {
+    if (!input.currentPassword) {
+      throw new AppError(
+        400,
+        "Masukkan kata sandi saat ini untuk menghapus akun Anda."
+      );
+    }
+    const valid = await verifyPassword(
+      input.currentPassword,
+      user.passwordHash
+    );
+    if (!valid) {
+      throw new AppError(400, "Kata sandi saat ini tidak sesuai.");
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    const ownedWallets = await tx
+      .select({ id: wallets.id })
+      .from(wallets)
+      .where(eq(wallets.ownerId, userId));
+    const ownedWalletIds = ownedWallets.map((w) => w.id);
+
+    // Clear references to wallets owned by this user on other records
+    if (ownedWalletIds.length > 0) {
+      await tx
+        .update(savingsGoals)
+        .set({ walletId: null })
+        .where(inArray(savingsGoals.walletId, ownedWalletIds));
+
+      await tx
+        .delete(transactions)
+        .where(
+          or(
+            inArray(transactions.walletId, ownedWalletIds),
+            inArray(transactions.targetWalletId, ownedWalletIds)
+          )
+        );
+
+      await tx
+        .delete(recurringRules)
+        .where(inArray(recurringRules.walletId, ownedWalletIds));
+    }
+
+    // Delete any transactions/invites authored by this user on shared wallets
+    await tx.delete(transactions).where(eq(transactions.userId, userId));
+    await tx.delete(walletInvites).where(eq(walletInvites.createdBy, userId));
+
+    if (ownedWalletIds.length > 0) {
+      await tx.delete(wallets).where(inArray(wallets.id, ownedWalletIds));
+    }
+
+    // Finally delete the user (cascades sessions, categories, budgets, goals, split_bills, debts, bank_integrations, reset tokens)
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 }

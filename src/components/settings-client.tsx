@@ -116,6 +116,15 @@ export function SettingsClient({
   const [restoringBackup, setRestoringBackup] = useState(false);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Self-service account deletion state
+  const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(
+    null
+  );
+
   const catSeqRef = useRef(0);
   const catAbortRef = useRef<AbortController | null>(null);
 
@@ -965,6 +974,40 @@ export function SettingsClient({
             </Button>
           </Card>
         )}
+
+        {/* Zona Bahaya: Hapus Akun Permanen (Khusus Akun Non-Demo) */}
+        {!user.isDemo && (
+          <Card padding="md" className="border-[#FECACA]">
+            <CardHeader
+              title="Hapus Akun Permanen"
+              subtitle="Hapus seluruh akun, dompet milik sendiri, transaksi, struk, dan catatan terkait secara permanen."
+              action={
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEE2E2] text-[#B91C1C]">
+                  <Trash2 className="h-4 w-4" />
+                </span>
+              }
+            />
+
+            <p className="text-xs sm:text-sm text-[#57534E] leading-relaxed mb-4">
+              Disarankan mengunduh salinan <strong>Backup JSON</strong> di atas
+              terlebih dahulu sebelum menghapus akun. Tindakan ini bersifat
+              permanen dan tidak dapat dibatalkan.
+            </p>
+
+            <Button
+              variant="danger"
+              onClick={() => {
+                setDeleteConfirmText("");
+                setDeleteAccountPassword("");
+                setDeleteAccountError(null);
+                setDeleteAccountModalOpen(true);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Hapus Akun Saya</span>
+            </Button>
+          </Card>
+        )}
       </div>
 
       {/* Modal Tambah / Edit Kategori */}
@@ -1141,6 +1184,101 @@ export function SettingsClient({
           akun demo akan dikembalikan ke baseline awal. Halaman akan dimuat
           ulang setelah proses selesai.
         </p>
+      </Modal>
+
+      {/* Modal Konfirmasi Hapus Akun Permanen */}
+      <Modal
+        open={deleteAccountModalOpen}
+        onClose={() => !deletingAccount && setDeleteAccountModalOpen(false)}
+        title="Hapus Akun Secara Permanen?"
+        description="Semua data keuangan Anda akan dihapus dari database dan tidak dapat dipulihkan."
+        size="sm"
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setDeleteAccountError(null);
+            if (deleteConfirmText.trim().toUpperCase() !== "HAPUS AKUN") {
+              setDeleteAccountError('Ketik "HAPUS AKUN" untuk konfirmasi.');
+              return;
+            }
+            setDeletingAccount(true);
+            try {
+              const res = await fetch("/api/settings/account", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  confirmText: deleteConfirmText.trim(),
+                  currentPassword: deleteAccountPassword || undefined,
+                }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                const msg = data.error ?? "Gagal menghapus akun.";
+                setDeleteAccountError(msg);
+                toast.error(msg);
+                return;
+              }
+              toast.success("Akun Anda telah dihapus permanen.");
+              router.push("/");
+              router.refresh();
+            } catch {
+              setDeleteAccountError("Terjadi gangguan jaringan.");
+            } finally {
+              setDeletingAccount(false);
+            }
+          }}
+          noValidate
+          className="space-y-4"
+        >
+          {deleteAccountError && (
+            <div
+              role="alert"
+              className="rounded-xl border border-[#FECACA] bg-[#FEE2E2]/60 px-3.5 py-2.5 text-xs text-[#B91C1C]"
+            >
+              {deleteAccountError}
+            </div>
+          )}
+
+          <Input
+            label='Ketik "HAPUS AKUN" untuk konfirmasi'
+            required
+            placeholder="HAPUS AKUN"
+            disabled={deletingAccount}
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+          />
+
+          <Input
+            label="Kata Sandi Saat Ini (kosongkan jika akun Google)"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Masukkan kata sandi Anda"
+            disabled={deletingAccount}
+            value={deleteAccountPassword}
+            onChange={(e) => setDeleteAccountPassword(e.target.value)}
+          />
+
+          <div className="flex items-center justify-end gap-2 border-t border-[#E7E2D8] pt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={deletingAccount}
+              onClick={() => setDeleteAccountModalOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="danger"
+              size="sm"
+              loading={deletingAccount}
+            >
+              Ya, Hapus Permanen
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

@@ -4,6 +4,7 @@ import { TransactionsClient } from "@/components/transactions-client";
 import { getDb } from "@/db";
 import { getCurrentUser } from "@/lib/auth";
 import { listCategories } from "@/lib/categories";
+import { listUserDebts } from "@/lib/debts";
 import { getCurrentMonthYM } from "@/lib/format";
 import { listRecurringRules } from "@/lib/recurring";
 import { listUserSplitBills } from "@/lib/split-bills";
@@ -40,7 +41,9 @@ export default async function TransaksiPage({
       ? "recurring"
       : resolvedParams.tab === "patungan"
         ? "patungan"
-        : "history";
+        : resolvedParams.tab === "hutang"
+          ? "hutang"
+          : "history";
 
   const db = await getDb();
   const currentYM = getCurrentMonthYM();
@@ -53,6 +56,7 @@ export default async function TransaksiPage({
     initialTx,
     initialRules,
     initialSplitBills,
+    initialDebtsRes,
   ] = await Promise.all([
     listUserWallets(db, user.id),
     listCategories(db, user.id),
@@ -62,6 +66,7 @@ export default async function TransaksiPage({
     }),
     listRecurringRules(db, user.id),
     listUserSplitBills(db, user.id),
+    listUserDebts(db, user.id),
   ]);
   const initialCategories = rawCategories.map((c) => ({
     id: c.id,
@@ -83,6 +88,7 @@ export default async function TransaksiPage({
       initialSummary={initialTx.summary}
       initialRules={initialRules}
       initialSplitBills={initialSplitBills}
+      initialDebts={initialDebtsRes.items}
     />
   );
 }
