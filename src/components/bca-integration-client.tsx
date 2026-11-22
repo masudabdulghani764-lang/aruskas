@@ -42,31 +42,131 @@ import type { WalletWithRole } from "@/lib/wallets";
 type ActiveTab = "webhook" | "csv" | "logs";
 type GuideTab = "gmail" | "android" | "ios";
 
+const PROVIDER_META: Record<
+  string,
+  {
+    appName: string;
+    gmailFrom: string;
+    sampleSubject: string;
+    sampleText: string;
+  }
+> = {
+  bca: {
+    appName: "myBCA / BCA mobile",
+    gmailFrom: "bca.co.id",
+    sampleSubject: "Notifikasi Transfer Masuk myBCA",
+    sampleText:
+      "Anda menerima transfer sebesar Rp 2.500.000,00 dari PT NUSANTARA DIGITAL ke rekening BCA Anda pada tanggal 21/11/2026. No. Ref: BCA2026112101",
+  },
+  mandiri: {
+    appName: "Livin' by Mandiri",
+    gmailFrom: "bankmandiri.co.id",
+    sampleSubject: "Livin' by Mandiri - Transaksi QRIS Berhasil",
+    sampleText:
+      "Pembayaran QRIS Livin' by Mandiri di KOPI KENANGAN SUDIRMAN sebesar Rp 42.000 pada 21/11/2026 berhasil. Ref: MDR2026112102",
+  },
+  bri: {
+    appName: "BRImo BRI",
+    gmailFrom: "bri.co.id",
+    sampleSubject: "Transaksi BRImo Berhasil",
+    sampleText:
+      "Pembayaran BRIVA TOKOPEDIA melalui BRImo sebesar Rp 275.000,00 pada 21/11/2026 berhasil. Ref: BRI2026112105",
+  },
+  bni: {
+    appName: "wondr by BNI / BNI Mobile",
+    gmailFrom: "bni.co.id",
+    sampleSubject: "Notifikasi Transaksi wondr by BNI",
+    sampleText:
+      "Transfer ke BUDI SANTOSO melalui wondr BNI sebesar Rp 185.000 pada 21/11/2026 berhasil. Ref: BNI2026112106",
+  },
+  blu: {
+    appName: "blu by BCA Digital",
+    gmailFrom: "bcadigital.co.id",
+    sampleSubject: "Notifikasi Transaksi blu by BCA",
+    sampleText:
+      "Pembayaran QRIS blu by BCA di ALFAMART KEMANG sebesar Rp 54.000 pada 21/11/2026 berhasil. Ref: BLU2026112107",
+  },
+  jago: {
+    appName: "Bank Jago",
+    gmailFrom: "jago.com",
+    sampleSubject: "Bank Jago - Transaksi Berhasil",
+    sampleText:
+      "Kamu bayar QRIS Bank Jago di FORE COFFEE sebesar Rp 39.000 pada 21/11/2026 berhasil. Ref: JGO2026112108",
+  },
+  seabank: {
+    appName: "SeaBank",
+    gmailFrom: "seabank.co.id",
+    sampleSubject: "SeaBank - Dana Masuk",
+    sampleText:
+      "Transfer masuk SeaBank sebesar Rp 750.000 dari ANDI PRATAMA pada 21/11/2026 berhasil. No. Ref: SEA2026112104",
+  },
+  bsi: {
+    appName: "BYOND by BSI",
+    gmailFrom: "bankbsi.co.id",
+    sampleSubject: "Notifikasi BYOND by BSI",
+    sampleText:
+      "Pembayaran QRIS BYOND BSI di WARUNG SATE KHAS sebesar Rp 88.000 pada 21/11/2026 berhasil. Ref: BSI2026112109",
+  },
+  gopay: {
+    appName: "GoPay / Gojek",
+    gmailFrom: "gopay OR gojek.com",
+    sampleSubject: "Notifikasi GoPay",
+    sampleText:
+      "Kamu bayar Rp 68.500 pakai GoPay QRIS di WARUNG PADANG SEDERHANA pada 21/11/2026 berhasil. Ref: GPY2026112103",
+  },
+  shopeepay: {
+    appName: "ShopeePay / Shopee",
+    gmailFrom: "shopee.co.id OR shopeepay",
+    sampleSubject: "Pembayaran ShopeePay Berhasil",
+    sampleText:
+      "Pembayaran ShopeePay di INDOMARET SUDIRMAN sebesar Rp 31.500 pada 21/11/2026 berhasil. Ref: SPY2026112110",
+  },
+  ovo: {
+    appName: "OVO",
+    gmailFrom: "ovo.id",
+    sampleSubject: "Notifikasi Transaksi OVO",
+    sampleText:
+      "Pembayaran OVO QRIS di BAKMI GM sebesar Rp 74.000 pada 21/11/2026 berhasil. Ref: OVO2026112111",
+  },
+  dana: {
+    appName: "DANA",
+    gmailFrom: "dana.id",
+    sampleSubject: "Notifikasi DANA",
+    sampleText:
+      "Bayar pakai DANA QRIS di MIXUE sebesar Rp 28.000 pada 21/11/2026 berhasil. Ref: DNA2026112112",
+  },
+};
+
 const SAMPLE_NOTIFICATIONS = [
   {
-    label: "BCA · Transfer Masuk",
-    subject: "Notifikasi Transfer Masuk myBCA",
-    text: "Anda menerima transfer sebesar Rp 2.500.000,00 dari PT NUSANTARA DIGITAL ke rekening BCA Anda pada tanggal 21/11/2026. No. Ref: BCA2026112101",
-  },
-  {
     label: "Livin' Mandiri · QRIS",
-    subject: "Livin' by Mandiri - Transaksi QRIS Berhasil",
-    text: "Pembayaran QRIS Livin' by Mandiri di KOPI KENANGAN SUDIRMAN sebesar Rp 42.000 pada 21/11/2026 berhasil. Ref: MDR2026112102",
+    subject: PROVIDER_META.mandiri.sampleSubject,
+    text: PROVIDER_META.mandiri.sampleText,
   },
   {
-    label: "GoPay · Bayar",
-    subject: "Notifikasi GoPay",
-    text: "Kamu bayar Rp 68.500 pakai GoPay QRIS di WARUNG PADANG SEDERHANA pada 21/11/2026 berhasil. Ref: GPY2026112103",
+    label: "GoPay · QRIS",
+    subject: PROVIDER_META.gopay.sampleSubject,
+    text: PROVIDER_META.gopay.sampleText,
   },
   {
-    label: "SeaBank · Transfer Masuk",
-    subject: "SeaBank - Dana Masuk",
-    text: "Transfer masuk SeaBank sebesar Rp 750.000 dari ANDI PRATAMA pada 21/11/2026 berhasil. No. Ref: SEA2026112104",
+    label: "SeaBank · Masuk",
+    subject: PROVIDER_META.seabank.sampleSubject,
+    text: PROVIDER_META.seabank.sampleText,
   },
   {
-    label: "BRImo · Virtual Account",
-    subject: "Transaksi BRImo Berhasil",
-    text: "Pembayaran BRIVA TOKOPEDIA melalui BRImo sebesar Rp 275.000,00 pada 21/11/2026 berhasil. Ref: BRI2026112105",
+    label: "BRImo · VA",
+    subject: PROVIDER_META.bri.sampleSubject,
+    text: PROVIDER_META.bri.sampleText,
+  },
+  {
+    label: "DANA · QRIS",
+    subject: PROVIDER_META.dana.sampleSubject,
+    text: PROVIDER_META.dana.sampleText,
+  },
+  {
+    label: "BCA · Transfer Masuk",
+    subject: PROVIDER_META.bca.sampleSubject,
+    text: PROVIDER_META.bca.sampleText,
   },
 ] as const;
 
@@ -86,18 +186,30 @@ const SAMPLE_BCA_CSV = [
   "Saldo Awal,=,14,000,000.00",
 ].join("\n");
 
-function buildGmailAppsScript(webhookUrl: string, tokenPlaceholder: string): string {
+function buildGmailAppsScript(
+  webhookUrl: string,
+  tokenPlaceholder: string,
+  selectedProviderId: string
+): string {
+  const meta = PROVIDER_META[selectedProviderId];
+  const fromFilter = meta
+    ? meta.gmailFrom
+    : "bca.co.id OR bankmandiri.co.id OR bri.co.id OR bni.co.id OR bcadigital.co.id OR jago.com OR seabank.co.id OR bankbsi.co.id OR gopay OR gojek.com OR ovo.id OR dana.id OR shopeepay OR shopee.co.id";
+  const commentLabel = meta
+    ? `email notifikasi dari ${meta.appName}`
+    : "email notifikasi dari seluruh Bank & E-Wallet Indonesia";
+
   return `// Tempel ke https://script.google.com lalu pasang Trigger "Time-driven" tiap 5 menit
 const ARUSKAS_WEBHOOK_URL = "${webhookUrl}";
 const ARUSKAS_TOKEN = "${tokenPlaceholder}";
 
-function syncNotifikasiBCA() {
+function syncNotifikasiKeuangan() {
   const labelName = "ArusKas-Synced";
   let label = GmailApp.getUserLabelByName(labelName);
   if (!label) label = GmailApp.createLabel(labelName);
 
-  // Cari email notifikasi dari BCA, Mandiri, BRI, BNI, Jago, SeaBank, GoPay, OVO, DANA, ShopeePay
-  const query = 'from:(bca.co.id OR bankmandiri.co.id OR bri.co.id OR bni.co.id OR jago.com OR seabank.co.id OR gopay OR ovo.id OR dana.id OR shopeepay) -label:' + labelName + ' newer_than:7d';
+  // Cari ${commentLabel}
+  const query = 'from:(${fromFilter}) -label:' + labelName + ' newer_than:7d';
   const threads = GmailApp.search(query, 0, 20);
 
   for (const thread of threads) {
@@ -139,7 +251,17 @@ export function BcaIntegrationClient({
 
   const [tab, setTab] = useState<ActiveTab>("webhook");
   const [guideTab, setGuideTab] = useState<GuideTab>("gmail");
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("all");
   const [origin, setOrigin] = useState("http://localhost:3000");
+
+  const activeProvider = useMemo(
+    () =>
+      SUPPORTED_BANK_PROVIDERS.find((p) => p.id === selectedProviderId) ?? null,
+    [selectedProviderId]
+  );
+  const activeProviderMeta = activeProvider
+    ? PROVIDER_META[activeProvider.id]
+    : null;
 
   const [integration, setIntegration] = useState<BcaIntegrationView | null>(
     initialIntegration
@@ -147,13 +269,9 @@ export function BcaIntegrationClient({
   const [logs, setLogs] = useState<BcaSyncLogView[]>(initialLogs);
   const [wallets] = useState<WalletWithRole[]>(initialWallets);
 
-  // Default to existing BCA wallet if present
   const defaultWalletId = useMemo(() => {
     if (initialIntegration?.walletId) return initialIntegration.walletId;
-    const bcaMatch = initialWallets.find((w) =>
-      w.name.toLowerCase().includes("bca")
-    );
-    return bcaMatch?.id ?? initialWallets[0]?.id ?? "";
+    return initialWallets[0]?.id ?? "";
   }, [initialIntegration, initialWallets]);
 
   const [selectedWalletId, setSelectedWalletId] = useState(defaultWalletId);
@@ -212,11 +330,21 @@ export function BcaIntegrationClient({
 
   const webhookUrl = `${origin}/api/integrations/bca/webhook`;
   const tokenForGuide =
-    freshRawToken ?? integration?.tokenPrefix ?? "TEMPATKAN_TOKEN_BCA_ANDA";
+    freshRawToken ?? integration?.tokenPrefix ?? "TEMPATKAN_TOKEN_WEBHOOK_ANDA";
   const appsScriptCode = useMemo(
-    () => buildGmailAppsScript(webhookUrl, tokenForGuide),
-    [webhookUrl, tokenForGuide]
+    () => buildGmailAppsScript(webhookUrl, tokenForGuide, selectedProviderId),
+    [webhookUrl, tokenForGuide, selectedProviderId]
   );
+
+  function handleSelectProvider(providerId: string) {
+    setSelectedProviderId(providerId);
+    const meta = PROVIDER_META[providerId];
+    if (meta) {
+      setSimSubject(meta.sampleSubject);
+      setSimText(meta.sampleText);
+      setSimPreview(null);
+    }
+  }
 
   async function refreshIntegrationState() {
     try {
@@ -305,11 +433,11 @@ export function BcaIntegrationClient({
 
   async function runSimulator(commit: boolean) {
     if (!selectedWalletId) {
-      toast.error("Pilih dompet BCA tujuan terlebih dahulu.");
+      toast.error("Pilih dompet tujuan terlebih dahulu.");
       return;
     }
     if (!simText.trim()) {
-      toast.error("Tempel teks notifikasi BCA terlebih dahulu.");
+      toast.error("Tempel teks notifikasi bank atau e-wallet terlebih dahulu.");
       return;
     }
     setSimBusy(true);
@@ -326,7 +454,7 @@ export function BcaIntegrationClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Gagal membaca notifikasi BCA.");
+        toast.error(data.error ?? "Gagal membaca notifikasi transaksi.");
         return;
       }
 
@@ -375,11 +503,11 @@ export function BcaIntegrationClient({
   async function handlePreviewCsv(overrideText?: string) {
     const content = overrideText ?? csvText;
     if (!csvWalletId) {
-      toast.error("Pilih dompet BCA tujuan terlebih dahulu.");
+      toast.error("Pilih dompet tujuan impor terlebih dahulu.");
       return;
     }
     if (!content.trim()) {
-      toast.error("Upload file CSV mutasi BCA atau muat contoh terlebih dahulu.");
+      toast.error("Upload file CSV mutasi bank atau muat contoh terlebih dahulu.");
       return;
     }
 
@@ -396,7 +524,7 @@ export function BcaIntegrationClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Gagal membaca file CSV BCA.");
+        toast.error(data.error ?? "Gagal membaca file CSV mutasi.");
         return;
       }
 
@@ -420,7 +548,7 @@ export function BcaIntegrationClient({
       setCsvSelectedHashes(initialSelected);
       setCsvCategoryOverrides(overrides);
       toast.success(
-        `${rows.length} baris mutasi BCA terbaca (${initialSelected.size} baru siap diimpor).`
+        `${rows.length} baris mutasi terbaca (${initialSelected.size} baru siap diimpor).`
       );
     } catch {
       toast.error("Terjadi gangguan jaringan.");
@@ -461,12 +589,12 @@ export function BcaIntegrationClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Gagal mengimpor mutasi BCA.");
+        toast.error(data.error ?? "Gagal mengimpor mutasi CSV.");
         return;
       }
 
       toast.success(
-        `${data.importedCount} transaksi BCA berhasil dicatat${
+        `${data.importedCount} transaksi berhasil diimpor${
           data.duplicateCount > 0
             ? ` (${data.duplicateCount} duplikat dilewati)`
             : ""
@@ -488,30 +616,65 @@ export function BcaIntegrationClient({
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-[#EADBC0] bg-[#FDF8EE] px-2.5 py-0.5 text-xs font-semibold text-[#92400E]">
             <Landmark className="h-3.5 w-3.5" />
-            <span>Universal Bank &amp; E-Wallet Indonesia · Tanpa Password/PIN</span>
+            <span>Otomatisasi 12 Bank &amp; E-Wallet Indonesia · Tanpa Password/PIN</span>
           </div>
           <h1 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917]">
-            Auto-Catat Bank &amp; E-Wallet
+            {activeProvider
+              ? `Auto-Catat Transaksi ${activeProvider.label}`
+              : "Auto-Catat Bank & E-Wallet"}
           </h1>
           <p className="mt-1 text-sm text-[#57534E] max-w-2xl">
-            Catat uang masuk dan keluar secara otomatis dari notifikasi Email/HP
-            untuk BCA, Livin&apos; Mandiri, BRImo, Wondr BNI, Bank Jago, SeaBank,
-            blu, GoPay, ShopeePay, OVO, dan DANA — atau impor CSV KlikBCA/myBCA.
+            {activeProvider
+              ? `Hubungkan notifikasi ${activeProvider.label} ke dompet pilihan Anda secara otomatis, lengkap dengan anti-duplikat dan tebak kategori.`
+              : "Pilih bank atau e-wallet yang Anda gunakan di bawah ini — panduan, routing dompet, dan contoh uji coba langsung menyesuaikan pilihan Anda."}
           </p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {SUPPORTED_BANK_PROVIDERS.map((p) => (
-              <span
-                key={p.id}
-                className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
-                  p.kind === "ewallet"
-                    ? "border-[#CBE0D2] bg-[#EFF6F1] text-[#14532D]"
-                    : "border-[#E3D4BA] bg-[#FAF1E0] text-[#57534E]"
-                )}
-              >
-                {p.label}
-              </span>
-            ))}
+          <div
+            role="group"
+            aria-label="Pilih Bank atau E-Wallet"
+            className="mt-3 flex flex-wrap gap-1.5"
+          >
+            <button
+              type="button"
+              onClick={() => handleSelectProvider("all")}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors cursor-pointer",
+                selectedProviderId === "all"
+                  ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF]"
+                  : "border-[#E3D4BA] bg-[#FFFFFF] text-[#57534E] hover:bg-[#FAF1E0]"
+              )}
+            >
+              Semua Bank &amp; E-Wallet (12)
+            </button>
+            {SUPPORTED_BANK_PROVIDERS.map((p) => {
+              const isSelected = selectedProviderId === p.id;
+              const isMapped = Boolean(providerWalletMap[p.id]);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleSelectProvider(p.id)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                    isSelected
+                      ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF] font-semibold"
+                      : p.kind === "ewallet"
+                        ? "border-[#CBE0D2] bg-[#EFF6F1] text-[#14532D] hover:bg-[#DCFCE7]"
+                        : "border-[#E3D4BA] bg-[#FAF1E0] text-[#57534E] hover:bg-[#F3E2C5]"
+                  )}
+                >
+                  <span>{p.label}</span>
+                  {isMapped && (
+                    <span
+                      title="Sudah dipetakan ke dompet khusus"
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        isSelected ? "bg-[#86EFAC]" : "bg-[#15803D]"
+                      )}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -545,7 +708,7 @@ export function BcaIntegrationClient({
             },
             {
               key: "csv",
-              label: "Impor Mutasi CSV (KlikBCA / myBCA)",
+              label: "Impor Mutasi CSV Bank",
               icon: FileSpreadsheet,
             },
             {
@@ -602,6 +765,35 @@ export function BcaIntegrationClient({
               </div>
 
               <form onSubmit={handleSaveConfig} noValidate className="mt-4 space-y-4">
+                {activeProvider && (
+                  <div className="rounded-xl border border-[#CBE0D2] bg-[#EFF6F1] p-3.5 space-y-2">
+                    <Select
+                      label={`Dompet Khusus untuk ${activeProvider.label}`}
+                      value={providerWalletMap[activeProvider.id] ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setProviderWalletMap((prev) => {
+                          const next = { ...prev };
+                          if (val) next[activeProvider.id] = val;
+                          else delete next[activeProvider.id];
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="">Ikuti Dompet Tujuan Default</option>
+                      {wallets.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name} ({formatIDR(w.balance)})
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-[11px] text-[#14532D]">
+                      Setiap notifikasi dari <strong>{activeProvider.label}</strong>{" "}
+                      akan otomatis dicatat ke dompet ini setelah Anda klik Simpan.
+                    </p>
+                  </div>
+                )}
+
                 <Select
                   label="Dompet Tujuan Default (Semua Bank & E-Wallet)"
                   value={selectedWalletId}
@@ -786,10 +978,13 @@ export function BcaIntegrationClient({
             {/* Setup Guide Card */}
             <Card className="p-5 sm:p-6">
               <h2 className="text-base font-semibold text-[#1C1917]">
-                2. Panduan Otomatisasi (Gratis, 3 Menit)
+                2. Panduan Otomatisasi{" "}
+                {activeProvider ? activeProvider.label : "(Gratis, 3 Menit)"}
               </h2>
               <p className="mt-1 text-xs text-[#78716C]">
-                Pilih cara pengiriman notifikasi Bank &amp; E-Wallet ke ArusKas:
+                Pilih cara pengiriman notifikasi{" "}
+                {activeProvider ? activeProvider.label : "Bank & E-Wallet"} ke
+                ArusKas:
               </p>
 
               <div className="mt-3 flex gap-1.5">
@@ -824,8 +1019,13 @@ export function BcaIntegrationClient({
                 <div className="mt-4 space-y-3 text-xs text-[#57534E]">
                   <ol className="list-decimal pl-4 space-y-1.5 leading-relaxed">
                     <li>
-                      Pastikan notifikasi email transaksi dari bank/e-wallet
-                      Anda (<strong>myBCA, Livin&apos;, BRImo, Wondr, SeaBank, Jago, GoPay, OVO, DANA</strong>) aktif menuju Gmail Anda.
+                      Pastikan notifikasi email transaksi dari{" "}
+                      <strong>
+                        {activeProviderMeta
+                          ? activeProviderMeta.appName
+                          : "bank/e-wallet Anda (Mandiri, BRI, BNI, SeaBank, Jago, GoPay, OVO, DANA, ShopeePay, BCA, dll.)"}
+                      </strong>{" "}
+                      aktif menuju Gmail Anda.
                     </li>
                     <li>
                       Buka <strong>script.google.com</strong> → klik{" "}
@@ -833,7 +1033,7 @@ export function BcaIntegrationClient({
                     </li>
                     <li>
                       Buka menu <strong>Triggers</strong> (ikon jam) → tambah
-                      trigger <code>syncNotifikasiBCA</code> berjalan setiap{" "}
+                      trigger <code>syncNotifikasiKeuangan</code> berjalan setiap{" "}
                       <strong>5 menit</strong>.
                     </li>
                   </ol>
@@ -870,12 +1070,13 @@ export function BcaIntegrationClient({
                   </li>
                   <li>
                     <strong>Trigger:</strong> <em>Notification Received</em> →
-                    pilih aplikasi bank/e-wallet Anda (<strong>myBCA</strong>,{" "}
-                    <strong>Livin&apos; Mandiri</strong>, <strong>BRImo</strong>,{" "}
-                    <strong>Wondr BNI</strong>, <strong>Bank Jago</strong>,{" "}
-                    <strong>SeaBank</strong>, <strong>GoPay</strong>,{" "}
-                    <strong>OVO</strong>, <strong>DANA</strong>, atau{" "}
-                    <strong>ShopeePay</strong>).
+                    pilih aplikasi{" "}
+                    <strong>
+                      {activeProviderMeta
+                        ? activeProviderMeta.appName
+                        : "bank/e-wallet yang Anda pakai (Livin' Mandiri, BRImo, Wondr BNI, Bank Jago, SeaBank, GoPay, OVO, DANA, ShopeePay, myBCA, dll.)"}
+                    </strong>
+                    .
                   </li>
                   <li>
                     <strong>Action:</strong> <em>HTTP Request (POST)</em> ke{" "}
@@ -893,7 +1094,11 @@ export function BcaIntegrationClient({
                   <li>
                     Buka aplikasi <strong>Shortcuts</strong> → tab{" "}
                     <strong>Automation</strong> → buat automasi saat menerima{" "}
-                    <strong>Email dari BCA</strong> (atau pakai jalur Gmail Apps
+                    <strong>
+                      Email dari{" "}
+                      {activeProvider ? activeProvider.label : "Bank / E-Wallet Anda"}
+                    </strong>{" "}
+                    (atau pakai jalur Gmail Apps
                     Script agar berjalan 100% di latar belakang tanpa konfirmasi
                     iOS).
                   </li>
@@ -913,12 +1118,18 @@ export function BcaIntegrationClient({
             <Card className="p-5 sm:p-6">
               <div className="pb-4 border-b border-[#E7E2D8]">
                 <h2 className="text-base font-semibold text-[#1C1917]">
-                  3. Uji Coba Langsung (Tempel Notifikasi Bank / E-Wallet)
+                  3. Uji Coba Langsung{" "}
+                  {activeProvider
+                    ? `(Notifikasi ${activeProvider.label})`
+                    : "(Tempel Notifikasi Bank / E-Wallet)"}
                 </h2>
                 <p className="text-xs text-[#78716C] mt-0.5">
-                  Tempel teks email atau notifikasi push dari 12 bank/e-wallet
-                  Indonesia, atau klik contoh di bawah untuk langsung menguji
-                  pembacaan &amp; routing dompet otomatis.
+                  Tempel teks email atau notifikasi push dari{" "}
+                  {activeProvider
+                    ? activeProvider.label
+                    : "bank atau e-wallet pilihan Anda"}
+                  , atau klik contoh di bawah untuk langsung menguji pembacaan
+                  &amp; routing dompet otomatis.
                 </p>
               </div>
 
@@ -948,7 +1159,7 @@ export function BcaIntegrationClient({
                     type="text"
                     value={simSubject}
                     onChange={(e) => setSimSubject(e.target.value)}
-                    placeholder="Contoh: Notifikasi Transfer Masuk myBCA"
+                    placeholder="Contoh: Notifikasi GoPay / Livin' Mandiri / SeaBank"
                     className="h-10 w-full rounded-xl border border-[#E7E2D8] bg-[#FFFFFF] px-3.5 text-sm text-[#1C1917] focus:border-[#14532D] focus:outline-none"
                   />
                 </div>
@@ -1050,14 +1261,14 @@ export function BcaIntegrationClient({
         </div>
       )}
 
-      {/* TAB 2: CSV IMPORT KLIKBCA / MYBCA */}
+      {/* TAB 2: CSV IMPORT MUTASI BANK */}
       {tab === "csv" && (
         <div className="space-y-6">
           <Card className="p-5 sm:p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div className="flex-1 max-w-md">
                 <Select
-                  label="Pilih Dompet BCA Tujuan Impor"
+                  label="Pilih Dompet Tujuan Impor CSV"
                   value={csvWalletId}
                   onChange={(e) => setCsvWalletId(e.target.value)}
                 >
@@ -1072,7 +1283,7 @@ export function BcaIntegrationClient({
               <div className="flex flex-wrap items-center gap-2.5">
                 <label className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#14532D] px-4 text-sm font-medium text-[#FFFFFF] hover:bg-[#166534] transition-colors cursor-pointer">
                   <Upload className="h-4 w-4" />
-                  <span>Upload CSV Mutasi BCA</span>
+                  <span>Upload CSV Mutasi Bank</span>
                   <input
                     type="file"
                     accept=".csv,text/csv"
@@ -1090,7 +1301,7 @@ export function BcaIntegrationClient({
                     void handlePreviewCsv(SAMPLE_BCA_CSV);
                   }}
                 >
-                  <span>Muat Contoh Mutasi KlikBCA</span>
+                  <span>Muat Contoh Mutasi CSV</span>
                 </Button>
               </div>
             </div>
@@ -1219,7 +1430,7 @@ export function BcaIntegrationClient({
                     <strong className="tnum text-[#1C1917]">
                       {csvSelectedHashes.size}
                     </strong>{" "}
-                    transaksi baru siap diimpor ke dompet BCA.
+                    transaksi baru siap diimpor ke dompet tujuan.
                   </p>
                   <Button
                     type="button"
@@ -1242,7 +1453,7 @@ export function BcaIntegrationClient({
           <div className="flex items-center justify-between pb-4 border-b border-[#E7E2D8]">
             <div>
               <h2 className="text-base font-semibold text-[#1C1917]">
-                Riwayat Sinkronisasi Otomatis &amp; Impor BCA
+                Riwayat Sinkronisasi Otomatis &amp; Impor CSV
               </h2>
               <p className="text-xs text-[#78716C] mt-0.5">
                 Menampilkan 25 aktivitas terakhir dari Webhook Email, Push HP,
@@ -1264,8 +1475,8 @@ export function BcaIntegrationClient({
             <div className="py-8">
               <EmptyState
                 icon={<History className="h-5 w-5" />}
-                title="Belum ada riwayat sinkronisasi BCA"
-                description="Coba jalankan Simulator Notifikasi atau Impor CSV Mutasi BCA untuk melihat catatan otomatis muncul di sini."
+                title="Belum ada riwayat sinkronisasi otomatis"
+                description="Coba jalankan Simulator Notifikasi atau Impor CSV Mutasi Bank untuk melihat catatan otomatis muncul di sini."
               />
             </div>
           ) : (

@@ -25,6 +25,7 @@ export default function robots(): MetadataRoute.Robots {
           "/anggaran",
           "/laporan",
           "/pengaturan",
+          "/auto-bank",
           "/integrasi-bca",
           "/reset-sandi",
           "/undangan/",

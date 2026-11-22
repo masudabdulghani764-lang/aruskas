@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "ArusKas — Laporan Keuangan Pribadi & Keluarga",
     short_name: "ArusKas",
     description:
-      "Kelola arus kas pribadi, dompet bersama keluarga, anggaran bulanan, dan pencatatan BCA otomatis secara permanen.",
+      "Kelola arus kas pribadi, dompet bersama keluarga, anggaran bulanan, patungan, dan auto-catat 12 bank & e-wallet Indonesia.",
     start_url: "/dashboard",
     display: "standalone",
     background_color: "#F5E9D3",
