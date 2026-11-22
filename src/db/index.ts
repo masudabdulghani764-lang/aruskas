@@ -42,8 +42,11 @@ function resolveConnectionTarget(): string {
  */
 export async function createDb(target = ":memory:"): Promise<CreatedDb> {
   if (isPostgresUrl(target)) {
+    const isLocalPg =
+      /localhost|127\.0\.0\.1/i.test(target) || /sslmode=disable/i.test(target);
     const pool = new Pool({
       connectionString: target,
+      ...(isLocalPg ? {} : { ssl: { rejectUnauthorized: true } }),
       max: 10,
       idleTimeoutMillis: 20_000,
       connectionTimeoutMillis: 15_000,

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { decryptVaultValue, encryptVaultValue } from "@/lib/crypto-vault";
 import { AppError } from "@/lib/errors";
 
 export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
@@ -163,12 +164,22 @@ export function prepareAttachmentForDb(file: {
   assertAttachmentMagicBytes(mime, file.buffer);
 
   const ext = MIME_EXTENSIONS[mime] ?? "";
+  const rawBase64 = Buffer.from(file.buffer).toString("base64");
   return {
     path: `db:${crypto.randomUUID()}${ext}`,
     name: sanitizeAttachmentName(file.name),
     mime,
-    dataBase64: Buffer.from(file.buffer).toString("base64"),
+    dataBase64: encryptVaultValue(rawBase64, "attachment"),
   };
+}
+
+/**
+ * Decodes a stored `transaction_attachments.data` value (AES-256-GCM encrypted or
+ * legacy plaintext base64) back into raw binary bytes.
+ */
+export function decodeAttachmentFromDb(stored: string): Uint8Array {
+  const base64 = decryptVaultValue(stored, "attachment");
+  return new Uint8Array(Buffer.from(base64, "base64"));
 }
 
 function resolveSafeAttachmentPath(relPath: string, baseDir?: string): string {

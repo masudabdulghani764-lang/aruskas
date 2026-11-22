@@ -4,6 +4,7 @@ import { getDb } from "@/db";
 import { transactionAttachments, transactions } from "@/db/schema";
 import {
   buildContentDisposition,
+  decodeAttachmentFromDb,
   readAttachmentBuffer,
 } from "@/lib/attachments";
 import { requireCurrentUser } from "@/lib/auth";
@@ -45,7 +46,7 @@ export async function GET(
 
     let bytes: Uint8Array;
     if (blobRow?.data) {
-      bytes = new Uint8Array(Buffer.from(blobRow.data, "base64"));
+      bytes = decodeAttachmentFromDb(blobRow.data);
     } else if (!row.attachmentPath.startsWith("db:")) {
       bytes = await readAttachmentBuffer(row.attachmentPath);
     } else {
@@ -62,6 +63,7 @@ export async function GET(
       headers: {
         "Content-Type": row.attachmentMime ?? "application/octet-stream",
         "Content-Disposition": contentDisposition,
+        "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },
     });

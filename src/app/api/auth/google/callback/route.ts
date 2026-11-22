@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/db";
+import { recordSecurityEvent } from "@/lib/audit-log";
 import {
   destroySession,
   findOrCreateGoogleUser,
   setSessionCookie,
 } from "@/lib/auth";
+import { getClientIp } from "@/lib/security";
 import {
   createMobileAuthHandoffToken,
   exchangeGoogleCodeForProfile,
@@ -142,6 +144,14 @@ export async function GET(request: Request) {
       profile,
       request.headers.get("user-agent")
     );
+
+    await recordSecurityEvent(db, {
+      userId: user.id,
+      eventType: "login_google",
+      ipAddress: getClientIp(request),
+      userAgent: request.headers.get("user-agent"),
+      metadata: isMobileFlow ? "Login Google via APK Android" : "Login Google Web",
+    });
 
     if (isMobileFlow) {
       // Do not leave a stray browser session; the WebView creates its own session via mobile-exchange

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
+import { AdvancedSecurityPanel } from "@/components/advanced-security-panel";
 import {
   Badge,
   Button,
@@ -742,6 +743,9 @@ export function SettingsClient({
           </div>
         </Card>
       </div>
+
+      {/* Row 1b: Proteksi Lapis Kedua (2FA, Kunci Biometrik APK) & Log Aktivitas Keamanan */}
+      <AdvancedSecurityPanel isDemo={user.isDemo} />
 
       {/* Row 2: Kelola Kategori Kustom */}
       <Card padding="md">

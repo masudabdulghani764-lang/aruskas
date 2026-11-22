@@ -3,7 +3,7 @@
 import React, { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleAuthButton } from "@/components/google-auth-button";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
@@ -30,9 +30,52 @@ function MasukForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(
+    null
+  );
+  const [twoFactorCode, setTwoFactorCode] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(
     queryError ? (OAUTH_ERROR_MESSAGES[queryError] ?? null) : null
   );
+
+  async function handleVerify2fa(event: React.FormEvent) {
+    event.preventDefault();
+    setErrorMsg(null);
+    const cleaned = twoFactorCode.replace(/\D/g, "");
+    if (cleaned.length !== 6) {
+      setErrorMsg("Masukkan 6 digit kode dari aplikasi Authenticator.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/login/verify-2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challengeToken: twoFactorChallenge,
+          code: cleaned,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.error ?? "Kode 2FA tidak valid.";
+        setErrorMsg(msg);
+        toast.error(msg);
+        return;
+      }
+
+      toast.success("Verifikasi 2FA berhasil. Selamat datang kembali!");
+      router.push(nextPath);
+      router.refresh();
+    } catch {
+      const msg = "Terjadi gangguan jaringan. Silakan coba lagi.";
+      setErrorMsg(msg);
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -63,6 +106,13 @@ function MasukForm() {
         const msg = data.error ?? "Email atau kata sandi salah.";
         setErrorMsg(msg);
         toast.error(msg);
+        return;
+      }
+
+      if (data.requiresTwoFactor && data.challengeToken) {
+        setTwoFactorChallenge(String(data.challengeToken));
+        setTwoFactorCode("");
+        toast.info("Masukkan kode 6 digit dari aplikasi Authenticator Anda.");
         return;
       }
 
@@ -120,72 +170,123 @@ function MasukForm() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <Input
-              label="Email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="nama@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  htmlFor="login-password"
-                  className="block text-xs font-medium text-[#57534E]"
-                >
-                  Kata Sandi <span className="text-[#B91C1C]">*</span>
-                </label>
-                <Link
-                  href="/lupa-sandi"
-                  className="text-xs font-medium text-[#14532D] hover:underline underline-offset-4"
-                >
-                  Lupa kata sandi?
-                </Link>
+          {twoFactorChallenge ? (
+            <form onSubmit={handleVerify2fa} className="space-y-4" noValidate>
+              <div className="flex items-start gap-3 rounded-xl border border-[#CBE0D2] bg-[#EFF6F1] p-3.5 text-xs text-[#14532D]">
+                <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Verifikasi 2 Langkah (2FA)</p>
+                  <p className="mt-0.5 text-[#166534]">
+                    Buka Google Authenticator / Authy lalu masukkan kode 6 digit
+                    untuk akun <strong>{email}</strong>.
+                  </p>
+                </div>
               </div>
-              <div className="relative">
-                <input
-                  id="login-password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  autoComplete="current-password"
-                  placeholder="Masukkan kata sandi"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-[#E7E2D8] bg-[#FFFFFF] px-3.5 py-2.5 pr-10 text-sm text-[#1C1917] placeholder:text-[#78716C]/70 transition-colors focus:border-[#14532D] focus:outline-none focus:ring-2 focus:ring-[#14532D]/15"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={
-                    showPassword
-                      ? "Sembunyikan kata sandi"
-                      : "Tampilkan kata sandi"
-                  }
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-[#78716C] hover:bg-[#EFECE4] hover:text-[#1C1917] cursor-pointer"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              loading={submitting}
-              className="w-full"
-            >
-              Masuk
-            </Button>
-          </form>
+              <Input
+                label="Kode 6 Digit Authenticator"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="123456"
+                required
+                value={twoFactorCode}
+                onChange={(e) =>
+                  setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+              />
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                loading={submitting}
+                className="w-full"
+              >
+                Verifikasi &amp; Masuk
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTwoFactorChallenge(null);
+                  setTwoFactorCode("");
+                  setErrorMsg(null);
+                }}
+                className="w-full text-center text-xs font-medium text-[#57534E] hover:text-[#1C1917] cursor-pointer"
+              >
+                Kembali ke form email &amp; kata sandi
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <Input
+                label="Email"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="nama@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="login-password"
+                    className="block text-xs font-medium text-[#57534E]"
+                  >
+                    Kata Sandi <span className="text-[#B91C1C]">*</span>
+                  </label>
+                  <Link
+                    href="/lupa-sandi"
+                    className="text-xs font-medium text-[#14532D] hover:underline underline-offset-4"
+                  >
+                    Lupa kata sandi?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    placeholder="Masukkan kata sandi"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full rounded-xl border border-[#E7E2D8] bg-[#FFFFFF] px-3.5 py-2.5 pr-10 text-sm text-[#1C1917] placeholder:text-[#78716C]/70 transition-colors focus:border-[#14532D] focus:outline-none focus:ring-2 focus:ring-[#14532D]/15"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={
+                      showPassword
+                        ? "Sembunyikan kata sandi"
+                        : "Tampilkan kata sandi"
+                    }
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-[#78716C] hover:bg-[#EFECE4] hover:text-[#1C1917] cursor-pointer"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                loading={submitting}
+                className="w-full"
+              >
+                Masuk
+              </Button>
+            </form>
+          )}
 
           <div className="my-5 flex items-center gap-3">
             <div className="h-px flex-1 bg-[#E7E2D8]" />

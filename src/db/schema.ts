@@ -13,6 +13,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   googleSub: text("google_sub").unique(),
+  totpSecretEnc: text("totp_secret_enc"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
   monthlySavingsTarget: integer("monthly_savings_target").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
@@ -301,4 +303,16 @@ export const debts = pgTable("debts", {
     .default("open"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+});
+
+export const securityAuditLogs = pgTable("security_audit_logs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  ipMasked: text("ip_masked").notNull(),
+  userAgent: text("user_agent"),
+  metadata: text("metadata"),
+  createdAt: text("created_at").notNull(),
 });

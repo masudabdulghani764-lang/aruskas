@@ -266,6 +266,31 @@ export const SCHEMA_SQL = `
 
   ALTER TABLE bank_integrations
     ADD COLUMN IF NOT EXISTS provider_wallet_map TEXT NOT NULL DEFAULT '{}';
+
+  ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT;
+  ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+
+  CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    ip_masked TEXT NOT NULL,
+    user_agent TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_security_audit_logs_user_created
+    ON security_audit_logs(user_id, created_at DESC);
+
+  DO $$
+  BEGIN
+    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END $$;
 `;
 
 /**
