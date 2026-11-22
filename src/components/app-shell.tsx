@@ -24,6 +24,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AppVersionMenuFooter } from "@/components/app-version-info";
 import {
   PwaInstallBanner,
   PwaInstallButton,
@@ -318,7 +319,7 @@ export function AppShell({
                 {menuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 mt-2 w-64 rounded-2xl border border-[#E7E2D8] bg-[#FFFFFF] py-1.5 shadow-[0_10px_30px_rgba(28,25,23,0.10)]"
+                    className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-[#E7E2D8] bg-[#FFFFFF] pt-1.5 shadow-[0_10px_30px_rgba(28,25,23,0.10)]"
                   >
                     <div className="border-b border-[#E7E2D8] px-4 py-2.5">
                       <div className="flex items-center justify-between gap-2">
@@ -366,7 +367,7 @@ export function AppShell({
                       />
                     </div>
 
-                    <div className="border-t border-[#E7E2D8] pt-1">
+                    <div className="border-t border-[#E7E2D8] py-1">
                       <button
                         type="button"
                         role="menuitem"
@@ -378,6 +379,8 @@ export function AppShell({
                         <span>{loggingOut ? "Keluar..." : "Keluar"}</span>
                       </button>
                     </div>
+
+                    <AppVersionMenuFooter onClose={() => setMenuOpen(false)} />
                   </div>
                 )}
               </div>

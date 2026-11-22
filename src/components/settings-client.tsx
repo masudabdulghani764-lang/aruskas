@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
 import { AdvancedSecurityPanel } from "@/components/advanced-security-panel";
+import { AppVersionCard } from "@/components/app-version-info";
 import {
   Badge,
   Button,
@@ -746,6 +747,9 @@ export function SettingsClient({
 
       {/* Row 1b: Proteksi Lapis Kedua (2FA, Kunci Biometrik APK) & Log Aktivitas Keamanan */}
       <AdvancedSecurityPanel isDemo={user.isDemo} />
+
+      {/* Row 1c: Versi Aplikasi Terpasang di Perangkat Ini */}
+      <AppVersionCard />
 
       {/* Row 2: Kelola Kategori Kustom */}
       <Card padding="md">
