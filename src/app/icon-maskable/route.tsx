@@ -10,28 +10,31 @@ export async function GET() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(145deg, #14532D 0%, #0D2E1D 100%)",
-          color: "#FAF0DD",
-          fontFamily: "Georgia, serif",
-          fontWeight: 700,
-          fontSize: 184,
-          letterSpacing: "-0.04em",
+          background:
+            "radial-gradient(circle at 24% 22%, rgba(34, 122, 72, 0.42) 0%, rgba(34, 122, 72, 0) 68%), linear-gradient(135deg, #165B33 0%, #0B2919 100%)",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "340px",
-            height: "340px",
-            borderRadius: "999px",
-            border: "10px solid rgba(229, 184, 105, 0.75)",
-          }}
+        {/* Scaled inside 72% safe zone for Android / PWA maskable icons */}
+        <svg
+          width="390"
+          height="390"
+          viewBox="0 0 1024 1024"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
         >
-          <span>AK</span>
-          <span style={{ color: "#E5B869" }}>.</span>
-        </div>
+          <path
+            d="M232 540 C350 314 570 540 742 332"
+            stroke="#FAF6EE"
+            strokeWidth="74"
+            strokeLinecap="round"
+          />
+          <path
+            d="M282 692 C400 466 620 692 792 484"
+            stroke="#E8BC68"
+            strokeWidth="74"
+            strokeLinecap="round"
+          />
+        </svg>
       </div>
     ),
     { width: 512, height: 512 }

@@ -7,14 +7,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.4",
-  versionCode: 5,
+  versionName: "1.0.5",
+  versionCode: 6,
   apkUrl: "/downloads/ArusKas.apk",
-  sizeLabel: "415 KB",
+  sizeLabel: "202 KB",
   highlights: [
-    "Perbaikan stabilitas & force close pada jembatan Kunci Sidik Jari/PIN",
-    "Pengurangan memori startup hingga 67% agar lebih ringan di semua HP Android",
-    "Kunci Sidik Jari/PIN HP, allowBackup=false, dan isolasi WebView tetap aktif",
+    "Logo aplikasi & Splash Screen baru ArusKas (gelombang ganda gading & emas)",
+    "Adaptive Icon Android baru tanpa pinggiran putih di semua bentuk layar",
+    "Tetap dilengkapi Kunci Sidik Jari/PIN HP & seluruh pengamanan terbaru",
   ],
 };
 

@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ArusKasLogoMark } from "@/components/aruskas-logo";
 import { Button, Modal, cn } from "@/components/ui/primitives";
 
 const APK_DOWNLOAD_PATH = "/downloads/ArusKas.apk";
@@ -162,7 +163,7 @@ function InstallGuideModal({
       open={open}
       onClose={onClose}
       title="Unduh & Instal Aplikasi ArusKas"
-      description="Pilih instalasi APK Android langsung (415 KB) atau tambahkan ke layar utama iPhone."
+      description="Pilih instalasi APK Android langsung (202 KB) atau tambahkan ke layar utama iPhone."
       size="sm"
     >
       <div className="space-y-4 text-xs sm:text-sm text-[#44403C]">
@@ -174,7 +175,7 @@ function InstallGuideModal({
               <span>Android (File APK Resmi)</span>
             </p>
             <span className="rounded-full bg-[#14532D] px-2 py-0.5 text-[10px] font-semibold text-[#FAF0DD]">
-              415 KB
+              202 KB
             </span>
           </div>
           <p className="text-xs text-[#166534] leading-relaxed">
@@ -186,7 +187,7 @@ function InstallGuideModal({
             href={APK_DOWNLOAD_PATH}
             download="ArusKas.apk"
             onClick={() =>
-              toast.success("Mengunduh ArusKas.apk (415 KB)...")
+              toast.success("Mengunduh ArusKas.apk (202 KB)...")
             }
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#14532D] px-4 text-xs sm:text-sm font-semibold text-[#FFFFFF] transition-colors hover:bg-[#166534]"
           >
@@ -276,7 +277,7 @@ export function PwaInstallButton({
               e.preventDefault();
               setGuideOpen(true);
             } else {
-              toast.success("Mengunduh ArusKas.apk (415 KB)...");
+              toast.success("Mengunduh ArusKas.apk (202 KB)...");
             }
           }}
           className={cn(
@@ -297,7 +298,7 @@ export function PwaInstallButton({
               e.preventDefault();
               setGuideOpen(true);
             } else {
-              toast.success("Mengunduh ArusKas.apk (415 KB)...");
+              toast.success("Mengunduh ArusKas.apk (202 KB)...");
             }
           }}
           className={cn(
@@ -355,9 +356,7 @@ export function PwaInstallShowcaseCard() {
           >
             <div className="flex items-start gap-4">
               {/* App Icon Preview */}
-              <div className="flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-2xl border-2 border-[#E5B869] bg-[#0F3D22] font-display text-2xl sm:text-3xl font-bold text-[#FAF0DD] shadow-sm">
-                AK<span className="text-[#E5B869]">.</span>
-              </div>
+              <ArusKasLogoMark className="h-14 w-14 sm:h-16 sm:w-16 border border-[#E5B869]/60" />
 
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-[#E5B869]/40 bg-[#E5B869]/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[#F5D284]">
@@ -365,7 +364,7 @@ export function PwaInstallShowcaseCard() {
                   <span>Aplikasi Android (.APK) &amp; iPhone</span>
                 </div>
                 <h2 className="font-display text-xl sm:text-2xl font-medium text-[#FFFFFF] leading-snug">
-                  Download Aplikasi ArusKas untuk Android (415 KB)
+                  Download Aplikasi ArusKas untuk Android (202 KB)
                 </h2>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#D6EAE0]">
                   <span className="inline-flex items-center gap-1">
@@ -390,7 +389,7 @@ export function PwaInstallShowcaseCard() {
                 download="ArusKas.apk"
                 onClick={() =>
                   toast.success(
-                    "Mengunduh ArusKas.apk (415 KB) — ketuk file selesai unduh untuk menginstal!"
+                    "Mengunduh ArusKas.apk (202 KB) — ketuk file selesai unduh untuk menginstal!"
                   )
                 }
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] via-[#E9BC66] to-[#DDA444] px-6 text-sm font-bold text-[#0D2E1D] shadow-sm transition-colors hover:from-[#FAE3A6] hover:to-[#E8B85C] cursor-pointer"
@@ -454,14 +453,15 @@ export function PwaInstallBanner() {
         }}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#E5B869]/60 bg-[#0F3D22] font-display text-sm font-bold text-[#FAF0DD]">
-            AK<span className="text-[#E5B869]">.</span>
-          </span>
+          <ArusKasLogoMark
+            rounded="rounded-xl"
+            className="h-9 w-9 border border-[#E5B869]/50"
+          />
           <div className="min-w-0">
             <p className="font-semibold text-[#FFFFFF] flex items-center gap-1.5">
               <span>Download Aplikasi Android ArusKas (.APK)</span>
               <span className="hidden sm:inline-flex rounded-full bg-[#E5B869]/20 px-2 py-0.5 text-[10px] font-semibold text-[#F5D284]">
-                415 KB
+                202 KB
               </span>
             </p>
             <p className="text-[11px] sm:text-xs text-[#C6DDD0]">
@@ -480,7 +480,7 @@ export function PwaInstallBanner() {
                 e.preventDefault();
                 setGuideOpen(true);
               } else {
-                toast.success("Mengunduh ArusKas.apk (415 KB)...");
+                toast.success("Mengunduh ArusKas.apk (202 KB)...");
               }
             }}
             className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3.5 text-xs font-bold text-[#0D2E1D] transition-colors hover:from-[#FAE3A6] hover:to-[#ECC57C] cursor-pointer"

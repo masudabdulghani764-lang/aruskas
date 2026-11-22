@@ -17,18 +17,30 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(145deg, #14532D 0%, #0F3D22 100%)",
-          borderRadius: "40px",
-          border: "6px solid #E5B869",
-          color: "#FAF0DD",
-          fontFamily: "Georgia, serif",
-          fontWeight: 700,
-          fontSize: 76,
-          letterSpacing: "-0.04em",
+          background:
+            "radial-gradient(circle at 24% 22%, rgba(34, 122, 72, 0.42) 0%, rgba(34, 122, 72, 0) 68%), linear-gradient(135deg, #165B33 0%, #0B2919 100%)",
         }}
       >
-        <span>AK</span>
-        <span style={{ color: "#E5B869" }}>.</span>
+        <svg
+          width="180"
+          height="180"
+          viewBox="0 0 1024 1024"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M232 540 C350 314 570 540 742 332"
+            stroke="#FAF6EE"
+            strokeWidth="74"
+            strokeLinecap="round"
+          />
+          <path
+            d="M282 692 C400 466 620 692 792 484"
+            stroke="#E8BC68"
+            strokeWidth="74"
+            strokeLinecap="round"
+          />
+        </svg>
       </div>
     ),
     { ...size }
