@@ -69,7 +69,8 @@ export function PwaRegistrar() {
 function usePwaInstallState() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(true);
   const [isIos, setIsIos] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -84,6 +85,7 @@ function usePwaInstallState() {
       document.referrer.startsWith("android-app://") ||
       window.navigator.userAgent.includes("ArusKasApp/");
     setIsInstalled(standalone);
+    setHydrated(true);
 
     const ua = window.navigator.userAgent;
     setIsIos(
@@ -136,6 +138,7 @@ function usePwaInstallState() {
 
   return {
     canNativeInstall: Boolean(deferredPrompt),
+    hydrated,
     isInstalled,
     isIos,
     installing,
@@ -238,9 +241,10 @@ export function PwaInstallButton({
   className?: string;
   onAfterClick?: () => void;
 }) {
-  const { isInstalled, isIos, guideOpen, setGuideOpen } = usePwaInstallState();
+  const { hydrated, isInstalled, isIos, guideOpen, setGuideOpen } =
+    usePwaInstallState();
 
-  if (isInstalled) {
+  if (!hydrated || isInstalled) {
     return null;
   }
 
@@ -325,6 +329,7 @@ export function PwaInstallButton({
  */
 export function PwaInstallShowcaseCard() {
   const {
+    hydrated,
     isInstalled,
     isIos,
     installing,
@@ -333,7 +338,7 @@ export function PwaInstallShowcaseCard() {
     triggerInstall,
   } = usePwaInstallState();
 
-  if (isInstalled) {
+  if (!hydrated || isInstalled) {
     return null;
   }
 
@@ -422,7 +427,8 @@ export function PwaInstallShowcaseCard() {
  * app shell until the user installs ArusKas or dismisses it.
  */
 export function PwaInstallBanner() {
-  const { isInstalled, isIos, guideOpen, setGuideOpen } = usePwaInstallState();
+  const { hydrated, isInstalled, isIos, guideOpen, setGuideOpen } =
+    usePwaInstallState();
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
@@ -434,7 +440,7 @@ export function PwaInstallBanner() {
     }
   }, []);
 
-  if (isInstalled || dismissed) {
+  if (!hydrated || isInstalled || dismissed) {
     return null;
   }
 
