@@ -262,6 +262,12 @@ export function AppShell({
             </div>
 
             <div className="flex items-center gap-2 sm:gap-2.5">
+              <PwaInstallButton
+                variant="header-pill"
+                label="Instal"
+                className="hidden lg:inline-flex"
+              />
+
               <Link
                 href="/auto-bank"
                 className={cn(

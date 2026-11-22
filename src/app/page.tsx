@@ -19,7 +19,10 @@ import {
 } from "lucide-react";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
 import { LandingShowcase } from "@/components/landing-showcase";
-import { PwaInstallButton } from "@/components/pwa-install-button";
+import {
+  PwaInstallButton,
+  PwaInstallShowcaseCard,
+} from "@/components/pwa-install-button";
 import {
   ScrollProgressAndTopButton,
   ScrollReveal,
@@ -69,6 +72,11 @@ export default async function LandingPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-2.5">
+            <PwaInstallButton
+              variant="header-pill"
+              label="Instal App"
+              className="hidden sm:inline-flex"
+            />
             {user ? (
               <>
                 <Link
@@ -153,8 +161,8 @@ export default async function LandingPage() {
                   <LandingDemoCta variant="secondary" size="lg" />
 
                   <PwaInstallButton
-                    variant="outline"
-                    label="Instal Aplikasi"
+                    variant="gold"
+                    label="Instal Aplikasi (Android / HP)"
                   />
 
                   {user && (
@@ -202,6 +210,9 @@ export default async function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* APP INSTALL SPOTLIGHT CARD */}
+        <PwaInstallShowcaseCard />
 
         {/* BAND 2: Deep Botanical Forest Contrast Strip */}
         <section
@@ -659,7 +670,7 @@ export default async function LandingPage() {
                   )}
                   <LandingDemoCta variant="forest-outline" size="lg" />
                   <PwaInstallButton
-                    variant="forest"
+                    variant="gold"
                     label="Instal di Android / HP"
                   />
                 </div>
