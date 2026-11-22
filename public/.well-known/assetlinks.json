@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vercel.aruskas",
+      "sha256_cert_fingerprints": [
+        "2A:50:FC:33:B5:C0:D6:AD:A4:8F:A7:A3:9A:6E:B9:42:57:6A:D0:1C:6D:51:55:F5:E0:ED:20:3E:82:99:3B:86"
+      ]
+    }
+  }
+]

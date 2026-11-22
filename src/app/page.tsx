@@ -74,7 +74,7 @@ export default async function LandingPage() {
           <div className="flex items-center gap-2 sm:gap-2.5">
             <PwaInstallButton
               variant="header-pill"
-              label="Instal App"
+              label="Unduh APK"
               className="hidden sm:inline-flex"
             />
             {user ? (
@@ -162,7 +162,7 @@ export default async function LandingPage() {
 
                   <PwaInstallButton
                     variant="gold"
-                    label="Instal Aplikasi (Android / HP)"
+                    label="Download APK Android"
                   />
 
                   {user && (
@@ -671,7 +671,7 @@ export default async function LandingPage() {
                   <LandingDemoCta variant="forest-outline" size="lg" />
                   <PwaInstallButton
                     variant="gold"
-                    label="Instal di Android / HP"
+                    label="Download APK Android"
                   />
                 </div>
               </div>

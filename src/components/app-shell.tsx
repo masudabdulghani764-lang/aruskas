@@ -264,7 +264,7 @@ export function AppShell({
             <div className="flex items-center gap-2 sm:gap-2.5">
               <PwaInstallButton
                 variant="header-pill"
-                label="Instal"
+                label="Unduh APK"
                 className="hidden lg:inline-flex"
               />
 
@@ -362,7 +362,7 @@ export function AppShell({
                       </Link>
                       <PwaInstallButton
                         variant="menu-item"
-                        label="Instal Aplikasi (Android / HP)"
+                        label="Download APK Android / HP"
                       />
                     </div>
 

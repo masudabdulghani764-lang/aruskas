@@ -63,6 +63,36 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/.well-known/assetlinks.json",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/json; charset=utf-8",
+          },
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*",
+          },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=3600",
+          },
+        ],
+      },
+      {
+        source: "/downloads/ArusKas.apk",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/vnd.android.package-archive",
+          },
+          {
+            key: "Content-Disposition",
+            value: 'attachment; filename="ArusKas.apk"',
+          },
+        ],
+      },
     ];
   },
   async redirects() {
