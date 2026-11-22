@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
+import { PwaRegistrar } from "@/components/pwa-install-button";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -68,6 +69,7 @@ export default function RootLayout({
       className={`${newsreader.variable} ${plusJakartaSans.variable}`}
     >
       <body className="min-h-screen bg-cream-canvas text-[#1C1917] antialiased selection:bg-[#DCFCE7] selection:text-[#14532D]">
+        <PwaRegistrar />
         {children}
         <Toaster
           position="bottom-right"

@@ -25,6 +25,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  PwaInstallBanner,
+  PwaInstallButton,
+} from "@/components/pwa-install-button";
+import {
   QuickAddModal,
   type QuickAddType,
 } from "@/components/quick-add-modal";
@@ -350,6 +354,10 @@ export function AppShell({
                         <Settings className="h-4 w-4 text-[#57534E]" />
                         <span>Pengaturan</span>
                       </Link>
+                      <PwaInstallButton
+                        variant="menu-item"
+                        label="Instal Aplikasi (Android / HP)"
+                      />
                     </div>
 
                     <div className="border-t border-[#E7E2D8] pt-1">
@@ -373,6 +381,7 @@ export function AppShell({
 
         {/* Main Content Container */}
         <main className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-24 sm:px-6 md:py-8 md:pb-12 print:max-w-none print:p-0">
+          <PwaInstallBanner />
           {children}
         </main>
 

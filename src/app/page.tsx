@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { LandingDemoCta } from "@/components/landing-demo-cta";
 import { LandingShowcase } from "@/components/landing-showcase";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 import {
   ScrollProgressAndTopButton,
   ScrollReveal,
@@ -150,6 +151,11 @@ export default async function LandingPage() {
                   </Link>
 
                   <LandingDemoCta variant="secondary" size="lg" />
+
+                  <PwaInstallButton
+                    variant="outline"
+                    label="Instal Aplikasi"
+                  />
 
                   {user && (
                     <Link
@@ -652,6 +658,10 @@ export default async function LandingPage() {
                     </Link>
                   )}
                   <LandingDemoCta variant="forest-outline" size="lg" />
+                  <PwaInstallButton
+                    variant="forest"
+                    label="Instal di Android / HP"
+                  />
                 </div>
               </div>
             </div>
