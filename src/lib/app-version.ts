@@ -7,14 +7,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.3",
-  versionCode: 4,
+  versionName: "1.0.4",
+  versionCode: 5,
   apkUrl: "/downloads/ArusKas.apk",
   sizeLabel: "415 KB",
   highlights: [
-    "Kunci Sidik Jari, Wajah, atau PIN HP langsung dari Pengaturan",
-    "Perlindungan ekstra: backup cookie sesi dimatikan (allowBackup=false)",
-    "Isolasi WebView produksi lebih ketat tanpa USB debugging",
+    "Perbaikan stabilitas & force close pada jembatan Kunci Sidik Jari/PIN",
+    "Pengurangan memori startup hingga 67% agar lebih ringan di semua HP Android",
+    "Kunci Sidik Jari/PIN HP, allowBackup=false, dan isolasi WebView tetap aktif",
   ],
 };
 
