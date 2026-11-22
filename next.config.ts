@@ -110,6 +110,23 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/downloads/ArusKas.mobileconfig",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/x-apple-aspen-config",
+          },
+          {
+            key: "Content-Disposition",
+            value: 'attachment; filename="ArusKas.mobileconfig"',
+          },
+          {
+            key: "Cache-Control",
+            value: "public, max-age=3600",
+          },
+        ],
+      },
     ];
   },
   async redirects() {
