@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/db";
-import { recordSecurityEvent } from "@/lib/audit-log";
+import { getEnrichedUserAgent, recordSecurityEvent } from "@/lib/audit-log";
 import {
   destroySession,
   findOrCreateGoogleUser,
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
       userId: user.id,
       eventType: "login_google",
       ipAddress: getClientIp(request),
-      userAgent: request.headers.get("user-agent"),
+      userAgent: getEnrichedUserAgent(request),
       metadata: isMobileFlow ? "Login Google via APK Android" : "Login Google Web",
     });
 

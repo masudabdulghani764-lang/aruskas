@@ -46,16 +46,92 @@ export function maskIpAddress(rawIp: string | null | undefined): string {
   return "Tersembunyi";
 }
 
+function cleanClientHint(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.replace(/^"+|"+$/g, "").trim();
+}
+
 /**
- * Summarizes a User-Agent header into a readable Indonesian device label.
+ * Builds an enriched User-Agent string combining the raw User-Agent with
+ * Chromium Client Hints (`Sec-CH-UA-Model`, `Sec-CH-UA-Platform-Version`) when available.
+ */
+export function getEnrichedUserAgent(request: Request): string | null {
+  const ua = request.headers.get("user-agent")?.trim() ?? "";
+  const chModel = cleanClientHint(request.headers.get("sec-ch-ua-model"));
+  const chPlatformVer = cleanClientHint(
+    request.headers.get("sec-ch-ua-platform-version")
+  );
+
+  const hints: string[] = [];
+  if (chModel && chModel !== "K") {
+    hints.push(`CHModel/${chModel}`);
+  }
+  if (chPlatformVer) {
+    hints.push(`CHVer/${chPlatformVer.split(".")[0]}`);
+  }
+
+  if (!ua && hints.length === 0) return null;
+  return hints.length > 0 ? `${ua} ${hints.join(" ")}`.trim() : ua;
+}
+
+function formatAndroidModelName(rawModel: string): string {
+  const cleaned = rawModel
+    .replace(/\s+Build\/[^\s;)]+/i, "")
+    .replace(/;\s*wv$/i, "")
+    .trim();
+
+  if (
+    !cleaned ||
+    cleaned.length < 2 ||
+    /^(K|wv|Mobile|Linux|Android|U|en-[A-Z]{2}|id-[A-Z]{2})$/i.test(cleaned)
+  ) {
+    return "";
+  }
+
+  if (/^SM-[A-Z0-9]+/i.test(cleaned)) return `Samsung ${cleaned}`;
+  if (/^RMX\d+/i.test(cleaned)) return `Realme ${cleaned}`;
+  if (/^CPH\d+/i.test(cleaned)) return `OPPO ${cleaned}`;
+  if (/^V\d{4}[A-Z]?$/i.test(cleaned)) return `vivo ${cleaned}`;
+  return cleaned;
+}
+
+/**
+ * Extracts a readable device/phone model and platform summary from a User-Agent
+ * (including Android WebView model codes and Chromium Client Hints).
  */
 export function summarizeUserAgent(ua: string | null | undefined): string {
   const raw = ua?.trim() ?? "";
   if (!raw) return "Perangkat tidak dikenal";
-  if (raw.includes("ArusKasApp/")) return "Aplikasi Android ArusKas";
+
+  const apkMatch = /ArusKasApp\/(\d+\.\d+\.\d+)/i.exec(raw);
+  const chModelMatch = /CHModel\/([^;\n\r]+?)(?:\s+CHVer\/|$)/i.exec(raw);
+  const chVerMatch = /CHVer\/(\d+)/i.exec(raw);
+
+  // Extract Android OS version and model from standard Android / WebView UA
+  let androidVer = chVerMatch ? chVerMatch[1] : "";
+  let model = chModelMatch ? formatAndroidModelName(chModelMatch[1]) : "";
+
+  const androidUaMatch = /Android(?:\s+([\d.]+))?(?:\s*;\s*([^;)]+))?/i.exec(raw);
+  if (androidUaMatch) {
+    if (!androidVer && androidUaMatch[1]) {
+      androidVer = androidUaMatch[1].split(".")[0];
+    }
+    if (!model && androidUaMatch[2]) {
+      model = formatAndroidModelName(androidUaMatch[2]);
+    }
+  }
+
+  if (apkMatch) {
+    const verSuffix = androidVer ? ` (Android ${androidVer})` : "";
+    if (model) {
+      return `${model}${verSuffix} · APK v${apkMatch[1]}`;
+    }
+    return "Aplikasi Android ArusKas";
+  }
 
   const isAndroid = /Android/i.test(raw);
-  const isIphone = /iPhone|iPad/i.test(raw);
+  const isIpad = /iPad/i.test(raw);
+  const isIphone = /iPhone/i.test(raw);
   const isWindows = /Windows/i.test(raw);
   const isMac = /Macintosh|Mac OS/i.test(raw);
   const isLinux = /Linux/i.test(raw) && !isAndroid;
@@ -70,17 +146,24 @@ export function summarizeUserAgent(ua: string | null | undefined): string {
           ? "Firefox"
           : "Browser";
 
-  const os = isAndroid
-    ? "Android"
-    : isIphone
-      ? "iOS"
-      : isWindows
-        ? "Windows"
-        : isMac
-          ? "macOS"
-          : isLinux
-            ? "Linux"
-            : "Web";
+  if (isAndroid) {
+    const osPart = androidVer ? `Android ${androidVer}` : "Android";
+    if (model) {
+      return `${model} (${osPart}) · ${browser}`;
+    }
+    return `${browser} · ${osPart}`;
+  }
+
+  if (isIphone) return `iPhone · ${browser}`;
+  if (isIpad) return `iPad · ${browser}`;
+
+  const os = isWindows
+    ? "Windows"
+    : isMac
+      ? "macOS"
+      : isLinux
+        ? "Linux"
+        : "Web";
 
   return `${browser} · ${os}`;
 }
@@ -105,7 +188,7 @@ export async function recordSecurityEvent(
       userId: params.userId,
       eventType: params.eventType,
       ipMasked: maskIpAddress(params.ipAddress),
-      userAgent: params.userAgent?.slice(0, 220) ?? null,
+      userAgent: params.userAgent?.slice(0, 260) ?? null,
       metadata: params.metadata?.slice(0, 240) ?? null,
       createdAt: new Date().toISOString(),
     });

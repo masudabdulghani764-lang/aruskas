@@ -28,6 +28,10 @@ const securityHeaders = [
     value: "none",
   },
   {
+    key: "Accept-CH",
+    value: "Sec-CH-UA-Model, Sec-CH-UA-Platform-Version",
+  },
+  {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },

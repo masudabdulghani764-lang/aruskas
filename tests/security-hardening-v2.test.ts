@@ -112,6 +112,16 @@ describe("Security Hardening Wave 2: AES-256-GCM Vault, 2FA TOTP & Security Audi
     expect(summarizeUserAgent("Mozilla/5.0 Android ArusKasApp/1.0.3")).toBe(
       "Aplikasi Android ArusKas"
     );
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Linux; Android 14; SM-A546E Build/UP1A.231005.007; wv) AppleWebKit/537.36 ArusKasApp/1.0.4"
+      )
+    ).toBe("Samsung SM-A546E (Android 14) · APK v1.0.4");
+    expect(
+      summarizeUserAgent(
+        "Mozilla/5.0 (Linux; Android 10; K) Chrome/130.0.0.0 Mobile CHModel/CPH2551 CHVer/14"
+      )
+    ).toBe("OPPO CPH2551 (Android 14) · Chrome");
 
     const { db, close } = await createDb(":memory:");
     try {

@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { recordSecurityEvent } from "@/lib/audit-log";
+import { getEnrichedUserAgent, recordSecurityEvent } from "@/lib/audit-log";
 import {
   SESSION_COOKIE_NAME,
   changePassword,
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       userId: currentUser.id,
       eventType: "password_changed",
       ipAddress: getClientIp(request),
-      userAgent: request.headers.get("user-agent"),
+      userAgent: getEnrichedUserAgent(request),
       metadata: "Kata sandi diperbarui & sesi perangkat lain dicabut",
     });
     return NextResponse.json({ ok: true });

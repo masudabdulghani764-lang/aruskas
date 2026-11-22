@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { recordSecurityEvent } from "@/lib/audit-log";
+import { getEnrichedUserAgent, recordSecurityEvent } from "@/lib/audit-log";
 import {
   DEMO_EMAIL,
   parseJsonBody,
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       userId: currentUser.id,
       eventType: "totp_enabled",
       ipAddress: getClientIp(request),
-      userAgent: request.headers.get("user-agent"),
+      userAgent: getEnrichedUserAgent(request),
       metadata: "2FA Authenticator diaktifkan",
     });
 
@@ -165,7 +165,7 @@ export async function DELETE(request: Request) {
       userId: currentUser.id,
       eventType: "totp_disabled",
       ipAddress: getClientIp(request),
-      userAgent: request.headers.get("user-agent"),
+      userAgent: getEnrichedUserAgent(request),
       metadata: "2FA Authenticator dinonaktifkan",
     });
 

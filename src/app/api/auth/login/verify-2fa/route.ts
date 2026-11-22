@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { users } from "@/db/schema";
-import { recordSecurityEvent } from "@/lib/audit-log";
+import { getEnrichedUserAgent, recordSecurityEvent } from "@/lib/audit-log";
 import {
   createSession,
   parseJsonBody,
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const clientIp = getClientIp(request);
-    const userAgent = request.headers.get("user-agent");
+    const userAgent = getEnrichedUserAgent(request);
 
     await enforceRateLimit(db, {
       scope: "auth_2fa_verify",

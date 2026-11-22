@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { recordSecurityEvent } from "@/lib/audit-log";
+import { getEnrichedUserAgent, recordSecurityEvent } from "@/lib/audit-log";
 import {
   SESSION_COOKIE_NAME,
   clearSessionCookie,
@@ -35,7 +35,7 @@ export async function DELETE(request: Request) {
       userId: currentUser.id,
       eventType: "sessions_revoked",
       ipAddress: getClientIp(request),
-      userAgent: request.headers.get("user-agent"),
+      userAgent: getEnrichedUserAgent(request),
       metadata: `${revokedCount} sesi perangkat dicabut`,
     });
 
