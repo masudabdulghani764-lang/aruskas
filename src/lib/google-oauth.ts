@@ -4,6 +4,112 @@ import { AppError } from "@/lib/errors";
 export const GOOGLE_STATE_COOKIE = "aruskas_google_state";
 export const GOOGLE_VERIFIER_COOKIE = "aruskas_google_verifier";
 export const GOOGLE_NEXT_COOKIE = "aruskas_google_next";
+export const GOOGLE_MOBILE_NONCE_COOKIE = "aruskas_google_mobile_nonce";
+
+const MOBILE_HANDOFF_TTL_MS = 2 * 60 * 1000;
+
+function getMobileHandoffKey(): Buffer {
+  const baseSecret =
+    process.env.GOOGLE_CLIENT_SECRET?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    "aruskas-local-dev-mobile-handoff-key";
+  return crypto
+    .createHash("sha256")
+    .update(`${baseSecret}|aruskas-mobile-handoff-v1`)
+    .digest();
+}
+
+/**
+ * Validates that a mobile OAuth handoff nonce is a 16-128 character hex string.
+ */
+export function isValidMobileNonce(nonce: string): boolean {
+  return /^[a-f0-9]{16,128}$/i.test(nonce);
+}
+
+/**
+ * Encrypts a short-lived (2 minute), nonce-bound mobile OAuth handoff token
+ * using AES-256-GCM so raw session tokens never appear in custom-scheme URLs.
+ */
+export function createMobileAuthHandoffToken(params: {
+  userId: string;
+  nonce: string;
+}): string {
+  const key = getMobileHandoffKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const payload = JSON.stringify({
+    u: params.userId,
+    n: params.nonce,
+    j: crypto.randomBytes(16).toString("hex"),
+    e: Date.now() + MOBILE_HANDOFF_TTL_MS,
+  });
+  const encrypted = Buffer.concat([
+    cipher.update(payload, "utf8"),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, encrypted]).toString("base64url");
+}
+
+/**
+ * Decrypts and validates a mobile OAuth handoff token against the caller's nonce and TTL.
+ */
+export function verifyMobileAuthHandoffToken(
+  token: string,
+  expectedNonce: string
+): { userId: string; jti: string } | null {
+  if (!token || !isValidMobileNonce(expectedNonce)) {
+    return null;
+  }
+
+  try {
+    const raw = Buffer.from(token, "base64url");
+    if (raw.length <= 28) {
+      return null;
+    }
+    const iv = raw.subarray(0, 12);
+    const authTag = raw.subarray(12, 28);
+    const ciphertext = raw.subarray(28);
+
+    const key = getMobileHandoffKey();
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    const decrypted = Buffer.concat([
+      decipher.update(ciphertext),
+      decipher.final(),
+    ]).toString("utf8");
+
+    const parsed = JSON.parse(decrypted) as {
+      u?: unknown;
+      n?: unknown;
+      j?: unknown;
+      e?: unknown;
+    };
+
+    if (
+      typeof parsed.u !== "string" ||
+      !parsed.u ||
+      typeof parsed.n !== "string" ||
+      typeof parsed.j !== "string" ||
+      !parsed.j ||
+      typeof parsed.e !== "number"
+    ) {
+      return null;
+    }
+
+    if (parsed.e <= Date.now()) {
+      return null;
+    }
+
+    if (!safeEqualStrings(parsed.n, expectedNonce)) {
+      return null;
+    }
+
+    return { userId: parsed.u, jti: parsed.j };
+  } catch {
+    return null;
+  }
+}
 
 export type GoogleUserProfile = {
   sub: string;

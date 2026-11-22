@@ -5,10 +5,12 @@ import {
   buildGoogleAuthorizationUrl,
   generateGoogleOAuthTokens,
   getPublicOrigin,
+  GOOGLE_MOBILE_NONCE_COOKIE,
   GOOGLE_NEXT_COOKIE,
   GOOGLE_STATE_COOKIE,
   GOOGLE_VERIFIER_COOKIE,
   isGoogleOAuthConfigured,
+  isValidMobileNonce,
 } from "@/lib/google-oauth";
 import { resolveSafeNext } from "@/lib/navigation";
 import { enforceRateLimit, getClientIp } from "@/lib/security";
@@ -55,9 +57,20 @@ export async function GET(request: Request) {
     maxAge: 600,
   };
 
+  const mobileApp = url.searchParams.get("mobile_app") === "1";
+  const mobileNonce = url.searchParams.get("mobile_nonce")?.trim() ?? "";
+
   cookieStore.set(GOOGLE_STATE_COOKIE, state, cookieOpts);
   cookieStore.set(GOOGLE_VERIFIER_COOKIE, codeVerifier, cookieOpts);
   cookieStore.set(GOOGLE_NEXT_COOKIE, nextPath, cookieOpts);
+  if (mobileApp && isValidMobileNonce(mobileNonce)) {
+    cookieStore.set(GOOGLE_MOBILE_NONCE_COOKIE, mobileNonce, cookieOpts);
+  } else {
+    cookieStore.set(GOOGLE_MOBILE_NONCE_COOKIE, "", {
+      ...cookieOpts,
+      maxAge: 0,
+    });
+  }
 
   return NextResponse.redirect(authUrl);
 }
