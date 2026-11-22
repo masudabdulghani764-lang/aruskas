@@ -20,6 +20,10 @@ import {
   Input,
   Modal,
 } from "@/components/ui/primitives";
+import {
+  checkAndroidAppUpdate,
+  LATEST_ANDROID_APP_RELEASE,
+} from "@/lib/app-version";
 import type { SecurityAuditLogItem } from "@/lib/audit-log";
 
 interface ArusKasNativeBridge {
@@ -76,6 +80,8 @@ export function AdvancedSecurityPanel({ isDemo }: { isDemo: boolean }) {
   // Native Android APK Biometric / PIN Lock state
   const [nativeLockSupported, setNativeLockSupported] = useState(false);
   const [nativeLockEnabled, setNativeLockEnabled] = useState(false);
+  const [apkVersion, setApkVersion] = useState<string | null>(null);
+  const [apkNeedsUpdate, setApkNeedsUpdate] = useState(false);
 
   // 2FA Setup Modal
   const [setupModalOpen, setSetupModalOpen] = useState(false);
@@ -112,15 +118,20 @@ export function AdvancedSecurityPanel({ isDemo }: { isDemo: boolean }) {
 
   useEffect(() => {
     void loadSecurityState();
-    if (typeof window !== "undefined" && window.ArusKasNative?.isSupported) {
-      try {
-        const supported = Boolean(window.ArusKasNative.isSupported());
-        setNativeLockSupported(supported);
-        if (supported && window.ArusKasNative.isAppLockEnabled) {
-          setNativeLockEnabled(Boolean(window.ArusKasNative.isAppLockEnabled()));
+    if (typeof window !== "undefined") {
+      const status = checkAndroidAppUpdate(window.navigator.userAgent);
+      setApkVersion(status.installedVersion);
+      setApkNeedsUpdate(status.needsUpdate);
+      if (window.ArusKasNative?.isSupported) {
+        try {
+          const supported = Boolean(window.ArusKasNative.isSupported());
+          setNativeLockSupported(supported);
+          if (supported && window.ArusKasNative.isAppLockEnabled) {
+            setNativeLockEnabled(Boolean(window.ArusKasNative.isAppLockEnabled()));
+          }
+        } catch {
+          setNativeLockSupported(false);
         }
-      } catch {
-        setNativeLockSupported(false);
       }
     }
   }, [loadSecurityState]);
@@ -346,14 +357,31 @@ export function AdvancedSecurityPanel({ isDemo }: { isDemo: boolean }) {
             )}
           </div>
 
-          {/* Database Hardening Badge Summary */}
+          {/* Database Hardening & APK Version Summary */}
           <div className="rounded-xl border border-[#CBE0D2] bg-[#EFF6F1]/70 px-3.5 py-2.5 text-xs text-[#166534] flex items-start gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-[#14532D] mt-0.5" />
-            <span>
-              Lampiran struk &amp; rahasia 2FA kini terenkripsi{" "}
-              <strong>AES-256-GCM</strong> di database, koneksi TLS wajib aktif,
-              dan backup cookie APK dimatikan.
-            </span>
+            <div className="space-y-1">
+              <span>
+                Lampiran struk &amp; rahasia 2FA kini terenkripsi{" "}
+                <strong>AES-256-GCM</strong> di database, koneksi TLS wajib aktif,
+                dan backup cookie APK dimatikan.
+              </span>
+              {apkVersion && (
+                <p className="font-medium text-[#14532D]">
+                  Versi APK terpasang: <strong>v{apkVersion}</strong>{" "}
+                  {apkNeedsUpdate ? (
+                    <a
+                      href={`${LATEST_ANDROID_APP_RELEASE.apkUrl}?v=${LATEST_ANDROID_APP_RELEASE.versionName}`}
+                      className="underline font-bold"
+                    >
+                      → Update ke v{LATEST_ANDROID_APP_RELEASE.versionName}
+                    </a>
+                  ) : (
+                    <span>(Sudah versi terbaru ✓)</span>
+                  )}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </Card>
