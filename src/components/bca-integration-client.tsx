@@ -1066,7 +1066,8 @@ export function BcaIntegrationClient({
                 <ol className="mt-4 list-decimal pl-4 space-y-2 text-xs text-[#57534E] leading-relaxed">
                   <li>
                     Install aplikasi <strong>MacroDroid</strong> (gratis di Play
-                    Store).
+                    Store) dan aktifkan izin{" "}
+                    <strong>Akses Notifikasi (Notification Access)</strong>.
                   </li>
                   <li>
                     <strong>Trigger:</strong> <em>Notification Received</em> →
@@ -1081,10 +1082,18 @@ export function BcaIntegrationClient({
                   <li>
                     <strong>Action:</strong> <em>HTTP Request (POST)</em> ke{" "}
                     <code className="text-[#14532D]">{webhookUrl}</code> dengan
-                    Header <code>Authorization: Bearer [TOKEN]</code> dan JSON
-                    body:{" "}
-                    <code>{`{"text":"[not_body]","subject":"[not_title]","source":"webhook_push"}`}</code>
-                    .
+                    Header <code>Authorization: Bearer [TOKEN]</code> (atau{" "}
+                    <code>X-ArusKas-Token</code>).
+                  </li>
+                  <li>
+                    <strong>Content Body (Anti-Error):</strong> pilih Content
+                    Type <code>text/plain</code> dan isi body:{" "}
+                    <code>{`[not_title] - [notification]`}</code>{" "}
+                    <em>
+                      (pilih lewat tombol titik tiga <code>...</code> Magic Text
+                      di MacroDroid agar tidak salah ketik; format JSON dengan{" "}
+                      <code>[notification]</code> juga didukung).
+                    </em>
                   </li>
                 </ol>
               )}

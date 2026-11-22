@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createDb } from "@/db";
+import { POST as bcaWebhookRoute } from "@/app/api/integrations/bca/webhook/route";
+import { createDb, getDb } from "@/db";
 import { registerUser } from "@/lib/auth";
 import {
   commitBcaCsvImport,
@@ -293,6 +294,96 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       expect(txs.items.length).toBe(3);
     } finally {
       await close();
+    }
+  });
+
+  test("webhook route handles MacroDroid text/plain, multi-line unescaped JSON, form-urlencoded, and logs unexpanded [not_body]", async () => {
+    const prevDbPath = process.env.DATABASE_PATH;
+    process.env.DATABASE_PATH = `memory://macrodroid-webhook-${crypto.randomUUID()}`;
+    try {
+      const db = await getDb();
+      const { user } = await registerUser(db, {
+        name: "Andi",
+        email: "andi-macro@aruskas.test",
+        password: "Password123!",
+      });
+      const bca = await createWallet(db, user.id, {
+        name: "BCA MacroDroid",
+        type: "bank",
+        initialBalance: 1_000_000,
+      });
+      const setup = await upsertBcaIntegration(db, user.id, {
+        walletId: bca.id,
+        isActive: true,
+        autoCategorize: true,
+      });
+      const token = setup.rawToken!;
+
+      // 1. MacroDroid text/plain body with raw token in Authorization header
+      const plainRes = await bcaWebhookRoute(
+        new Request("http://localhost/api/integrations/bca/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "text/plain; charset=utf-8",
+            authorization: token,
+          },
+          body: "Notifikasi Transfer Masuk myBCA - Anda menerima transfer sebesar Rp 250.000 dari SITI pada 22/11/2026 Ref: MD01",
+        })
+      );
+      expect(plainRes.status).toBe(201);
+
+      // 2. MacroDroid JSON body containing raw unescaped newline inside notification text
+      const multilineJsonRes = await bcaWebhookRoute(
+        new Request("http://localhost/api/integrations/bca/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-aruskas-token": token,
+          },
+          body: `{"text":"Pembayaran QRIS berhasil\nKOPI KENANGAN sebesar Rp 35.000 pada 22/11/2026 Ref: MD02","subject":"myBCA","source":"webhook_push"}`,
+        })
+      );
+      expect(multilineJsonRes.status).toBe(201);
+
+      // 3. Form-urlencoded payload
+      const formRes = await bcaWebhookRoute(
+        new Request("http://localhost/api/integrations/bca/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            authorization: `Bearer ${token}`,
+          },
+          body: new URLSearchParams({
+            subject: "Livin' Mandiri",
+            text: "Pembayaran QRIS Livin' by Mandiri di ALFAMART sebesar Rp 40.000 pada 22/11/2026 berhasil Ref: MD03",
+          }).toString(),
+        })
+      );
+      expect(formRes.status).toBe(201);
+
+      // 4. Unexpanded [not_body] placeholder returns 422 AND writes a diagnostic failed log
+      const badPlaceholderRes = await bcaWebhookRoute(
+        new Request("http://localhost/api/integrations/bca/webhook", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${token}`,
+          },
+          body: `{"text":"[not_body]","subject":"[not_title]","source":"webhook_push"}`,
+        })
+      );
+      expect(badPlaceholderRes.status).toBe(422);
+
+      const { logs } = await getBcaIntegration(db, user.id);
+      expect(logs.length).toBe(4);
+      const failedLog = logs.find((l) => l.status === "failed");
+      expect(failedLog?.errorMessage).toContain("[notification]");
+    } finally {
+      if (prevDbPath === undefined) {
+        delete process.env.DATABASE_PATH;
+      } else {
+        process.env.DATABASE_PATH = prevDbPath;
+      }
     }
   });
 });

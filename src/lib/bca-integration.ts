@@ -524,6 +524,12 @@ export async function ingestBcaNotificationByToken(
     .slice(0, 220);
 
   if (!parsed) {
+    const isUnexpandedMacroDroidToken =
+      /\[(?:not_body|notification|not_title)\]/i.test(payload.text);
+    const failMessage = isUnexpandedMacroDroidToken
+      ? "MacroDroid mengirim variabel mentah ([not_body]/[notification]). Ganti dengan [notification] lewat tombol Magic Text (...) dan pastikan makro dipicu oleh Notification Received."
+      : "Format notifikasi bank/e-wallet tidak dikenali (nominal atau arah masuk/keluar tidak ditemukan).";
+
     await db.insert(bankSyncLogs).values({
       id: crypto.randomUUID(),
       userId: integration.userId,
@@ -534,14 +540,15 @@ export async function ingestBcaNotificationByToken(
       transactionId: null,
       status: "failed",
       rawSnippet: snippet || "(pesan kosong)",
-      errorMessage:
-        "Format notifikasi BCA tidak dikenali (nominal atau arah masuk/keluar tidak ditemukan).",
+      errorMessage: failMessage,
       createdAt: new Date().toISOString(),
     });
 
     throw new AppError(
       422,
-      "Format notifikasi BCA tidak dikenali. Pastikan berisi nominal (Rp/IDR) dan keterangan uang masuk atau keluar."
+      isUnexpandedMacroDroidToken
+        ? failMessage
+        : "Format notifikasi bank/e-wallet tidak dikenali. Pastikan berisi nominal (Rp/IDR) dan keterangan uang masuk atau keluar."
     );
   }
 
