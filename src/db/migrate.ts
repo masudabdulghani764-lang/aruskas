@@ -263,6 +263,9 @@ export const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_debts_user_status
     ON debts(user_id, status, created_at DESC);
+
+  ALTER TABLE bank_integrations
+    ADD COLUMN IF NOT EXISTS provider_wallet_map TEXT NOT NULL DEFAULT '{}';
 `;
 
 /**

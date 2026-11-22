@@ -5,7 +5,8 @@ import {
   getUserBySessionToken,
   registerUser,
 } from "@/lib/auth";
-import { parseBcaNotification } from "@/lib/bca-parser";
+import { upsertBcaIntegration, ingestBcaNotificationByToken } from "@/lib/bca-integration";
+import { parseBcaNotification } from "@/lib/bank-notification-parser";
 import { upsertBudget } from "@/lib/budgets";
 import { listCategories } from "@/lib/categories";
 import { AppError } from "@/lib/errors";
@@ -242,6 +243,62 @@ describe("5 Growth Features: Universal Bank Parser, Safe-to-Spend, Smart Paste, 
 
       await deleteSplitBill(db, user.id, bill.id);
       expect(await getPublicSplitBillBySlug(db, bill.slug)).toBeNull();
+    } finally {
+      await close();
+    }
+  });
+
+  test("1b. Multi-Bank & Multi-E-Wallet webhook routes GoPay and SeaBank to their mapped wallets", async () => {
+    const { db, close } = await createDb(":memory:");
+    try {
+      const { user } = await registerUser(db, {
+        name: "Bima",
+        email: "bima-multi@aruskas.test",
+        password: "Password123!",
+      });
+      const defaultWallet = await createWallet(db, user.id, {
+        name: "BCA Utama",
+        type: "bank",
+        initialBalance: 1_000_000,
+      });
+      const gopayWallet = await createWallet(db, user.id, {
+        name: "Dompet GoPay",
+        type: "ewallet",
+        initialBalance: 500_000,
+      });
+      const seabankWallet = await createWallet(db, user.id, {
+        name: "SeaBank Bima",
+        type: "bank",
+        initialBalance: 2_000_000,
+      });
+
+      const setup = await upsertBcaIntegration(db, user.id, {
+        walletId: defaultWallet.id,
+        isActive: true,
+        autoCategorize: true,
+        providerWalletMap: {
+          gopay: gopayWallet.id,
+          seabank: seabankWallet.id,
+        },
+      });
+
+      const r1 = await ingestBcaNotificationByToken(db, setup.rawToken!, {
+        subject: "Notifikasi GoPay",
+        text: "Kamu bayar Rp 50.000 pakai GoPay QRIS di KOPI KENANGAN pada 22/11/2026 berhasil. Ref: GPY-ROUTE-1",
+      });
+      expect(r1.status).toBe("imported");
+      if (r1.status === "imported") {
+        expect(r1.transaction.walletId).toBe(gopayWallet.id);
+      }
+
+      const r2 = await ingestBcaNotificationByToken(db, setup.rawToken!, {
+        subject: "SeaBank - Dana Masuk",
+        text: "Transfer masuk SeaBank sebesar Rp 300.000 dari ANDI pada 22/11/2026 berhasil. No. Ref: SEA-ROUTE-1",
+      });
+      expect(r2.status).toBe("imported");
+      if (r2.status === "imported") {
+        expect(r2.transaction.walletId).toBe(seabankWallet.id);
+      }
     } finally {
       await close();
     }

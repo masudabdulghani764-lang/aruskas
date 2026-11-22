@@ -26,6 +26,7 @@ const upsertSchema = z.object(
         invalid_type_error: "Auto-kategori harus berupa boolean.",
       })
       .optional(),
+    providerWalletMap: z.record(z.string(), z.string()).optional(),
   },
   { invalid_type_error: "Format data permintaan tidak valid." }
 );
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       walletId: parsed.walletId,
       isActive: parsed.isActive,
       autoCategorize: parsed.autoCategorize,
+      providerWalletMap: parsed.providerWalletMap,
     });
 
     return NextResponse.json(result);

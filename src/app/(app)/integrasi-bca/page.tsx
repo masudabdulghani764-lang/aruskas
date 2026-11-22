@@ -7,7 +7,7 @@ import { getBcaIntegration } from "@/lib/bca-integration";
 import { listUserWallets } from "@/lib/wallets";
 
 export const metadata: Metadata = {
-  title: "Otomatisasi Bank BCA",
+  title: "Auto-Catat Bank & E-Wallet",
 };
 
 export const dynamic = "force-dynamic";

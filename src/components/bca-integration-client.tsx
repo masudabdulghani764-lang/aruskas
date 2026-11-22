@@ -161,6 +161,10 @@ export function BcaIntegrationClient({
   const [autoCategorize, setAutoCategorize] = useState(
     initialIntegration?.autoCategorize ?? true
   );
+  const [providerWalletMap, setProviderWalletMap] = useState<
+    Record<string, string>
+  >(initialIntegration?.providerWalletMap ?? {});
+  const [showRoutingPanel, setShowRoutingPanel] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [rotatingToken, setRotatingToken] = useState(false);
   const [freshRawToken, setFreshRawToken] = useState<string | null>(null);
@@ -179,6 +183,7 @@ export function BcaIntegrationClient({
     occurredAt: string;
     paymentMethod: string;
     suggestedCategoryName: string;
+    providerName?: string;
   } | null>(null);
 
   // CSV import state
@@ -239,7 +244,7 @@ export function BcaIntegrationClient({
   async function handleSaveConfig(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedWalletId) {
-      toast.error("Pilih dompet tujuan BCA terlebih dahulu.");
+      toast.error("Pilih dompet tujuan default terlebih dahulu.");
       return;
     }
     setSavingConfig(true);
@@ -251,21 +256,22 @@ export function BcaIntegrationClient({
           walletId: selectedWalletId,
           isActive,
           autoCategorize,
+          providerWalletMap,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Gagal menyimpan pengaturan BCA.");
+        toast.error(data.error ?? "Gagal menyimpan pengaturan Auto Bank.");
         return;
       }
       setIntegration(data.integration);
       if (data.rawToken) {
         setFreshRawToken(data.rawToken);
         toast.success(
-          "Integrasi BCA aktif! Segera salin Token Rahasia Anda di bawah."
+          "Otomatisasi Bank & E-Wallet aktif! Segera salin Token Rahasia Anda di bawah."
         );
       } else {
-        toast.success("Pengaturan otomatisasi Bank BCA disimpan.");
+        toast.success("Pengaturan otomatisasi Bank & E-Wallet disimpan.");
       }
     } catch {
       toast.error("Terjadi gangguan jaringan.");
@@ -331,6 +337,7 @@ export function BcaIntegrationClient({
         occurredAt: data.parsed.occurredAt,
         paymentMethod: data.parsed.paymentMethod,
         suggestedCategoryName: data.suggestedCategoryName,
+        providerName: data.parsed.providerName,
       });
 
       if (commit) {
@@ -338,13 +345,13 @@ export function BcaIntegrationClient({
           toast.warning(data.result.message);
         } else {
           toast.success(
-            `Berhasil dicatat otomatis ke dompet BCA (${formatIDR(data.parsed.amount)})!`
+            `Berhasil dicatat otomatis (${formatIDR(data.parsed.amount)})!`
           );
           triggerRefresh();
         }
         await refreshIntegrationState();
       } else {
-        toast.success("Notifikasi BCA berhasil dibaca — cek hasil pratinjau.");
+        toast.success("Notifikasi berhasil dibaca — cek hasil pratinjau.");
       }
     } catch {
       toast.error("Terjadi gangguan jaringan.");
@@ -521,9 +528,9 @@ export function BcaIntegrationClient({
         <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
         <p className="leading-relaxed">
           <strong>100% Aman:</strong> ArusKas tidak pernah meminta Username,
-          PIN, atau Password KlikBCA/myBCA Anda. Pencatatan otomatis bekerja
-          dengan membaca teks notifikasi transaksi BCA atau file mutasi CSV yang
-          Anda kirimkan sendiri.
+          PIN, atau Password mobile banking / e-wallet Anda. Pencatatan otomatis
+          bekerja dengan membaca teks notifikasi dari aplikasi bank/e-wallet atau
+          file mutasi CSV yang Anda kirimkan sendiri.
         </p>
       </div>
 
@@ -533,7 +540,7 @@ export function BcaIntegrationClient({
           [
             {
               key: "webhook",
-              label: "Otomatis Real-Time (Notifikasi BCA)",
+              label: "Otomatis Real-Time (Bank & E-Wallet)",
               icon: Sparkles,
             },
             {
@@ -578,10 +585,11 @@ export function BcaIntegrationClient({
               <div className="flex items-center justify-between gap-2 pb-4 border-b border-[#E7E2D8]">
                 <div>
                   <h2 className="text-base font-semibold text-[#1C1917]">
-                    1. Hubungkan Dompet BCA &amp; Token Webhook
+                    1. Hubungkan Dompet Tujuan &amp; Token Webhook
                   </h2>
                   <p className="text-xs text-[#78716C] mt-0.5">
-                    Pilih dompet tujuan untuk semua transaksi masuk/keluar BCA.
+                    Pilih dompet default dan (opsional) petakan dompet khusus per
+                    bank atau e-wallet.
                   </p>
                 </div>
                 {integration ? (
@@ -595,7 +603,7 @@ export function BcaIntegrationClient({
 
               <form onSubmit={handleSaveConfig} noValidate className="mt-4 space-y-4">
                 <Select
-                  label="Dompet Tujuan BCA"
+                  label="Dompet Tujuan Default (Semua Bank & E-Wallet)"
                   value={selectedWalletId}
                   onChange={(e) => setSelectedWalletId(e.target.value)}
                 >
@@ -605,6 +613,63 @@ export function BcaIntegrationClient({
                     </option>
                   ))}
                 </Select>
+
+                {/* Per-Provider Wallet Routing */}
+                <div className="rounded-xl border border-[#E3D4BA] bg-[#FAF1E0]/55 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-[#1C1917]">
+                        Routing Dompet Per Bank / E-Wallet (Opsional)
+                      </p>
+                      <p className="text-[11px] text-[#78716C]">
+                        Misal: notif GoPay otomatis masuk ke Dompet GoPay,
+                        SeaBank ke Dompet SeaBank.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRoutingPanel((prev) => !prev)}
+                      className="shrink-0 rounded-lg border border-[#E3D4BA] bg-[#FFFFFF] px-2.5 py-1 text-[11px] font-semibold text-[#14532D] hover:bg-[#EFECE4] cursor-pointer"
+                    >
+                      {showRoutingPanel ? "Tutup" : "Atur Routing"}
+                    </button>
+                  </div>
+
+                  {showRoutingPanel && (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 pt-1 max-h-60 overflow-y-auto pr-1">
+                      {SUPPORTED_BANK_PROVIDERS.map((prov) => (
+                        <div
+                          key={prov.id}
+                          className="flex flex-col gap-1 rounded-lg border border-[#E7E2D8] bg-[#FFFFFF] p-2"
+                        >
+                          <span className="text-[11px] font-semibold text-[#1C1917]">
+                            {prov.label}
+                          </span>
+                          <select
+                            value={providerWalletMap[prov.id] ?? ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setProviderWalletMap((prev) => {
+                                const next = { ...prev };
+                                if (val) next[prov.id] = val;
+                                else delete next[prov.id];
+                                return next;
+                              });
+                            }}
+                            className="h-8 rounded-md border border-[#E7E2D8] bg-[#FAF8F4] px-2 text-xs text-[#1C1917] focus:border-[#14532D] focus:outline-none"
+                          >
+                            <option value="">Ikuti Dompet Default</option>
+                            {wallets.map((w) => (
+                              <option key={w.id} value={w.id}>
+                                {w.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <label className="flex items-center gap-2.5 rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] px-3.5 py-2.5 text-xs font-medium text-[#1C1917] cursor-pointer">
@@ -724,7 +789,7 @@ export function BcaIntegrationClient({
                 2. Panduan Otomatisasi (Gratis, 3 Menit)
               </h2>
               <p className="mt-1 text-xs text-[#78716C]">
-                Pilih cara pengiriman notifikasi BCA ke ArusKas:
+                Pilih cara pengiriman notifikasi Bank &amp; E-Wallet ke ArusKas:
               </p>
 
               <div className="mt-3 flex gap-1.5">
@@ -759,7 +824,8 @@ export function BcaIntegrationClient({
                 <div className="mt-4 space-y-3 text-xs text-[#57534E]">
                   <ol className="list-decimal pl-4 space-y-1.5 leading-relaxed">
                     <li>
-                      Pastikan notifikasi email transaksi di <strong>myBCA / m-BCA</strong> aktif menuju Gmail Anda.
+                      Pastikan notifikasi email transaksi dari bank/e-wallet
+                      Anda (<strong>myBCA, Livin&apos;, BRImo, Wondr, SeaBank, Jago, GoPay, OVO, DANA</strong>) aktif menuju Gmail Anda.
                     </li>
                     <li>
                       Buka <strong>script.google.com</strong> → klik{" "}
@@ -847,12 +913,12 @@ export function BcaIntegrationClient({
             <Card className="p-5 sm:p-6">
               <div className="pb-4 border-b border-[#E7E2D8]">
                 <h2 className="text-base font-semibold text-[#1C1917]">
-                  3. Uji Coba Langsung (Tempel Notifikasi BCA)
+                  3. Uji Coba Langsung (Tempel Notifikasi Bank / E-Wallet)
                 </h2>
                 <p className="text-xs text-[#78716C] mt-0.5">
-                  Coba tempel teks email/notifikasi myBCA atau klik contoh di
-                  bawah untuk langsung menguji pencatatan otomatis ke dompet
-                  BCA Anda.
+                  Tempel teks email atau notifikasi push dari 12 bank/e-wallet
+                  Indonesia, atau klik contoh di bawah untuk langsung menguji
+                  pembacaan &amp; routing dompet otomatis.
                 </p>
               </div>
 
@@ -888,11 +954,11 @@ export function BcaIntegrationClient({
                 </div>
 
                 <Textarea
-                  label="Isi Teks Notifikasi / Email BCA"
+                  label="Isi Teks Notifikasi / Email Bank atau E-Wallet"
                   rows={4}
                   value={simText}
                   onChange={(e) => setSimText(e.target.value)}
-                  placeholder="Tempel teks notifikasi myBCA / m-BCA di sini..."
+                  placeholder="Tempel teks notifikasi myBCA, Livin' Mandiri, BRImo, SeaBank, Jago, GoPay, ShopeePay, OVO, atau DANA di sini..."
                 />
 
                 <div className="flex flex-wrap gap-2.5">
@@ -921,6 +987,7 @@ export function BcaIntegrationClient({
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#14532D]">
                       <CheckCircle2 className="h-4 w-4" />
                       Hasil Pembacaan Otomatis
+                      {simPreview.providerName ? ` · ${simPreview.providerName}` : ""}
                     </span>
                     <Badge
                       variant={

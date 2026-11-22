@@ -8,6 +8,7 @@ export type ParsedBcaEntry = {
   paymentMethod: string;
   notes: string;
   dedupeKey: string;
+  providerId?: string;
   providerName?: string;
 };
 
@@ -389,6 +390,7 @@ export function parseBcaNotification(
     paymentMethod,
     notes,
     dedupeKey,
+    providerId: provider.id,
     providerName: pLabel,
   };
 }

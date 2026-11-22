@@ -27,6 +27,7 @@ export type BcaIntegrationView = {
   provider: "bca";
   walletId: string;
   walletName: string;
+  providerWalletMap: Record<string, string>;
   tokenPrefix: string;
   isActive: boolean;
   autoCategorize: boolean;
@@ -71,6 +72,25 @@ function generateWebhookToken(): {
   };
 }
 
+function parseProviderWalletMap(raw: string | null | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" && v.trim()) {
+        clean[k.trim().toLowerCase()] = v.trim();
+      }
+    }
+    return clean;
+  } catch {
+    return {};
+  }
+}
+
 function toIntegrationView(
   row: typeof bankIntegrations.$inferSelect,
   walletName: string
@@ -80,6 +100,7 @@ function toIntegrationView(
     provider: row.provider,
     walletId: row.walletId,
     walletName,
+    providerWalletMap: parseProviderWalletMap(row.providerWalletMap),
     tokenPrefix: row.tokenPrefix,
     isActive: row.isActive,
     autoCategorize: row.autoCategorize,
@@ -155,6 +176,7 @@ export async function upsertBcaIntegration(
     walletId: string;
     isActive?: boolean;
     autoCategorize?: boolean;
+    providerWalletMap?: Record<string, string>;
   }
 ): Promise<{ integration: BcaIntegrationView; rawToken: string | null }> {
   const membership = await assertWalletAccess(
@@ -166,8 +188,29 @@ export async function upsertBcaIntegration(
   if (membership.wallet.archivedAt) {
     throw new AppError(
       400,
-      "Dompet yang diarsipkan tidak dapat dijadikan target integrasi BCA."
+      "Dompet yang diarsipkan tidak dapat dijadikan target integrasi otomatis."
     );
+  }
+
+  let sanitizedMap: Record<string, string> | undefined;
+  if (input.providerWalletMap !== undefined) {
+    sanitizedMap = {};
+    for (const [providerKey, targetId] of Object.entries(
+      input.providerWalletMap
+    )) {
+      const cleanKey = providerKey.trim().toLowerCase();
+      const cleanWalletId = typeof targetId === "string" ? targetId.trim() : "";
+      if (!cleanKey || !cleanWalletId) continue;
+      const targetMem = await assertWalletAccess(
+        db,
+        cleanWalletId,
+        userId,
+        "editor"
+      );
+      if (!targetMem.wallet.archivedAt) {
+        sanitizedMap[cleanKey] = cleanWalletId;
+      }
+    }
   }
 
   const now = new Date().toISOString();
@@ -185,12 +228,17 @@ export async function upsertBcaIntegration(
   if (existing) {
     const nextIsActive = input.isActive ?? existing.isActive;
     const nextAutoCat = input.autoCategorize ?? existing.autoCategorize;
+    const nextMapJson =
+      sanitizedMap !== undefined
+        ? JSON.stringify(sanitizedMap)
+        : existing.providerWalletMap;
     const [updated] = await db
       .update(bankIntegrations)
       .set({
         walletId: input.walletId,
         isActive: nextIsActive,
         autoCategorize: nextAutoCat,
+        providerWalletMap: nextMapJson,
         updatedAt: now,
       })
       .where(eq(bankIntegrations.id, existing.id))
@@ -215,6 +263,7 @@ export async function upsertBcaIntegration(
       tokenPrefix: generated.tokenPrefix,
       isActive: input.isActive ?? true,
       autoCategorize: input.autoCategorize ?? true,
+      providerWalletMap: JSON.stringify(sanitizedMap ?? {}),
       lastSyncedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -496,10 +545,15 @@ export async function ingestBcaNotificationByToken(
     );
   }
 
+  const providerMap = parseProviderWalletMap(integration.providerWalletMap);
+  const routedWalletId =
+    (parsed.providerId && providerMap[parsed.providerId]) ||
+    integration.walletId;
+
   return recordParsedEntryForWallet(db, {
     userId: integration.userId,
     integrationId: integration.id,
-    walletId: integration.walletId,
+    walletId: routedWalletId,
     autoCategorize: integration.autoCategorize,
     source,
     entry: parsed,
@@ -546,19 +600,25 @@ export async function simulateBcaNotification(
     );
   }
 
-  const membership = await assertWalletAccess(
-    db,
-    targetWalletId,
-    userId,
-    "editor"
-  );
   const parsed = parseBcaNotification(input.text, { subject: input.subject });
   if (!parsed) {
     throw new AppError(
       422,
-      "Teks notifikasi BCA tidak dapat dibaca. Pastikan terdapat nominal Rupiah dan kata kunci seperti Transfer Masuk, QRIS, Virtual Account, atau Transfer ke."
+      "Teks notifikasi bank/e-wallet tidak dapat dibaca. Pastikan terdapat nominal Rupiah dan kata kunci seperti Transfer Masuk, QRIS, Virtual Account, atau Bayar."
     );
   }
+
+  const providerMap = parseProviderWalletMap(integration?.providerWalletMap);
+  const mappedWalletId =
+    (parsed.providerId && providerMap[parsed.providerId]) || undefined;
+  const effectiveWalletId = mappedWalletId ?? targetWalletId;
+
+  const membership = await assertWalletAccess(
+    db,
+    effectiveWalletId,
+    userId,
+    "editor"
+  );
 
   const ownerCategories = await db
     .select({
@@ -585,7 +645,7 @@ export async function simulateBcaNotification(
   const result = await recordParsedEntryForWallet(db, {
     userId,
     integrationId: integration?.id ?? null,
-    walletId: targetWalletId,
+    walletId: effectiveWalletId,
     autoCategorize: integration?.autoCategorize ?? true,
     source: "simulator",
     entry: parsed,

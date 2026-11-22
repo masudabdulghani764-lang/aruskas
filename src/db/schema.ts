@@ -196,6 +196,7 @@ export const bankIntegrations = pgTable(
     tokenPrefix: text("token_prefix").notNull(),
     isActive: boolean("is_active").notNull().default(true),
     autoCategorize: boolean("auto_categorize").notNull().default(true),
+    providerWalletMap: text("provider_wallet_map").notNull().default("{}"),
     lastSyncedAt: text("last_synced_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
