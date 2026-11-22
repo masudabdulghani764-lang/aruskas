@@ -7,14 +7,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.5",
-  versionCode: 6,
+  versionName: "1.0.6",
+  versionCode: 7,
   apkUrl: "/downloads/ArusKas.apk",
-  sizeLabel: "202 KB",
+  sizeLabel: "205 KB",
   highlights: [
-    "Logo aplikasi & Splash Screen baru ArusKas (gelombang ganda gading & emas)",
-    "Adaptive Icon Android baru tanpa pinggiran putih di semua bentuk layar",
-    "Tetap dilengkapi Kunci Sidik Jari/PIN HP & seluruh pengamanan terbaru",
+    "Animasi pembuka baru: 2 garis logo masuk satu per satu tanpa spinner",
+    "Transisi keluar sinematik: 2 garis melesat keluar & halaman bergeser mengikuti arus garis",
+    "Logo W1 Clean, Kunci Sidik Jari/PIN HP, & seluruh pengamanan terbaru",
   ],
 };
 
