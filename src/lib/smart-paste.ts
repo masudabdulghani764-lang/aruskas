@@ -1,4 +1,7 @@
-import { parseBcaNotification, suggestBcaCategoryId } from "@/lib/bca-parser";
+import {
+  parseBcaNotification,
+  suggestBcaCategoryId,
+} from "@/lib/bank-notification-parser";
 import { getTodayISO } from "@/lib/format";
 
 export type SmartPasteCategoryOption = {

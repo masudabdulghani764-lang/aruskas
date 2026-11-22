@@ -30,7 +30,7 @@ import {
   Textarea,
   cn,
 } from "@/components/ui/primitives";
-import { SUPPORTED_BANK_PROVIDERS } from "@/lib/bca-parser";
+import { SUPPORTED_BANK_PROVIDERS } from "@/lib/bank-notification-parser";
 import type {
   BcaCsvPreviewRow,
   BcaIntegrationView,
