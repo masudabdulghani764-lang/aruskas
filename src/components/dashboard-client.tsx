@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
 import { ReceiptDrawer } from "@/components/receipt-drawer";
+import { useTheme } from "@/components/theme-provider";
 import {
   Badge,
   Button,
@@ -179,6 +180,7 @@ export function DashboardClient({
   userName: string;
 }) {
   const { openQuickAdd, refreshTrigger, triggerRefresh } = useQuickAdd();
+  const { resolvedTheme } = useTheme();
 
   const [scope, setScope] = useState<ReportScope>("all");
   const [data, setData] = useState<DashboardSummary | null>(initialData ?? null);
@@ -634,7 +636,7 @@ export function DashboardClient({
 
       {/* Hero Balance Sheet — Deep Botanical Forest & Warm Gold Focal Card (zero blur filter cost) */}
       <div
-        className="relative overflow-hidden rounded-3xl border border-[#245A3E] p-6 sm:p-8 text-[#FAF8F4] shadow-sm"
+        className="hero-forest-surface relative overflow-hidden rounded-3xl border border-[#245A3E] p-6 sm:p-8 text-[#FAF8F4] shadow-sm"
         style={{
           backgroundImage:
             "radial-gradient(circle at 92% 12%, rgba(229, 184, 105, 0.22) 0%, rgba(229, 184, 105, 0) 55%), linear-gradient(135deg, #14532D 0%, #113B26 55%, #0D2E1D 100%)",
@@ -951,7 +953,10 @@ export function DashboardClient({
                   width={76}
                 />
                 <Tooltip
-                  cursor={{ fill: "#EFECE4", opacity: 0.45 }}
+                  cursor={{
+                    fill: resolvedTheme === "dark" ? "#1E3026" : "#EFECE4",
+                    opacity: 0.45,
+                  }}
                   content={<CashflowTooltip />}
                 />
                 <Bar
@@ -976,6 +981,108 @@ export function DashboardClient({
             <div className="h-full w-full rounded-xl bg-[#F7F5F0] animate-pulse" />
           )}
         </div>
+      </Card>
+
+      {/* Monthly Bills (Tagihan Bulanan) Strip */}
+      <Card padding="md">
+        <CardHeader
+          serif
+          title="Tagihan Bulanan"
+          subtitle={
+            data.monthlyBills && data.monthlyBills.totalCount > 0
+              ? `${data.monthlyBills.paidThisMonthCount} lunas · ${data.monthlyBills.unpaidThisMonthCount} belum dibayar bulan ini (sisa ${displayIDR(data.monthlyBills.remainingAmountThisMonth)})`
+              : "Kelola daftar tagihan rutin setiap bulan (Listrik, WiFi, Cicilan, Air, BPJS)"
+          }
+          action={
+            <Link
+              href="/tagihan"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#14532D] hover:underline whitespace-nowrap"
+            >
+              <span>Kelola Tagihan →</span>
+            </Link>
+          }
+        />
+
+        {!data.monthlyBills || data.monthlyBills.bills.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-[#E7E2D8] bg-[#FAF8F4] px-4 py-3.5 text-xs">
+            <span className="text-[#57534E]">
+              Belum ada tagihan bulanan terjadwal. Tambahkan Listrik, Internet,
+              atau Cicilan agar muncul pengingat &amp; bayar 1 klik setiap bulan.
+            </span>
+            <Link
+              href="/tagihan"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-[#14532D] px-3 text-xs font-semibold text-[#FFFFFF] hover:bg-[#166534]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>Tambah Tagihan</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.monthlyBills.bills.map((bill) => {
+              const isPaidThisMonth =
+                bill.nextRunDate.slice(0, 7) > data.month;
+              const isBusy = busyRuleId === bill.id;
+              return (
+                <div
+                  key={bill.id}
+                  className="rounded-xl border border-[#E7E2D8] bg-[#F7F5F0]/55 p-3.5 flex flex-col justify-between gap-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[#1C1917]">
+                        {bill.title}
+                      </p>
+                      <p className="text-[11px] text-[#78716C]">
+                        {bill.walletName} ·{" "}
+                        {isPaidThisMonth
+                          ? `Berikut: ${formatDateID(bill.nextRunDate)}`
+                          : `Jatuh tempo: ${formatDateID(bill.nextRunDate)}`}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={
+                        bill.isDue
+                          ? "outflow"
+                          : isPaidThisMonth
+                            ? "inflow"
+                            : "warning"
+                      }
+                    >
+                      {bill.isDue
+                        ? "Jatuh Tempo"
+                        : isPaidThisMonth
+                          ? "Lunas"
+                          : "Belum Bayar"}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="tnum font-display text-lg font-medium text-[#1C1917]">
+                      {displayIDR(bill.amount)}
+                    </span>
+                    {!isPaidThisMonth ? (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        loading={isBusy}
+                        onClick={() => void handleApplyRecurring(bill.id)}
+                        className="h-7 px-2.5 text-[11px]"
+                      >
+                        <Check className="h-3 w-3" />
+                        <span>Bayar</span>
+                      </Button>
+                    ) : (
+                      <span className="text-[11px] font-medium text-[#15803D]">
+                        ✓ Selesai
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       {/* Two-Column Detail Row: Budgets & Recent Activity */}

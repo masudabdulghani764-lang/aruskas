@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
+import { useTheme } from "@/components/theme-provider";
 import {
   Badge,
   Button,
@@ -172,6 +173,7 @@ function CategoryBreakdownPanel({
   items: CategoryBreakdownItem[];
   emptyText: string;
 }) {
+  const { resolvedTheme } = useTheme();
   return (
     <Card padding="md" className="print-sheet print:break-inside-avoid">
       <CardHeader serif title={title} subtitle={subtitle} />
@@ -194,7 +196,7 @@ function CategoryBreakdownPanel({
                     innerRadius={38}
                     outerRadius={62}
                     paddingAngle={2}
-                    stroke="#FFFDF8"
+                    stroke={resolvedTheme === "dark" ? "#131F18" : "#FFFDF8"}
                     strokeWidth={2}
                     isAnimationActive={false}
                   >

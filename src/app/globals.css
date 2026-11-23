@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --bg-canvas: #F5E9D3;
@@ -22,120 +23,18 @@
 
 html.dark {
   color-scheme: dark;
-  --bg-canvas: #0D1510;
-  --bg-sheet: #142019;
-  --bg-subtle: #1B2B22;
-  --border-warm: #273B2F;
+  --bg-canvas: #0B130E;
+  --bg-sheet: #131F18;
+  --bg-subtle: #1A2A21;
+  --border-warm: #273C2F;
 
-  --ink-primary: #F4EFE6;
-  --ink-secondary: #C6C1B8;
-  --ink-muted: #939088;
+  --ink-primary: #F3EDE2;
+  --ink-secondary: #CCC6BC;
+  --ink-muted: #9A958B;
 
   --accent-forest: #1E7A45;
   --accent-forest-hover: #248F52;
   --accent-forest-soft: #133923;
-}
-
-html.dark body,
-html.dark .bg-cream-canvas {
-  background-color: #0D1510 !important;
-  background-image: linear-gradient(
-    165deg,
-    #0F1914 0%,
-    #122019 52%,
-    #0C140F 100%
-  ) !important;
-  color: #F4EFE6;
-}
-
-html.dark header,
-html.dark nav[aria-label="Navigasi seluler"] {
-  background-color: #121E18 !important;
-  background-image: linear-gradient(
-    90deg,
-    #121D17 0%,
-    #15231B 60%,
-    #111C16 100%
-  ) !important;
-  border-color: #26392D !important;
-}
-
-html.dark .bg-\[\#FFFFFF\],
-html.dark .bg-\[\#FFFDF9\] {
-  background-color: #142019 !important;
-}
-
-html.dark .bg-\[\#FAF8F4\],
-html.dark .bg-\[\#F7F5F0\],
-html.dark .bg-\[\#EFECE4\],
-html.dark .bg-\[\#FAF1E0\],
-html.dark .bg-\[\#FDF8EE\],
-html.dark .bg-\[\#FAF0DD\] {
-  background-color: #1A2920 !important;
-}
-
-html.dark .bg-\[\#EFF6F1\],
-html.dark .bg-\[\#F2FAF5\],
-html.dark .bg-\[\#DCFCE7\] {
-  background-color: #132C1E !important;
-}
-
-html.dark .text-\[\#1C1917\],
-html.dark .text-\[\#44403C\] {
-  color: #F4EFE6 !important;
-}
-
-html.dark .text-\[\#57534E\] {
-  color: #C6C1B8 !important;
-}
-
-html.dark .text-\[\#78716C\] {
-  color: #9A958C !important;
-}
-
-html.dark .text-\[\#14532D\],
-html.dark .text-\[\#166534\],
-html.dark .text-\[\#15803D\] {
-  color: #6EE7B7 !important;
-}
-
-html.dark .border-\[\#E7E2D8\],
-html.dark .border-\[\#E3D4BA\],
-html.dark .border-\[\#EFECE4\],
-html.dark .border-\[\#EADBC0\],
-html.dark .border-\[\#DDD5C7\],
-html.dark .border-\[\#D6CFC2\] {
-  border-color: #273B2F !important;
-}
-
-html.dark .border-\[\#CBE0D2\],
-html.dark .border-\[\#BBF7D0\],
-html.dark .border-\[\#D6E6DC\] {
-  border-color: #254D37 !important;
-}
-
-html.dark .divide-\[\#EFECE4\] > :not(:last-child) {
-  border-color: #24362B !important;
-}
-
-html.dark input,
-html.dark select,
-html.dark textarea {
-  background-color: #101A14 !important;
-  color: #F4EFE6 !important;
-  border-color: #2B4033 !important;
-}
-
-/* Preserve high contrast on solid forest-green CTA buttons/badges in Dark Mode */
-html.dark .bg-\[\#14532D\] {
-  background-color: #166534 !important;
-  color: #FFFFFF !important;
-}
-
-html.dark .recharts-default-tooltip {
-  background-color: #142019 !important;
-  border-color: #273B2F !important;
-  color: #F4EFE6 !important;
 }
 
 @layer base {
@@ -159,7 +58,7 @@ html.dark .recharts-default-tooltip {
   }
 }
 
-/* GPU-friendly single-layer warm Cream-to-White canvas (no background-attachment: fixed or stacked radial gradients) */
+/* GPU-friendly single-layer warm Cream-to-White canvas */
 .bg-cream-canvas {
   background-color: #F5E9D3;
   background-image: linear-gradient(
@@ -171,7 +70,6 @@ html.dark .recharts-default-tooltip {
   );
 }
 
-/* Lightweight solid warm tones for nested chips/badges/rows so scrolling stays at a locked 60-120fps */
 .bg-\[\#F7F5F0\] {
   background-color: #F6EAD4;
 }
@@ -186,6 +84,239 @@ html.dark .recharts-default-tooltip {
 
 .font-display {
   font-family: var(--font-newsreader), Georgia, serif;
+}
+
+/* ============================================================================
+ * COMPREHENSIVE OBSIDIAN-EMERALD DARK MODE OVERRIDES
+ * Covers static utility surfaces, Tailwind v4 gradients, alerts, and charts.
+ * ============================================================================ */
+
+html.dark body,
+html.dark .bg-cream-canvas {
+  background-color: #0B130E !important;
+  background-image: linear-gradient(
+    165deg,
+    #0D1711 0%,
+    #111F17 50%,
+    #0A110D 100%
+  ) !important;
+  color: #F3EDE2;
+}
+
+html.dark header,
+html.dark nav[aria-label="Navigasi seluler"] {
+  background-color: #101B15 !important;
+  background-image: linear-gradient(
+    90deg,
+    #101B15 0%,
+    #132219 60%,
+    #0F1A14 100%
+  ) !important;
+  border-color: #253A2D !important;
+}
+
+/* Neutral Paper & Elevated Surfaces */
+html.dark .bg-white,
+html.dark .bg-\[\#FFFFFF\],
+html.dark .bg-\[\#FFFDF9\],
+html.dark .bg-\[\#FFFFFF\]\/80,
+html.dark .bg-\[\#FFFFFF\]\/95 {
+  background-color: #131F18 !important;
+}
+
+html.dark .bg-\[\#FAF8F4\],
+html.dark .bg-\[\#FAF8F4\]\/70,
+html.dark .bg-\[\#F7F5F0\],
+html.dark .bg-\[\#F7F5F0\]\/50,
+html.dark .bg-\[\#F7F5F0\]\/60,
+html.dark .bg-\[\#F7F5F0\]\/70,
+html.dark .bg-\[\#EFECE4\],
+html.dark .bg-\[\#EFECE4\]\/40,
+html.dark .bg-\[\#EFECE4\]\/65,
+html.dark .bg-\[\#EFECE4\]\/70,
+html.dark .bg-\[\#FAF1E0\],
+html.dark .bg-\[\#FAF1E0\]\/55,
+html.dark .bg-\[\#FDF8EE\],
+html.dark .bg-\[\#FAF0DD\],
+html.dark .bg-\[\#E3D4BA\]\/70,
+html.dark .bg-\[\#E3D4BA\]\/80 {
+  background-color: #19281F !important;
+}
+
+/* Card & Hero Paper Gradients (Tailwind v4 gradient variables) */
+html.dark .from-\[\#FFFFFF\],
+html.dark .from-\[\#FFFDF8\] {
+  --tw-gradient-from: #15231B !important;
+}
+
+html.dark .to-\[\#F6E8CF\],
+html.dark .to-\[\#EFE0C6\] {
+  --tw-gradient-to: #101A14 !important;
+}
+
+html.dark .from-\[\#EFF6F1\] {
+  --tw-gradient-from: #13281C !important;
+}
+
+html.dark .via-\[\#F7FAF8\],
+html.dark .via-\[\#FFFBF2\] {
+  --tw-gradient-via: #15261C !important;
+}
+
+html.dark .to-\[\#FAF1E0\]\/70 {
+  --tw-gradient-to: #18271E !important;
+}
+
+html.dark .from-\[\#FAF0DD\]\/70 {
+  --tw-gradient-from: #18271E !important;
+}
+
+/* Semantic Status Tints (Emerald / Amber / Crimson) */
+html.dark .bg-\[\#EFF6F1\],
+html.dark .bg-\[\#EFF6F1\]\/85,
+html.dark .bg-\[\#F2FAF5\],
+html.dark .bg-\[\#DCFCE7\],
+html.dark .bg-\[\#DCFCE7\]\/60,
+html.dark .bg-\[\#DCFCE7\]\/85 {
+  background-color: rgba(20, 83, 45, 0.34) !important;
+}
+
+html.dark .bg-\[\#FEF3C7\],
+html.dark .bg-\[\#FEF3C7\]\/60,
+html.dark .bg-\[\#FEF3C7\]\/70,
+html.dark .bg-\[\#FEF3C7\]\/85,
+html.dark .bg-\[\#FDE68A\] {
+  background-color: rgba(146, 64, 14, 0.28) !important;
+}
+
+html.dark .bg-\[\#FEE2E2\],
+html.dark .bg-\[\#FEE2E2\]\/45,
+html.dark .bg-\[\#FEE2E2\]\/60,
+html.dark .bg-\[\#FEE2E2\]\/80 {
+  background-color: rgba(127, 29, 29, 0.32) !important;
+}
+
+/* High-Contrast Dark Mode Text Palette */
+html.dark .text-\[\#1C1917\],
+html.dark .text-\[\#44403C\] {
+  color: #F3EDE2 !important;
+}
+
+html.dark .text-\[\#57534E\] {
+  color: #CEC8BE !important;
+}
+
+html.dark .text-\[\#78716C\],
+html.dark .text-\[\#78716C\]\/70 {
+  color: #9D978D !important;
+}
+
+html.dark .text-\[\#14532D\],
+html.dark .text-\[\#166534\],
+html.dark .text-\[\#15803D\] {
+  color: #6EE7B7 !important;
+}
+
+html.dark .text-\[\#B45309\],
+html.dark .text-\[\#92400E\],
+html.dark .text-\[\#78350F\] {
+  color: #FCD34D !important;
+}
+
+html.dark .text-\[\#B91C1C\] {
+  color: #FCA5A5 !important;
+}
+
+/* Hairline Borders & Dividers */
+html.dark .border-\[\#E7E2D8\],
+html.dark .border-\[\#E3D4BA\],
+html.dark .border-\[\#EFECE4\],
+html.dark .border-\[\#EADBC0\],
+html.dark .border-\[\#EDE5D6\],
+html.dark .border-\[\#DDD5C7\],
+html.dark .border-\[\#D6CFC2\],
+html.dark .border-\[\#C8B493\] {
+  border-color: #273C2F !important;
+}
+
+html.dark .border-\[\#CBE0D2\],
+html.dark .border-\[\#BBF7D0\],
+html.dark .border-\[\#D6E6DC\],
+html.dark .border-\[\#245A3E\]\/30 {
+  border-color: rgba(52, 211, 153, 0.28) !important;
+}
+
+html.dark .border-\[\#FDE68A\],
+html.dark .border-\[\#D4A045\] {
+  border-color: rgba(251, 191, 36, 0.34) !important;
+}
+
+html.dark .border-\[\#FECACA\] {
+  border-color: rgba(248, 113, 113, 0.36) !important;
+}
+
+html.dark .divide-\[\#EFECE4\] > :not(:last-child),
+html.dark .divide-\[\#E7E2D8\] > :not(:last-child) {
+  border-color: #24372B !important;
+}
+
+/* Form Controls */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #0E1712 !important;
+  color: #F3EDE2 !important;
+  border-color: #2B4234 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #78827B !important;
+}
+
+/* Solid Primary / Danger Buttons & Pills keep crisp white ink */
+html.dark .bg-\[\#14532D\],
+html.dark .bg-\[\#166534\] {
+  background-color: #166534 !important;
+  color: #FFFFFF !important;
+}
+
+html.dark .bg-\[\#B91C1C\],
+html.dark .bg-\[\#991B1B\] {
+  background-color: #B91C1C !important;
+  color: #FFFFFF !important;
+}
+
+/* Hero Forest Surfaces keep bright warm cream pill contrasts */
+html.dark .hero-forest-surface .bg-\[\#FAF0DD\] {
+  background-color: #FAF0DD !important;
+  color: #14532D !important;
+}
+
+/* Gold Gradient Download Buttons stay dark-forest ink on warm gold */
+html.dark a.from-\[\#F6D58E\],
+html.dark a.from-\[\#F5D284\],
+html.dark button.from-\[\#F6D58E\] {
+  color: #0D2E1D !important;
+}
+
+/* Recharts Axes, Gridlines & Tooltips in Dark Mode */
+html.dark .recharts-cartesian-grid line {
+  stroke: #24372B !important;
+}
+
+html.dark .recharts-cartesian-axis-line {
+  stroke: #273C2F !important;
+}
+
+html.dark .recharts-cartesian-axis-tick-value {
+  fill: #9D978D !important;
+}
+
+html.dark .recharts-default-tooltip {
+  background-color: #131F18 !important;
+  border-color: #273C2F !important;
+  color: #F3EDE2 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

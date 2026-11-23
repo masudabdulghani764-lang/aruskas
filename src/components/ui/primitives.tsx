@@ -29,9 +29,9 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-[#14532D] text-[#FFFFFF] border border-[#14532D] hover:bg-[#166534] hover:border-[#166534] focus-visible:ring-[#14532D]/30",
   secondary:
-    "bg-[#FFFFFF] text-[#1C1917] border border-[#E7E2D8] hover:bg-[#EFECE4] hover:border-[#D6CFC2] focus-visible:ring-[#14532D]/20",
+    "bg-[#FFFFFF] text-[#1C1917] border border-[#E7E2D8] hover:bg-[#EFECE4] hover:border-[#D6CFC2] focus-visible:ring-[#14532D]/20 dark:bg-[#19281F] dark:text-[#F3EDE2] dark:border-[#273C2F] dark:hover:bg-[#22362A]",
   ghost:
-    "bg-transparent text-[#57534E] border border-transparent hover:bg-[#EFECE4] hover:text-[#1C1917] focus-visible:ring-[#14532D]/20",
+    "bg-transparent text-[#57534E] border border-transparent hover:bg-[#EFECE4] hover:text-[#1C1917] focus-visible:ring-[#14532D]/20 dark:text-[#CEC8BE] dark:hover:bg-[#19281F] dark:hover:text-[#F3EDE2]",
   danger:
     "bg-[#B91C1C] text-[#FFFFFF] border border-[#B91C1C] hover:bg-[#991B1B] hover:border-[#991B1B] focus-visible:ring-[#B91C1C]/30",
 };
@@ -102,11 +102,11 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-[#E3D4BA] shadow-xs transition-colors duration-150",
+        "rounded-2xl border border-[#E3D4BA] dark:border-[#273C2F] shadow-xs transition-colors duration-150",
         subtle
-          ? "bg-gradient-to-br from-[#FFFDF8] to-[#EFE0C6]"
-          : "bg-gradient-to-br from-[#FFFFFF] to-[#F6E8CF]",
-        interactive && "hover:border-[#C8B493]",
+          ? "bg-gradient-to-br from-[#FFFDF8] to-[#EFE0C6] dark:from-[#16241C] dark:to-[#101A14]"
+          : "bg-gradient-to-br from-[#FFFFFF] to-[#F6E8CF] dark:from-[#15231B] dark:to-[#101A14]",
+        interactive && "hover:border-[#C8B493] dark:hover:border-[#3A5A46]",
         CARD_PADDING[padding],
         className
       )}

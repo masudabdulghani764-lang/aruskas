@@ -383,7 +383,7 @@ export function PwaInstallShowcaseCard() {
       <section className="border-b border-[#E3D4BA] bg-cream-canvas py-8 sm:py-10">
         <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
           <div
-            className="rounded-3xl border border-[#245A3E] p-5 sm:p-7 text-[#FAF8F4] shadow-sm flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"
+            className="hero-forest-surface rounded-3xl border border-[#245A3E] p-5 sm:p-7 text-[#FAF8F4] shadow-sm flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between"
             style={{
               backgroundImage:
                 "radial-gradient(circle at 92% 15%, rgba(229, 184, 105, 0.25) 0%, rgba(229, 184, 105, 0) 55%), linear-gradient(135deg, #14532D 0%, #113B26 58%, #0D2E1D 100%)",

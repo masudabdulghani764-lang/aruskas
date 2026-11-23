@@ -12,6 +12,7 @@ import {
 } from "@/lib/format";
 import {
   listDueRecurringRules,
+  listRecurringRules,
   type RecurringRuleView,
 } from "@/lib/recurring";
 import {
@@ -63,6 +64,15 @@ export type DashboardSummary = {
   topBudgets: BudgetProgressView[];
   recentTransactions: TransactionView[];
   dueRecurring: RecurringRuleView[];
+  monthlyBills: {
+    totalCount: number;
+    dueCount: number;
+    unpaidThisMonthCount: number;
+    paidThisMonthCount: number;
+    totalMonthlyAmount: number;
+    remainingAmountThisMonth: number;
+    bills: RecurringRuleView[];
+  };
   pendingInvites: PendingInviteView[];
 };
 
@@ -440,6 +450,7 @@ export async function getDashboardSummary(
     monthlyBudgets,
     recentTxRes,
     dueRecurring,
+    allRecurringRules,
     pendingInvites,
   ] = await Promise.all([
     activeWalletIds.length > 0
@@ -496,6 +507,7 @@ export async function getDashboardSummary(
           summary: { income: 0, expense: 0, net: 0, count: 0 },
         }),
     listDueRecurringRules(db, userId, todayIso),
+    listRecurringRules(db, userId),
     listPendingInvitesForEmail(db, userEmail),
   ]);
 
@@ -604,6 +616,24 @@ export async function getDashboardSummary(
     status: safeToSpendStatus,
   };
 
+  const activeMonthlyBills = allRecurringRules.filter(
+    (r) => r.isActive && r.type === "expense" && r.frequency === "monthly"
+  );
+  const unpaidMonthlyBills = activeMonthlyBills.filter(
+    (r) => r.nextRunDate.slice(0, 7) <= month
+  );
+  const paidMonthlyBillsCount =
+    activeMonthlyBills.length - unpaidMonthlyBills.length;
+  const dueMonthlyBillsCount = unpaidMonthlyBills.filter((r) => r.isDue).length;
+  const totalMonthlyAmount = activeMonthlyBills.reduce(
+    (sum, r) => sum + r.amount,
+    0
+  );
+  const remainingAmountThisMonth = unpaidMonthlyBills.reduce(
+    (sum, r) => sum + r.amount,
+    0
+  );
+
   return {
     scope,
     month,
@@ -621,6 +651,15 @@ export async function getDashboardSummary(
     topBudgets,
     recentTransactions,
     dueRecurring,
+    monthlyBills: {
+      totalCount: activeMonthlyBills.length,
+      dueCount: dueMonthlyBillsCount,
+      unpaidThisMonthCount: unpaidMonthlyBills.length,
+      paidThisMonthCount: paidMonthlyBillsCount,
+      totalMonthlyAmount,
+      remainingAmountThisMonth,
+      bills: activeMonthlyBills.slice(0, 5),
+    },
     pendingInvites,
   };
 }

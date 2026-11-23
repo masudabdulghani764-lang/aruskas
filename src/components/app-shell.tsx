@@ -13,6 +13,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  CalendarClock,
   ChevronDown,
   Landmark,
   LayoutDashboard,
@@ -313,6 +314,18 @@ export function AppShell({
                   );
                 })}
                 <Link
+                  href="/tagihan"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150",
+                    pathname === "/tagihan" || pathname.startsWith("/tagihan/")
+                      ? "bg-[#EFECE4] text-[#14532D] font-semibold"
+                      : "text-[#57534E] hover:bg-[#EFECE4]/65 hover:text-[#1C1917]"
+                  )}
+                >
+                  <CalendarClock className="h-3.5 w-3.5 text-[#B45309]" />
+                  <span>Tagihan</span>
+                </Link>
+                <Link
                   href="/auto-bank"
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150",
@@ -335,6 +348,19 @@ export function AppShell({
                 label="Unduh APK"
                 className="hidden lg:inline-flex"
               />
+
+              <Link
+                href="/tagihan"
+                className={cn(
+                  "md:hidden inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors",
+                  pathname === "/tagihan" || pathname.startsWith("/tagihan/")
+                    ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF]"
+                    : "border-[#E3D4BA] bg-[#FAF0DD] text-[#14532D] hover:bg-[#EFECE4]"
+                )}
+              >
+                <CalendarClock className="h-3.5 w-3.5 text-[#B45309]" />
+                <span>Tagihan</span>
+              </Link>
 
               <Link
                 href="/auto-bank"
@@ -423,6 +449,19 @@ export function AppShell({
                     </div>
 
                     <div className="py-1">
+                      <Link
+                        href="/tagihan"
+                        role="menuitem"
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2.5 px-4 py-2 text-sm text-[#1C1917] transition-colors hover:bg-[#EFECE4]/70",
+                          pathname === "/tagihan" &&
+                            "font-semibold text-[#14532D]"
+                        )}
+                      >
+                        <CalendarClock className="h-4 w-4 text-[#B45309]" />
+                        <span>Tagihan Bulanan</span>
+                      </Link>
                       <Link
                         href="/auto-bank"
                         role="menuitem"
