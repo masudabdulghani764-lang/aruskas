@@ -231,6 +231,37 @@ function cleanEntity(raw: string): string {
 }
 
 /**
+ * Filters out promotional, OTP, and delivery bait notifications (e.g., Gojek/Shopee
+ * "Bayar cuma Rp 1!" or "Diskon hingga Rp 50.000") before classifying transactions.
+ */
+function isPromotionalOrBaitNotification(text: string, amount: number): boolean {
+  const hasRealReceiptProof =
+    /\b(?:no\.?\s*ref|ref\s*[:#]|referensi|trx\s*id|berhasil\s+(?:di|ke|sebesar|masuk)|menerima\s+transfer|transfer\s+masuk|mutasi|saldo\s+masuk|kamu\s+(?:bayar|terima))\b/i.test(
+      text
+    );
+
+  // Rp 1 - Rp 10 notifications without a verified transaction receipt reference are promo bait
+  if (amount <= 10 && !hasRealReceiptProof) {
+    return true;
+  }
+
+  const hasHardBait =
+    /\b(?:cuma\s+rp|mulai\s+(?:dari\s+)?rp|hanya\s+rp|serba\s+rp|kode\s+otp|kode\s+verifikasi|pin\s+rahasia|jangan\s+(?:bagikan|berikan)|flash\s+sale|gratis\s+ongkir|klaim\s+(?:voucher|promo|hadiah)|menangkan\s+hadiah|undian)\b/i.test(
+      text
+    );
+  if (hasHardBait) {
+    return true;
+  }
+
+  const hasSoftPromo =
+    /\b(?:promo|diskon|potongan\s+harga|voucher|kupon|pesan\s+lagi|yuk\s+pesan|checkout\s+sekarang|jangan\s+lewatkan|khusus\s+buatmu|cashback\s+hingga|hemat\s+(?:hingga|rp)|gofood|goride|gocar)\b/i.test(
+      text
+    );
+
+  return hasSoftPromo && !hasRealReceiptProof;
+}
+
+/**
  * Parses real-world Indonesian bank & e-wallet email/push notifications
  * (BCA, Livin' Mandiri, BRImo, Wondr BNI, blu, Jago, SeaBank, BSI, GoPay, ShopeePay, OVO, DANA).
  */
@@ -258,6 +289,10 @@ export function parseBcaNotification(
 
   const amount = parseBcaAmount(amountMatch[1]);
   if (!amount) {
+    return null;
+  }
+
+  if (isPromotionalOrBaitNotification(combined, amount)) {
     return null;
   }
 

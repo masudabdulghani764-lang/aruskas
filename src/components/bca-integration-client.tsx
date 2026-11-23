@@ -13,8 +13,10 @@ import {
   History,
   KeyRound,
   Landmark,
+  ListChecks,
   Mail,
   RefreshCw,
+  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -29,6 +31,8 @@ import {
   Button,
   Card,
   EmptyState,
+  Input,
+  Modal,
   Select,
   Textarea,
   cn,
@@ -37,6 +41,7 @@ import {
   checkAndroidAppUpdate,
   LATEST_ANDROID_APP_RELEASE,
   type AndroidAutoCatatStatus,
+  type AndroidInstalledApp,
 } from "@/lib/app-version";
 import { SUPPORTED_BANK_PROVIDERS } from "@/lib/bank-notification-parser";
 import type {
@@ -303,6 +308,10 @@ export function BcaIntegrationClient({
     null
   );
   const [nativeBusy, setNativeBusy] = useState(false);
+  const [canPickInstalledApps, setCanPickInstalledApps] = useState(false);
+  const [appPickerOpen, setAppPickerOpen] = useState(false);
+  const [installedApps, setInstalledApps] = useState<AndroidInstalledApp[]>([]);
+  const [appSearch, setAppSearch] = useState("");
 
   // Simulator state
   const [simSubject, setSimSubject] = useState<string>(
@@ -349,6 +358,7 @@ export function BcaIntegrationClient({
         ) as AndroidAutoCatatStatus;
         if (parsed && parsed.supported) {
           setNativeStatus(parsed);
+          setCanPickInstalledApps(Boolean(bridge.getInstalledAppsJson));
         }
       }
     } catch {
@@ -618,6 +628,103 @@ export function BcaIntegrationClient({
         : "Kembali memantau aplikasi Bank & E-Wallet saja."
     );
   }
+
+  function handleOpenAppPicker() {
+    const bridge = window.ArusKasNative;
+    if (!bridge?.getInstalledAppsJson) {
+      toast.error(
+        `Update APK ke v${LATEST_ANDROID_APP_RELEASE.versionName} untuk memilih aplikasi langsung dari HP Anda.`
+      );
+      return;
+    }
+    try {
+      const parsed = JSON.parse(bridge.getInstalledAppsJson()) as {
+        apps?: AndroidInstalledApp[];
+      };
+      const list = Array.isArray(parsed.apps) ? parsed.apps : [];
+      setInstalledApps(list);
+      setAppSearch("");
+      setAppPickerOpen(true);
+    } catch {
+      toast.error("Gagal membaca daftar aplikasi terpasang di HP.");
+    }
+  }
+
+  function handleToggleAppInPicker(packageName: string) {
+    setInstalledApps((prev) =>
+      prev.map((app) =>
+        app.packageName === packageName
+          ? { ...app, selected: !app.selected }
+          : app
+      )
+    );
+  }
+
+  function handleSelectRecommendedAppsOnly() {
+    setInstalledApps((prev) =>
+      prev.map((app) => ({
+        ...app,
+        selected: app.isRecommended,
+      }))
+    );
+    toast.success("Menandai aplikasi bank & e-wallet yang direkomendasikan.");
+  }
+
+  function handleSaveAppPicker() {
+    const bridge = window.ArusKasNative;
+    if (!bridge?.setSelectedAppsJson) return;
+
+    const selectedMap: Record<string, string> = {};
+    for (const app of installedApps) {
+      if (app.selected) {
+        selectedMap[app.packageName] = app.label;
+      }
+    }
+
+    const count = Object.keys(selectedMap).length;
+    if (count === 0) {
+      toast.error("Pilih minimal 1 aplikasi untuk dipantau notifikasinya.");
+      return;
+    }
+
+    const ok = bridge.setSelectedAppsJson(JSON.stringify(selectedMap));
+    if (ok) {
+      refreshNativeStatus();
+      setAppPickerOpen(false);
+      toast.success(
+        `Berhasil! Hanya notifikasi dari ${count} aplikasi pilihan Anda yang dipantau.`
+      );
+    } else {
+      toast.error("Gagal menyimpan daftar aplikasi pilihan.");
+    }
+  }
+
+  function handleResetAppsDefault() {
+    const bridge = window.ArusKasNative;
+    if (!bridge?.resetSelectedAppsDefault) return;
+    if (bridge.resetSelectedAppsDefault()) {
+      refreshNativeStatus();
+      setAppPickerOpen(false);
+      toast.success(
+        "Dikembalikan ke daftar default Bank & E-Wallet Indonesia (tanpa promo super-app)."
+      );
+    }
+  }
+
+  const filteredInstalledApps = useMemo(() => {
+    const q = appSearch.trim().toLowerCase();
+    if (!q) return installedApps;
+    return installedApps.filter(
+      (app) =>
+        app.label.toLowerCase().includes(q) ||
+        app.packageName.toLowerCase().includes(q)
+    );
+  }, [installedApps, appSearch]);
+
+  const selectedPickerCount = useMemo(
+    () => installedApps.filter((app) => app.selected).length,
+    [installedApps]
+  );
 
   async function runSimulator(commit: boolean) {
     if (!selectedWalletId) {
@@ -1429,6 +1536,47 @@ export function BcaIntegrationClient({
                         </p>
                       )}
 
+                      <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-[#1C1917]">
+                              3. Aplikasi HP yang Dipantau
+                            </span>
+                            <Badge variant={nativeStatus.customAppsMode ? "inflow" : "neutral"}>
+                              {nativeStatus.customAppsMode
+                                ? `${nativeStatus.selectedAppsCount ?? 0} Aplikasi Dipilih`
+                                : "Bank & E-Wallet Default"}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-[#78716C] mt-0.5">
+                            Pilih sendiri aplikasi bank / e-wallet dari HP Anda
+                            supaya notif promo aplikasi lain tidak ikut tercatat.
+                          </p>
+                        </div>
+
+                        {canPickInstalledApps ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleOpenAppPicker}
+                            className="h-8 text-[11px] shrink-0"
+                          >
+                            <ListChecks className="h-3.5 w-3.5 text-[#14532D]" />
+                            <span>Pilih Aplikasi HP</span>
+                          </Button>
+                        ) : (
+                          <a
+                            href={LATEST_ANDROID_APP_RELEASE.apkUrl}
+                            download="ArusKas.apk"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D4A045] bg-[#FEF3C7] px-2.5 text-[11px] font-semibold text-[#92400E] hover:bg-[#FDE68A] shrink-0"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Update ke v{LATEST_ANDROID_APP_RELEASE.versionName}</span>
+                          </a>
+                        )}
+                      </div>
+
                       <label className="flex items-start gap-2 rounded-xl border border-[#E7E2D8] bg-[#FFFFFF]/80 px-3 py-2 text-[11px] text-[#44403C] cursor-pointer">
                         <input
                           type="checkbox"
@@ -2005,6 +2153,104 @@ export function BcaIntegrationClient({
           )}
         </Card>
       )}
+
+      {/* Android Installed Apps Picker Modal */}
+      <Modal
+        open={appPickerOpen}
+        onClose={() => setAppPickerOpen(false)}
+        title="Pilih Aplikasi HP untuk Auto-Catat"
+        description="Hanya notifikasi transaksi dari aplikasi yang Anda centang di sini yang akan dibaca oleh ArusKas."
+        size="md"
+      >
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#78716C]" />
+            <Input
+              value={appSearch}
+              onChange={(e) => setAppSearch(e.target.value)}
+              placeholder="Cari aplikasi (misal: myBCA, GoPay, SeaBank, DANA)..."
+              className="pl-9"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={handleSelectRecommendedAppsOnly}
+                className="rounded-lg border border-[#CBE0D2] bg-[#EFF6F1] px-2.5 py-1 text-[11px] font-semibold text-[#14532D] hover:bg-[#DCFCE7] cursor-pointer"
+              >
+                Pilih Rekomendasi Bank/E-Wallet
+              </button>
+              <button
+                type="button"
+                onClick={handleResetAppsDefault}
+                className="rounded-lg border border-[#E7E2D8] bg-[#FAF8F4] px-2.5 py-1 text-[11px] font-medium text-[#57534E] hover:bg-[#EFECE4] cursor-pointer"
+              >
+                Reset ke Default
+              </button>
+            </div>
+            <span className="text-[11px] font-medium text-[#14532D]">
+              Terpilih: {selectedPickerCount}
+            </span>
+          </div>
+
+          <div className="max-h-72 overflow-y-auto divide-y divide-[#EFECE4] rounded-xl border border-[#E7E2D8] bg-[#FFFFFF]">
+            {filteredInstalledApps.length === 0 ? (
+              <p className="p-6 text-center text-xs text-[#78716C]">
+                Tidak ada aplikasi yang cocok dengan pencarian Anda.
+              </p>
+            ) : (
+              filteredInstalledApps.map((app) => (
+                <label
+                  key={app.packageName}
+                  className="flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-[#FAF8F4] cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={app.selected}
+                      onChange={() => handleToggleAppInPicker(app.packageName)}
+                      className="h-4 w-4 shrink-0 accent-[#14532D]"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs sm:text-sm font-medium text-[#1C1917]">
+                        {app.label}
+                      </p>
+                      <p className="truncate font-mono text-[10px] text-[#78716C]">
+                        {app.packageName}
+                      </p>
+                    </div>
+                  </div>
+                  {app.isRecommended && (
+                    <Badge variant="inflow" className="shrink-0 text-[10px]">
+                      Rekomendasi
+                    </Badge>
+                  )}
+                </label>
+              ))
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-[#E7E2D8]">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setAppPickerOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveAppPicker}
+            >
+              Simpan Pilihan ({selectedPickerCount})
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

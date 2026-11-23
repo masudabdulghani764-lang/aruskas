@@ -64,6 +64,16 @@ describe("BCA Notification & CSV Parser", () => {
     expect(va!.title).toContain("TOKOPEDIA");
 
     expect(parseBcaNotification("Halo, ini hanya promo kartu kredit BCA.")).toBeNull();
+    expect(
+      parseBcaNotification("Promo GoFood! Bayar pakai GoPay cuma Rp 1 hari ini!", {
+        subject: "GoPay / Gojek - Promo Spesial",
+      })
+    ).toBeNull();
+    expect(
+      parseBcaNotification("Voucher Gojek diskon Rp 1 untuk perjalananmu.", {
+        subject: "GoPay / Gojek - Gojek",
+      })
+    ).toBeNull();
   });
 
   test("parseBcaCsv parses KlikBCA statement with metadata headers, CR/DB, PEND skipping, and footer", () => {

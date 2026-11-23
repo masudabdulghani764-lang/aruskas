@@ -4,11 +4,20 @@ export interface AndroidAutoCatatStatus {
   enabled: boolean;
   hasToken: boolean;
   includeExtraApps: boolean;
+  customAppsMode?: boolean;
+  selectedAppsCount?: number;
   capturedCount: number;
   pendingCount: number;
   lastStatus: string;
   lastApp: string;
   lastAt: string;
+}
+
+export interface AndroidInstalledApp {
+  packageName: string;
+  label: string;
+  isRecommended: boolean;
+  selected: boolean;
 }
 
 export interface ArusKasNativeBridge {
@@ -26,6 +35,9 @@ export interface ArusKasNativeBridge {
   configureAutoCatat?: (rawToken: string, enabled: boolean) => boolean;
   setAutoCatatEnabled?: (enabled: boolean) => boolean;
   getAutoCatatStatusJson?: () => string;
+  getInstalledAppsJson?: () => string;
+  setSelectedAppsJson?: (selectedMapJson: string) => boolean;
+  resetSelectedAppsDefault?: () => boolean;
 }
 
 declare global {
@@ -43,14 +55,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.7",
-  versionCode: 8,
+  versionName: "1.0.8",
+  versionCode: 9,
   apkUrl: "/downloads/ArusKas.apk",
-  sizeLabel: "214 KB",
+  sizeLabel: "218 KB",
   highlights: [
-    "Auto-Catat Notifikasi Bank & E-Wallet bawaan langsung di dalam APK (tanpa perlu MacroDroid!)",
-    "Otomatis mendeteksi & merutekan 15+ bank & e-wallet Indonesia termasuk uang masuk & keluar",
-    "Antrean offline cerdas + seluruh animasi W1 Clean & pengamanan sidik jari/PIN HP",
+    "Pemilih Aplikasi HP: centang langsung aplikasi bank/e-wallet yang terpasang di HP Anda",
+    "Filter anti-promo pintar: memblokir notifikasi promo/voucher palsu seperti 'cuma Rp 1' dari Gojek/Shopee",
+    "Otomatis mendeteksi 15+ bank & e-wallet + antrean offline & pengamanan sidik jari/PIN",
   ],
 };
 
