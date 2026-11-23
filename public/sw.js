@@ -1,4 +1,4 @@
-const CACHE_NAME = "aruskas-static-v1";
+const CACHE_NAME = "aruskas-static-v2";
 
 const OFFLINE_HTML = `<!doctype html>
 <html lang="id">
@@ -58,8 +58,15 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never cache API calls so financial balances & auth sessions are always live
-  if (url.pathname.startsWith("/api/")) return;
+  // Never intercept API calls, downloads (.mobileconfig / .apk), or Next.js build assets
+  // (Crucial on iOS Safari so .mobileconfig profile downloads are handled natively by Safari)
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/downloads/") ||
+    url.pathname.startsWith("/_next/")
+  ) {
+    return;
+  }
 
   if (req.mode === "navigate") {
     event.respondWith(

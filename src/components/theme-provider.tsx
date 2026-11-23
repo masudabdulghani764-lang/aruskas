@@ -84,7 +84,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setResolvedTheme(resolved);
     applyDocumentTheme(resolved);
 
-    if (preference !== "system" || typeof window === "undefined") {
+    if (
+      preference !== "system" ||
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
       return;
     }
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -93,8 +97,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setResolvedTheme(next);
       applyDocumentTheme(next);
     };
-    mq.addEventListener("change", listener);
-    return () => mq.removeEventListener("change", listener);
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", listener);
+      return () => mq.removeEventListener("change", listener);
+    }
+    if (typeof mq.addListener === "function") {
+      mq.addListener(listener);
+      return () => mq.removeListener(listener);
+    }
+    return;
   }, [preference]);
 
   const setPreference = useCallback((next: ThemePreference) => {

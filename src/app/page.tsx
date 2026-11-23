@@ -32,7 +32,13 @@ import { getCurrentUser } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export default async function LandingPage() {
-  const user = await getCurrentUser();
+  let user = null;
+  try {
+    user = await getCurrentUser();
+  } catch (err) {
+    // Never crash the public landing page on transient DB cold starts or stale cookies
+    console.error("LandingPage getCurrentUser fallback:", err);
+  }
 
   return (
     <div className="min-h-screen bg-cream-canvas text-[#1C1917] scroll-smooth">

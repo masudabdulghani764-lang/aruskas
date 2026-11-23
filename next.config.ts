@@ -135,7 +135,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Content-Disposition",
-            value: 'attachment; filename="ArusKas.mobileconfig"',
+            value: 'inline; filename="ArusKas.mobileconfig"',
           },
           {
             key: "Cache-Control",

@@ -37,10 +37,14 @@ export function PwaRegistrar() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // Non-fatal in private browsing or restricted contexts
-      });
+    try {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch(() => {
+          // Non-fatal in private browsing or restricted iOS contexts
+        });
+      }
+    } catch {
+      // Ignore SecurityError in restricted iOS WebViews / Lockdown Mode
     }
 
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -80,18 +84,27 @@ function usePwaInstallState() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone ===
-        true ||
-      document.referrer.startsWith("android-app://") ||
-      window.navigator.userAgent.includes("ArusKasApp/");
+    let standalone = false;
+    try {
+      standalone =
+        (typeof window.matchMedia === "function" &&
+          window.matchMedia("(display-mode: standalone)").matches) ||
+        (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+          true ||
+        document.referrer.startsWith("android-app://") ||
+        window.navigator.userAgent.includes("ArusKasApp/");
+    } catch {
+      standalone = false;
+    }
     setIsInstalled(standalone);
     setHydrated(true);
 
-    const ua = window.navigator.userAgent;
+    const ua = window.navigator.userAgent || "";
+    const isIpadOs =
+      window.navigator.platform === "MacIntel" &&
+      (window.navigator.maxTouchPoints ?? 0) > 1;
     setIsIos(
-      /iPad|iPhone|iPod/.test(ua) &&
+      (/iPad|iPhone|iPod/.test(ua) || isIpadOs) &&
         !(window as unknown as { MSStream?: unknown }).MSStream
     );
 
@@ -99,10 +112,14 @@ function usePwaInstallState() {
 
     const sync = () => {
       setDeferredPrompt(window.__aruskasDeferredPrompt ?? null);
-      const nowStandalone = window.matchMedia(
-        "(display-mode: standalone)"
-      ).matches;
-      if (nowStandalone) setIsInstalled(true);
+      try {
+        const nowStandalone =
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(display-mode: standalone)").matches;
+        if (nowStandalone) setIsInstalled(true);
+      } catch {
+        // ignore
+      }
     };
 
     window.addEventListener(INSTALL_EVENT_NAME, sync);
@@ -160,43 +177,65 @@ function InstallGuideModal({
   isIos: boolean;
 }) {
   const iosCard = (
-    <div className="rounded-2xl border border-[#E3D4BA] bg-[#FAF1E0]/80 p-4 space-y-3">
+    <div className="rounded-2xl border border-[#E3D4BA] bg-[#FAF1E0]/80 p-4 space-y-3.5">
       <div className="flex items-center justify-between gap-2">
         <p className="font-semibold text-[#14532D] flex items-center gap-1.5">
           <Smartphone className="h-4 w-4" />
-          <span>iPhone / iPad (Profil Aplikasi iOS)</span>
+          <span>iPhone / iPad (iOS)</span>
         </p>
-        <span className="rounded-full bg-[#B45309] px-2 py-0.5 text-[10px] font-semibold text-[#FFFFFF]">
-          34 KB
+        <span className="rounded-full bg-[#14532D] px-2 py-0.5 text-[10px] font-semibold text-[#FAF0DD]">
+          Disarankan
         </span>
       </div>
-      <p className="text-xs text-[#44403C] leading-relaxed">
-        Unduh profil aplikasi <strong>ArusKas.mobileconfig</strong> (buka di
-        Safari), lalu ketuk <strong>Izinkan</strong> → buka{" "}
-        <strong>Pengaturan iPhone → Profil Diunduh → Instal</strong>.
-      </p>
-      <a
-        href={IOS_PROFILE_DOWNLOAD_PATH}
-        onClick={() =>
-          toast.success(
-            "Profil iOS diunduh — ketuk Izinkan lalu buka Pengaturan → Profil Diunduh → Instal!"
-          )
-        }
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#C99133] bg-gradient-to-r from-[#F5D284] via-[#E9BC66] to-[#DDA444] px-4 text-xs sm:text-sm font-bold text-[#0D2E1D] transition-colors hover:from-[#F9DF9B] hover:to-[#E5B258]"
-      >
-        <Download className="h-4 w-4" />
-        <span>Download Aplikasi iPhone (.mobileconfig)</span>
-      </a>
 
-      <div className="border-t border-[#E3D4BA] pt-2.5 space-y-1">
-        <p className="text-[11px] font-semibold text-[#57534E] flex items-center gap-1">
-          <Share className="h-3 w-3" />
-          <span>Atau cara cepat langsung dari Safari:</span>
+      {/* Cara 1: Langsung dari Safari (paling cepat, tanpa menu Pengaturan) */}
+      <div className="rounded-xl border border-[#CBE0D2] bg-[#EFF6F1] p-3 space-y-1.5">
+        <p className="text-xs font-semibold text-[#14532D] flex items-center gap-1.5">
+          <Share className="h-3.5 w-3.5 shrink-0" />
+          <span>Cara 1 (Paling Cepat — 10 Detik di Safari):</span>
+        </p>
+        <ol className="list-decimal list-inside space-y-1 text-[11px] text-[#166534] leading-relaxed">
+          <li>
+            Pastikan halaman ini dibuka di <strong>Safari</strong> (bukan browser
+            dalam WhatsApp/Instagram).
+          </li>
+          <li>
+            Ketuk ikon <strong>Bagikan / Share (↑)</strong> di bar bawah Safari.
+          </li>
+          <li>
+            Pilih <strong>Tambah ke Layar Utama (Add to Home Screen)</strong> →
+            ketuk <strong>Tambah</strong>.
+          </li>
+        </ol>
+      </div>
+
+      {/* Cara 2: Profil .mobileconfig dengan langkah Pengaturan yang jelas */}
+      <div className="border-t border-[#E3D4BA] pt-3 space-y-2">
+        <p className="text-[11px] font-semibold text-[#57534E]">
+          Cara 2 (Alternatif via Profil iOS · 34 KB):
         </p>
         <p className="text-[11px] text-[#57534E] leading-relaxed">
-          Ketuk <strong>Share (↑)</strong> →{" "}
-          <strong>Tambah ke Layar Utama</strong> → <strong>Tambah</strong>.
+          Setelah menekan tombol di bawah &amp; muncul notif{" "}
+          <strong>&ldquo;Profil Diunduh&rdquo;</strong>, ketuk{" "}
+          <strong>Tutup</strong>, lalu buka{" "}
+          <strong>
+            Pengaturan iPhone → Umum → VPN &amp; Manajemen Perangkat → ArusKas →
+            Instal
+          </strong>
+          .
         </p>
+        <a
+          href={IOS_PROFILE_DOWNLOAD_PATH}
+          onClick={() =>
+            toast.info(
+              "Jika muncul 'Profil Diunduh', ketuk Tutup lalu buka Pengaturan → Umum → VPN & Manajemen Perangkat → ArusKas → Instal."
+            )
+          }
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#C99133] bg-gradient-to-r from-[#F5D284] via-[#E9BC66] to-[#DDA444] px-4 text-xs sm:text-sm font-bold text-[#0D2E1D] transition-colors hover:from-[#F9DF9B] hover:to-[#E5B258]"
+        >
+          <Download className="h-4 w-4" />
+          <span>Unduh Profil iPhone (.mobileconfig)</span>
+        </a>
       </div>
     </div>
   );
@@ -301,42 +340,65 @@ export function PwaInstallButton({
           <span>{label}</span>
         </button>
       ) : variant === "header-pill" ? (
-        <a
-          href={isIos ? IOS_PROFILE_DOWNLOAD_PATH : APK_DOWNLOAD_PATH}
-          download={isIos ? undefined : "ArusKas.apk"}
+        isIos ? (
+          <button
+            type="button"
+            onClick={() => {
+              onAfterClick?.();
+              setGuideOpen(true);
+            }}
+            className={cn(
+              "inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#D4A045] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3 text-xs font-bold text-[#0D2E1D] shadow-2xs transition-colors hover:from-[#F9DF9F] hover:to-[#ECC57C] cursor-pointer",
+              className
+            )}
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            <span>Pasang iPhone</span>
+          </button>
+        ) : (
+          <a
+            href={APK_DOWNLOAD_PATH}
+            download="ArusKas.apk"
+            onClick={() => {
+              onAfterClick?.();
+              toast.success("Mengunduh ArusKas.apk (218 KB)...");
+            }}
+            className={cn(
+              "inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#D4A045] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3 text-xs font-bold text-[#0D2E1D] shadow-2xs transition-colors hover:from-[#F9DF9F] hover:to-[#ECC57C] cursor-pointer",
+              className
+            )}
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>{label}</span>
+          </a>
+        )
+      ) : isIos ? (
+        <button
+          type="button"
           onClick={() => {
             onAfterClick?.();
-            if (isIos) {
-              toast.success(
-                "Profil iPhone diunduh — ketuk Izinkan lalu buka Pengaturan → Profil Diunduh → Instal!"
-              );
-              setGuideOpen(true);
-            } else {
-              toast.success("Mengunduh ArusKas.apk (218 KB)...");
-            }
+            setGuideOpen(true);
           }}
           className={cn(
-            "inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#D4A045] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3 text-xs font-bold text-[#0D2E1D] shadow-2xs transition-colors hover:from-[#F9DF9F] hover:to-[#ECC57C] cursor-pointer",
+            "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors cursor-pointer",
+            variant === "gold"
+              ? "border border-[#C99133] bg-gradient-to-r from-[#F5D284] via-[#E9BC66] to-[#DDA444] text-[#0D2E1D] shadow-sm hover:from-[#F9DF9B] hover:to-[#E5B258]"
+              : variant === "forest"
+                ? "border border-[#E5B869] bg-[#FAF0DD] text-[#14532D] hover:bg-[#FFFFFF]"
+                : "border border-[#CBE0D2] bg-[#EFF6F1] text-[#14532D] hover:bg-[#DCFCE7]",
             className
           )}
         >
-          <Download className="h-3.5 w-3.5" />
-          <span>{isIos ? "Download iPhone" : label}</span>
-        </a>
+          <Smartphone className="h-4 w-4" />
+          <span>Pasang Aplikasi di iPhone</span>
+        </button>
       ) : (
         <a
-          href={isIos ? IOS_PROFILE_DOWNLOAD_PATH : APK_DOWNLOAD_PATH}
-          download={isIos ? undefined : "ArusKas.apk"}
+          href={APK_DOWNLOAD_PATH}
+          download="ArusKas.apk"
           onClick={() => {
             onAfterClick?.();
-            if (isIos) {
-              toast.success(
-                "Profil iPhone diunduh — ketuk Izinkan lalu buka Pengaturan → Profil Diunduh → Instal!"
-              );
-              setGuideOpen(true);
-            } else {
-              toast.success("Mengunduh ArusKas.apk (218 KB)...");
-            }
+            toast.success("Mengunduh ArusKas.apk (218 KB)...");
           }}
           className={cn(
             "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors cursor-pointer",
@@ -349,7 +411,7 @@ export function PwaInstallButton({
           )}
         >
           <Download className="h-4 w-4" />
-          <span>{isIos ? "Download Aplikasi iPhone" : label}</span>
+          <span>{label}</span>
         </a>
       )}
 
@@ -433,24 +495,14 @@ export function PwaInstallShowcaseCard() {
                 <span>Download APK Android</span>
               </a>
 
-              <a
-                href={IOS_PROFILE_DOWNLOAD_PATH}
-                onClick={(e) => {
-                  if (!isIos) {
-                    e.preventDefault();
-                    setGuideOpen(true);
-                  } else {
-                    toast.success(
-                      "Profil iPhone diunduh — ketuk Izinkan lalu buka Pengaturan → Profil Diunduh → Instal!"
-                    );
-                    setGuideOpen(true);
-                  }
-                }}
+              <button
+                type="button"
+                onClick={() => setGuideOpen(true)}
                 className="inline-flex h-12 items-center justify-center gap-1.5 rounded-full border border-[#E5B869]/60 bg-[#17482F] px-5 text-xs sm:text-sm font-semibold text-[#FAF0DD] transition-colors hover:bg-[#1E5B3C] cursor-pointer"
               >
                 <Smartphone className="h-4 w-4 text-[#E5B869]" />
-                <span>Download iPhone (iOS)</span>
-              </a>
+                <span>Pasang di iPhone (iOS)</span>
+              </button>
             </div>
           </div>
         </div>
@@ -520,24 +572,26 @@ export function PwaInstallBanner() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <a
-            href={isIos ? IOS_PROFILE_DOWNLOAD_PATH : APK_DOWNLOAD_PATH}
-            download={isIos ? undefined : "ArusKas.apk"}
-            onClick={() => {
-              if (isIos) {
-                toast.success(
-                  "Profil iPhone diunduh — ketuk Izinkan lalu buka Pengaturan → Profil Diunduh → Instal!"
-                );
-                setGuideOpen(true);
-              } else {
-                toast.success("Mengunduh ArusKas.apk (218 KB)...");
-              }
-            }}
-            className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3.5 text-xs font-bold text-[#0D2E1D] transition-colors hover:from-[#FAE3A6] hover:to-[#ECC57C] cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>{isIos ? "Download iPhone" : "Download APK"}</span>
-          </a>
+          {isIos ? (
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3.5 text-xs font-bold text-[#0D2E1D] transition-colors hover:from-[#FAE3A6] hover:to-[#ECC57C] cursor-pointer"
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              <span>Pasang di iPhone</span>
+            </button>
+          ) : (
+            <a
+              href={APK_DOWNLOAD_PATH}
+              download="ArusKas.apk"
+              onClick={() => toast.success("Mengunduh ArusKas.apk (218 KB)...")}
+              className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3.5 text-xs font-bold text-[#0D2E1D] transition-colors hover:from-[#FAE3A6] hover:to-[#ECC57C] cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download APK</span>
+            </a>
+          )}
           <button
             type="button"
             aria-label="Tutup banner instalasi"

@@ -280,7 +280,7 @@ export function AppShell({
     <QuickAddContext.Provider value={contextValue}>
       <div className="min-h-screen text-[#1C1917]">
         {/* Top Desktop & Mobile Header (opaque GPU layer — zero backdrop-filter scroll lag) */}
-        <header className="no-print sticky top-0 z-30 transform-gpu border-b border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF] via-[#FCF3E2] to-[#F4E4C6]">
+        <header className="no-print sticky top-0 z-30 transform-gpu border-b border-[#E3D4BA] bg-gradient-to-r from-[#FFFFFF] via-[#FCF3E2] to-[#F4E4C6] pt-[env(safe-area-inset-top)]">
           <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between gap-3 px-4 sm:px-6">
             <div className="flex items-center gap-7">
               <Link
@@ -477,7 +477,7 @@ export function AppShell({
         </header>
 
         {/* Main Content Container */}
-        <main className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-24 sm:px-6 md:py-8 md:pb-12 print:max-w-none print:p-0">
+        <main className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 md:py-8 md:pb-12 print:max-w-none print:p-0">
           {(!isOnline || offlineQueueCount > 0) && (
             <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[#FDE68A] bg-[#FEF3C7]/85 px-4 py-2.5 text-xs text-[#92400E]">
               <div className="flex items-center gap-2 min-w-0">

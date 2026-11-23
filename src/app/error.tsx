@@ -15,6 +15,24 @@ export default function GlobalError({
     console.error("ArusKas runtime error:", error);
   }, [error]);
 
+  function handleRetry() {
+    try {
+      const msg = String(error?.message ?? "").toLowerCase();
+      if (
+        msg.includes("chunk") ||
+        msg.includes("loading") ||
+        msg.includes("failed to fetch") ||
+        msg.includes("load failed")
+      ) {
+        window.location.reload();
+        return;
+      }
+      reset();
+    } catch {
+      window.location.reload();
+    }
+  }
+
   return (
     <div className="min-h-screen bg-cream-canvas flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-[#E3D4BA] bg-gradient-to-br from-[#FFFFFF] via-[#FFFBF2] to-[#F5E6CC] p-8 text-center shadow-xs">
@@ -28,10 +46,15 @@ export default function GlobalError({
           Data keuangan Anda tetap aman tersimpan di database. Silakan muat
           ulang halaman ini atau kembali ke ringkasan.
         </p>
+        {error?.digest && (
+          <p className="mt-2 font-mono text-[11px] text-[#78716C]">
+            Kode: {error.digest}
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={handleRetry}
             className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#14532D] px-4 text-sm font-medium text-[#FFFFFF] transition-colors hover:bg-[#166534] cursor-pointer"
           >
             <RotateCcw className="h-4 w-4" />

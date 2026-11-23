@@ -45,9 +45,22 @@ export function GoogleAuthButton({
 }) {
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  const [isIosStandalone, setIsIosStandalone] = useState(false);
 
   useEffect(() => {
     let active = true;
+    try {
+      const ua = window.navigator.userAgent || "";
+      const isIos = /iPad|iPhone|iPod/.test(ua);
+      const standalone =
+        (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+        true;
+      if (isIos && standalone) {
+        setIsIosStandalone(true);
+      }
+    } catch {
+      // ignore
+    }
     fetch("/api/auth/providers", { cache: "no-store" })
       .then((res) => res.json())
       .then((data: { googleEnabled?: boolean }) => {
@@ -77,17 +90,25 @@ export function GoogleAuthButton({
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={redirecting}
-      className={cn(
-        "inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-[#DFD6C7] bg-[#FFFFFF] px-4 text-sm font-semibold text-[#1C1917] shadow-2xs transition-colors hover:bg-[#FAF1E0] active:bg-[#F3E5CA] disabled:opacity-60 cursor-pointer",
-        className
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={redirecting}
+        className={cn(
+          "inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-[#DFD6C7] bg-[#FFFFFF] px-4 text-sm font-semibold text-[#1C1917] shadow-2xs transition-colors hover:bg-[#FAF1E0] active:bg-[#F3E5CA] disabled:opacity-60 cursor-pointer",
+          className
+        )}
+      >
+        <GoogleLogoSvg />
+        <span>{redirecting ? "Menghubungkan ke Google..." : label}</span>
+      </button>
+      {isIosStandalone && (
+        <p className="text-[11px] text-[#78716C] text-center leading-relaxed">
+          Tip iPhone Layar Penuh: login dengan <strong>Email &amp; Kata Sandi</strong>{" "}
+          lebih stabil agar sesi tidak berpindah ke Safari.
+        </p>
       )}
-    >
-      <GoogleLogoSvg />
-      <span>{redirecting ? "Menghubungkan ke Google..." : label}</span>
-    </button>
+    </div>
   );
 }
