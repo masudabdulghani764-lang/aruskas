@@ -1,3 +1,39 @@
+export interface AndroidAutoCatatStatus {
+  supported: boolean;
+  notificationAccess: boolean;
+  enabled: boolean;
+  hasToken: boolean;
+  includeExtraApps: boolean;
+  capturedCount: number;
+  pendingCount: number;
+  lastStatus: string;
+  lastApp: string;
+  lastAt: string;
+}
+
+export interface ArusKasNativeBridge {
+  isSupported?: () => boolean;
+  isAppLockEnabled?: () => boolean;
+  setAppLockEnabled?: (enabled: boolean) => boolean;
+  isAutoCatatSupported?: () => boolean;
+  isNotificationAccessGranted?: () => boolean;
+  openNotificationAccessSettings?: () => boolean;
+  openAppInfoSettings?: () => boolean;
+  isAutoCatatEnabled?: () => boolean;
+  hasAutoCatatToken?: () => boolean;
+  isIncludeExtraAppsEnabled?: () => boolean;
+  setIncludeExtraAppsEnabled?: (enabled: boolean) => boolean;
+  configureAutoCatat?: (rawToken: string, enabled: boolean) => boolean;
+  setAutoCatatEnabled?: (enabled: boolean) => boolean;
+  getAutoCatatStatusJson?: () => string;
+}
+
+declare global {
+  interface Window {
+    ArusKasNative?: ArusKasNativeBridge;
+  }
+}
+
 export interface AndroidAppRelease {
   versionName: string;
   versionCode: number;
@@ -7,14 +43,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.6",
-  versionCode: 7,
+  versionName: "1.0.7",
+  versionCode: 8,
   apkUrl: "/downloads/ArusKas.apk",
-  sizeLabel: "205 KB",
+  sizeLabel: "214 KB",
   highlights: [
-    "Animasi pembuka baru: 2 garis logo masuk satu per satu tanpa spinner",
-    "Transisi keluar sinematik: 2 garis melesat keluar & halaman bergeser mengikuti arus garis",
-    "Logo W1 Clean, Kunci Sidik Jari/PIN HP, & seluruh pengamanan terbaru",
+    "Auto-Catat Notifikasi Bank & E-Wallet bawaan langsung di dalam APK (tanpa perlu MacroDroid!)",
+    "Otomatis mendeteksi & merutekan 15+ bank & e-wallet Indonesia termasuk uang masuk & keluar",
+    "Antrean offline cerdas + seluruh animasi W1 Clean & pengamanan sidik jari/PIN HP",
   ],
 };
 

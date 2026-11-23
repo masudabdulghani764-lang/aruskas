@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
+  BellRing,
   Check,
   CheckCircle2,
   Copy,
+  Download,
   FileSpreadsheet,
   History,
   KeyRound,
@@ -14,6 +16,7 @@ import {
   Mail,
   RefreshCw,
   Send,
+  Settings,
   ShieldCheck,
   Smartphone,
   Sparkles,
@@ -30,6 +33,11 @@ import {
   Textarea,
   cn,
 } from "@/components/ui/primitives";
+import {
+  checkAndroidAppUpdate,
+  LATEST_ANDROID_APP_RELEASE,
+  type AndroidAutoCatatStatus,
+} from "@/lib/app-version";
 import { SUPPORTED_BANK_PROVIDERS } from "@/lib/bank-notification-parser";
 import type {
   BcaCsvPreviewRow,
@@ -288,6 +296,14 @@ export function BcaIntegrationClient({
   const [freshRawToken, setFreshRawToken] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // Native Android APK Built-in Auto-Catat state
+  const [isAndroidApk, setIsAndroidApk] = useState(false);
+  const [apkNeedsUpdate, setApkNeedsUpdate] = useState(false);
+  const [nativeStatus, setNativeStatus] = useState<AndroidAutoCatatStatus | null>(
+    null
+  );
+  const [nativeBusy, setNativeBusy] = useState(false);
+
   // Simulator state
   const [simSubject, setSimSubject] = useState<string>(
     SAMPLE_NOTIFICATIONS[0].subject
@@ -324,9 +340,44 @@ export function BcaIntegrationClient({
   } | null>(null);
   const [csvBusy, setCsvBusy] = useState(false);
 
+  const refreshNativeStatus = useCallback(() => {
+    try {
+      const bridge = window.ArusKasNative;
+      if (bridge?.isAutoCatatSupported?.() && bridge.getAutoCatatStatusJson) {
+        const parsed = JSON.parse(
+          bridge.getAutoCatatStatusJson()
+        ) as AndroidAutoCatatStatus;
+        if (parsed && parsed.supported) {
+          setNativeStatus(parsed);
+        }
+      }
+    } catch {
+      // ignore if outside native shell
+    }
+  }, []);
+
   useEffect(() => {
     setOrigin(window.location.origin);
-  }, []);
+    const uaInfo = checkAndroidAppUpdate(window.navigator.userAgent ?? "");
+    if (uaInfo.isAndroidApk || /Android/i.test(window.navigator.userAgent ?? "")) {
+      setGuideTab("android");
+    }
+    setIsAndroidApk(uaInfo.isAndroidApk);
+    setApkNeedsUpdate(uaInfo.needsUpdate);
+    refreshNativeStatus();
+
+    const handleResume = () => {
+      if (document.visibilityState === "visible") {
+        refreshNativeStatus();
+      }
+    };
+    window.addEventListener("focus", refreshNativeStatus);
+    document.addEventListener("visibilitychange", handleResume);
+    return () => {
+      window.removeEventListener("focus", refreshNativeStatus);
+      document.removeEventListener("visibilitychange", handleResume);
+    };
+  }, [refreshNativeStatus]);
 
   const webhookUrl = `${origin}/api/integrations/bca/webhook`;
   const tokenForGuide =
@@ -421,14 +472,151 @@ export function BcaIntegrationClient({
       }
       setIntegration(data.integration);
       setFreshRawToken(data.rawToken);
-      toast.success(
-        "Token webhook baru dibuat. Token lama otomatis tidak berlaku."
-      );
+      if (
+        data.rawToken &&
+        window.ArusKasNative?.isAutoCatatSupported?.() &&
+        window.ArusKasNative?.hasAutoCatatToken?.()
+      ) {
+        const keepEnabled = Boolean(
+          window.ArusKasNative?.isAutoCatatEnabled?.()
+        );
+        window.ArusKasNative.configureAutoCatat?.(data.rawToken, keepEnabled);
+        refreshNativeStatus();
+        toast.success(
+          "Token baru dibuat & otomatis disinkronkan ke Auto-Catat Android."
+        );
+      } else {
+        toast.success(
+          "Token webhook baru dibuat. Token lama otomatis tidak berlaku."
+        );
+      }
     } catch {
       toast.error("Terjadi gangguan jaringan.");
     } finally {
       setRotatingToken(false);
     }
+  }
+
+  async function handleConnectNativeAutoCatat() {
+    const bridge = window.ArusKasNative;
+    if (!bridge?.isAutoCatatSupported?.()) {
+      toast.error("Fitur ini hanya tersedia di APK ArusKas v1.0.7 ke atas.");
+      return;
+    }
+    if (!selectedWalletId) {
+      toast.error("Pilih dompet tujuan default terlebih dahulu.");
+      return;
+    }
+
+    setNativeBusy(true);
+    try {
+      let tokenToUse = freshRawToken;
+
+      if (!integration) {
+        const createRes = await fetch("/api/integrations/bca", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletId: selectedWalletId,
+            isActive: true,
+            autoCategorize,
+            providerWalletMap,
+          }),
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          toast.error(
+            createData.error ?? "Gagal mengaktifkan integrasi server."
+          );
+          return;
+        }
+        setIntegration(createData.integration);
+        setIsActive(true);
+        if (createData.rawToken) {
+          tokenToUse = createData.rawToken;
+          setFreshRawToken(createData.rawToken);
+        }
+      } else if (!integration.isActive) {
+        await fetch("/api/integrations/bca", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletId: selectedWalletId,
+            isActive: true,
+            autoCategorize,
+            providerWalletMap,
+          }),
+        });
+        setIsActive(true);
+      }
+
+      if (!tokenToUse) {
+        const rotRes = await fetch("/api/integrations/bca/rotate-token", {
+          method: "POST",
+        });
+        const rotData = await rotRes.json().catch(() => ({}));
+        if (!rotRes.ok || !rotData.rawToken) {
+          toast.error(
+            rotData.error ?? "Gagal membuat token otomatis untuk aplikasi Android."
+          );
+          return;
+        }
+        setIntegration(rotData.integration);
+        setFreshRawToken(rotData.rawToken);
+        tokenToUse = rotData.rawToken;
+      }
+
+      const saved = bridge.configureAutoCatat?.(tokenToUse ?? "", true);
+      if (!saved) {
+        toast.error("Gagal menyimpan konfigurasi ke aplikasi Android.");
+        return;
+      }
+
+      refreshNativeStatus();
+      if (!bridge.isNotificationAccessGranted?.()) {
+        toast.success(
+          "Token terhubung! Sekarang ketuk 'Buka Izin Notifikasi' lalu aktifkan Auto-Catat ArusKas."
+        );
+      } else {
+        toast.success(
+          "Auto-Catat Bawaan Aktif! Semua notifikasi bank & e-wallet kini otomatis tercatat."
+        );
+      }
+    } catch {
+      toast.error("Terjadi gangguan jaringan saat menghubungkan Auto-Catat.");
+    } finally {
+      setNativeBusy(false);
+    }
+  }
+
+  function handleToggleNativeAutoCatat(nextEnabled: boolean) {
+    const bridge = window.ArusKasNative;
+    if (!bridge?.setAutoCatatEnabled) return;
+    if (nextEnabled && !bridge.hasAutoCatatToken?.()) {
+      void handleConnectNativeAutoCatat();
+      return;
+    }
+    const ok = bridge.setAutoCatatEnabled(nextEnabled);
+    refreshNativeStatus();
+    if (ok) {
+      toast.success(
+        nextEnabled
+          ? "Auto-Catat Notifikasi Bank diaktifkan."
+          : "Auto-Catat Notifikasi Bank dijeda sementara."
+      );
+    }
+  }
+
+  function handleToggleIncludeExtraApps(nextVal: boolean) {
+    const bridge = window.ArusKasNative;
+    if (!bridge?.setIncludeExtraAppsEnabled) return;
+    bridge.setIncludeExtraAppsEnabled(nextVal);
+    refreshNativeStatus();
+    toast.success(
+      nextVal
+        ? "Pemantauan notifikasi WhatsApp / Email / SMS diaktifkan."
+        : "Kembali memantau aplikasi Bank & E-Wallet saja."
+    );
   }
 
   async function runSimulator(commit: boolean) {
@@ -1063,39 +1251,311 @@ export function BcaIntegrationClient({
               )}
 
               {guideTab === "android" && (
-                <ol className="mt-4 list-decimal pl-4 space-y-2 text-xs text-[#57534E] leading-relaxed">
-                  <li>
-                    Install aplikasi <strong>MacroDroid</strong> (gratis di Play
-                    Store) dan aktifkan izin{" "}
-                    <strong>Akses Notifikasi (Notification Access)</strong>.
-                  </li>
-                  <li>
-                    <strong>Trigger:</strong> <em>Notification Received</em> →
-                    pilih aplikasi{" "}
-                    <strong>
-                      {activeProviderMeta
-                        ? activeProviderMeta.appName
-                        : "bank/e-wallet yang Anda pakai (Livin' Mandiri, BRImo, Wondr BNI, Bank Jago, SeaBank, GoPay, OVO, DANA, ShopeePay, myBCA, dll.)"}
-                    </strong>
-                    .
-                  </li>
-                  <li>
-                    <strong>Action:</strong> <em>HTTP Request (POST)</em> ke{" "}
-                    <code className="text-[#14532D]">{webhookUrl}</code> dengan
-                    Header <code>Authorization: Bearer [TOKEN]</code> (atau{" "}
-                    <code>X-ArusKas-Token</code>).
-                  </li>
-                  <li>
-                    <strong>Content Body (Anti-Error):</strong> pilih Content
-                    Type <code>text/plain</code> dan isi body:{" "}
-                    <code>{`[not_title] - [notification]`}</code>{" "}
-                    <em>
-                      (pilih lewat tombol titik tiga <code>...</code> Magic Text
-                      di MacroDroid agar tidak salah ketik; format JSON dengan{" "}
-                      <code>[notification]</code> juga didukung).
-                    </em>
-                  </li>
-                </ol>
+                <div className="mt-4 space-y-4">
+                  {nativeStatus?.supported ? (
+                    <div className="rounded-2xl border border-[#245A3E]/30 bg-gradient-to-br from-[#EFF6F1] via-[#F7FAF8] to-[#FAF1E0]/70 p-4 space-y-3.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5">
+                          <div className="rounded-xl bg-[#14532D] p-2 text-[#FAF0DD] shrink-0">
+                            <BellRing className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[#14532D]">
+                              Auto-Catat Bawaan ArusKas (Tanpa MacroDroid)
+                            </p>
+                            <p className="text-[11px] text-[#57534E] leading-relaxed mt-0.5">
+                              Membaca notifikasi uang masuk &amp; keluar dari 15+
+                              aplikasi Bank &amp; E-Wallet Indonesia secara
+                              langsung di HP Anda.
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={
+                            nativeStatus.enabled &&
+                            nativeStatus.notificationAccess &&
+                            nativeStatus.hasToken
+                              ? "inflow"
+                              : "warning"
+                          }
+                        >
+                          {nativeStatus.enabled &&
+                          nativeStatus.notificationAccess &&
+                          nativeStatus.hasToken
+                            ? "Aktif"
+                            : "Perlu Aktivasi"}
+                        </Badge>
+                      </div>
+
+                      {/* Step Status Pills */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                        <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] p-3 flex flex-col justify-between gap-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-[#1C1917]">
+                              1. Izin Notifikasi HP
+                            </span>
+                            <Badge
+                              variant={
+                                nativeStatus.notificationAccess
+                                  ? "inflow"
+                                  : "warning"
+                              }
+                            >
+                              {nativeStatus.notificationAccess
+                                ? "Diizinkan"
+                                : "Belum Izin"}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                nativeStatus.notificationAccess
+                                  ? "secondary"
+                                  : "primary"
+                              }
+                              onClick={() =>
+                                window.ArusKasNative?.openNotificationAccessSettings?.()
+                              }
+                              className="h-8 text-[11px]"
+                            >
+                              <Settings className="h-3.5 w-3.5" />
+                              <span>
+                                {nativeStatus.notificationAccess
+                                  ? "Kelola Izin"
+                                  : "Buka Izin Notifikasi"}
+                              </span>
+                            </Button>
+                            {!nativeStatus.notificationAccess && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  window.ArusKasNative?.openAppInfoSettings?.()
+                                }
+                                className="h-8 text-[11px]"
+                              >
+                                <span>Info Aplikasi</span>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] p-3 flex flex-col justify-between gap-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-[#1C1917]">
+                              2. Layanan Auto-Catat
+                            </span>
+                            <Badge
+                              variant={
+                                nativeStatus.enabled && nativeStatus.hasToken
+                                  ? "inflow"
+                                  : "neutral"
+                              }
+                            >
+                              {nativeStatus.enabled && nativeStatus.hasToken
+                                ? "Berjalan"
+                                : nativeStatus.hasToken
+                                  ? "Dijeda"
+                                  : "Belum Terhubung"}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {!nativeStatus.hasToken ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                loading={nativeBusy}
+                                onClick={() => void handleConnectNativeAutoCatat()}
+                                className="h-8 text-[11px]"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                <span>Hubungkan &amp; Aktifkan</span>
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={
+                                    nativeStatus.enabled
+                                      ? "secondary"
+                                      : "primary"
+                                  }
+                                  onClick={() =>
+                                    handleToggleNativeAutoCatat(
+                                      !nativeStatus.enabled
+                                    )
+                                  }
+                                  className="h-8 text-[11px]"
+                                >
+                                  <span>
+                                    {nativeStatus.enabled
+                                      ? "Jeda Sementara"
+                                      : "Aktifkan Lagi"}
+                                  </span>
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  loading={nativeBusy}
+                                  onClick={() =>
+                                    void handleConnectNativeAutoCatat()
+                                  }
+                                  className="h-8 text-[11px]"
+                                  title="Buat token baru & sinkronkan ulang ke aplikasi Android"
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  <span>Sinkron Ulang</span>
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {!nativeStatus.notificationAccess && (
+                        <p className="rounded-xl border border-[#FDE68A] bg-[#FEF3C7]/70 px-3 py-2 text-[11px] text-[#92400E] leading-relaxed">
+                          <strong>Tip Android 13–15:</strong> Jika sakelar{" "}
+                          <em>Auto-Catat ArusKas</em> di Akses Notifikasi
+                          berwarna abu-abu / tidak bisa digeser, ketuk{" "}
+                          <strong>Info Aplikasi</strong> → ikon{" "}
+                          <strong>titik tiga (⋮) di pojok kanan atas</strong> →{" "}
+                          <strong>Izinkan Pengaturan Terbatas</strong>, lalu
+                          buka Izin Notifikasi lagi.
+                        </p>
+                      )}
+
+                      <label className="flex items-start gap-2 rounded-xl border border-[#E7E2D8] bg-[#FFFFFF]/80 px-3 py-2 text-[11px] text-[#44403C] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={nativeStatus.includeExtraApps}
+                          onChange={(e) =>
+                            handleToggleIncludeExtraApps(e.target.checked)
+                          }
+                          className="mt-0.5 h-3.5 w-3.5 accent-[#14532D]"
+                        />
+                        <span>
+                          <strong>Juga baca Gmail, SMS &amp; WhatsApp</strong>{" "}
+                          (opsional — otomatis menyaring pesan yang berisi
+                          nominal Rupiah &amp; kata transaksi bank; cocok untuk
+                          uji cepat via WhatsApp atau SMS banking).
+                        </span>
+                      </label>
+
+                      {(nativeStatus.capturedCount > 0 ||
+                        nativeStatus.lastStatus ||
+                        nativeStatus.pendingCount > 0) && (
+                        <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] px-3 py-2 text-[11px] text-[#57534E] space-y-0.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span>
+                              Tercatat otomatis dari HP:{" "}
+                              <strong className="text-[#14532D]">
+                                {nativeStatus.capturedCount} transaksi
+                              </strong>
+                            </span>
+                            {nativeStatus.pendingCount > 0 && (
+                              <span className="text-[#B45309] font-medium">
+                                Antre offline: {nativeStatus.pendingCount}
+                              </span>
+                            )}
+                          </div>
+                          {nativeStatus.lastStatus && (
+                            <p className="text-[11px] text-[#78716C]">
+                              Status terakhir: {nativeStatus.lastStatus}
+                              {nativeStatus.lastAt
+                                ? ` · ${nativeStatus.lastAt}`
+                                : ""}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : isAndroidApk && apkNeedsUpdate ? (
+                    <div className="rounded-2xl border border-[#FDE68A] bg-[#FEF3C7]/60 p-4 space-y-2.5 text-xs">
+                      <p className="font-semibold text-[#92400E]">
+                        Update APK ke v{LATEST_ANDROID_APP_RELEASE.versionName}{" "}
+                        untuk Auto-Catat Tanpa MacroDroid!
+                      </p>
+                      <p className="text-[#78350F] leading-relaxed">
+                        Versi terbaru APK ArusKas ({LATEST_ANDROID_APP_RELEASE.sizeLabel})
+                        kini membawa layanan pembaca notifikasi bank &amp;
+                        e-wallet bawaan — cukup 1 sakelar aktif tanpa perlu
+                        install MacroDroid lagi.
+                      </p>
+                      <a
+                        href={LATEST_ANDROID_APP_RELEASE.apkUrl}
+                        download="ArusKas.apk"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#14532D] px-3.5 text-xs font-semibold text-[#FFFFFF] hover:bg-[#166534]"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>
+                          Download Update APK v{LATEST_ANDROID_APP_RELEASE.versionName}
+                        </span>
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1] p-4 space-y-2.5 text-xs">
+                      <p className="font-semibold text-[#14532D]">
+                        Cara Termudah di Android: Pakai APK ArusKas v
+                        {LATEST_ANDROID_APP_RELEASE.versionName} (Auto-Catat Bawaan)
+                      </p>
+                      <p className="text-[#166534] leading-relaxed">
+                        Pasang <strong>ArusKas.apk</strong> ({LATEST_ANDROID_APP_RELEASE.sizeLabel}),
+                        lalu buka halaman <strong>Integrasi Bank</strong> dari
+                        dalam aplikasi ArusKas untuk mengaktifkan pembaca
+                        notifikasi bank &amp; e-wallet bawaan{" "}
+                        <strong>tanpa perlu MacroDroid</strong>.
+                      </p>
+                      <a
+                        href={LATEST_ANDROID_APP_RELEASE.apkUrl}
+                        download="ArusKas.apk"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#14532D] px-3.5 text-xs font-semibold text-[#FFFFFF] hover:bg-[#166534]"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download ArusKas.apk (Android)</span>
+                      </a>
+                    </div>
+                  )}
+
+                  <details className="rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] px-3.5 py-2.5 text-xs text-[#57534E]">
+                    <summary className="font-semibold text-[#44403C] cursor-pointer">
+                      Opsi Alternatif: Cara Manual via MacroDroid / Notify2HTTP
+                    </summary>
+                    <ol className="mt-3 list-decimal pl-4 space-y-2 leading-relaxed">
+                      <li>
+                        Install <strong>MacroDroid</strong> atau{" "}
+                        <strong>Notification Forwarder</strong> dari Play Store
+                        dan aktifkan <strong>Akses Notifikasi</strong>.
+                      </li>
+                      <li>
+                        <strong>Trigger:</strong> <em>Notification Received</em>{" "}
+                        → pilih aplikasi{" "}
+                        <strong>
+                          {activeProviderMeta
+                            ? activeProviderMeta.appName
+                            : "bank/e-wallet yang Anda pakai (Livin' Mandiri, BRImo, Wondr BNI, Bank Jago, SeaBank, GoPay, OVO, DANA, ShopeePay, myBCA, dll.)"}
+                        </strong>
+                        .
+                      </li>
+                      <li>
+                        <strong>Action:</strong> <em>HTTP Request (POST)</em> ke{" "}
+                        <code className="text-[#14532D]">{webhookUrl}</code>{" "}
+                        dengan Header <code>Authorization: Bearer [TOKEN]</code>{" "}
+                        (atau <code>X-ArusKas-Token</code>).
+                      </li>
+                      <li>
+                        <strong>Content Body:</strong> pilih Content Type{" "}
+                        <code>text/plain</code> lalu gunakan tombol Magic Text (
+                        <code>...</code>) → pilih <strong>Judul Notifikasi</strong>{" "}
+                        dan <strong>Teks Notifikasi</strong>.
+                      </li>
+                    </ol>
+                  </details>
+                </div>
               )}
 
               {guideTab === "ios" && (

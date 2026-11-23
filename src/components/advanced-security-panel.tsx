@@ -26,18 +26,6 @@ import {
 } from "@/lib/app-version";
 import type { SecurityAuditLogItem } from "@/lib/audit-log";
 
-interface ArusKasNativeBridge {
-  isSupported?: () => boolean;
-  isAppLockEnabled?: () => boolean;
-  setAppLockEnabled?: (enabled: boolean) => boolean;
-}
-
-declare global {
-  interface Window {
-    ArusKasNative?: ArusKasNativeBridge;
-  }
-}
-
 const EVENT_LABELS: Record<
   string,
   { label: string; tone: "inflow" | "outflow" | "neutral" | "warning" }
