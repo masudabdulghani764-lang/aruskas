@@ -8,7 +8,8 @@
     "start": "bun --bun next start",
     "tunnel": "bin\\cloudflared.exe tunnel --url http://localhost:3000",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "ci": "bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
     "@vercel/functions": "^3.11.3",

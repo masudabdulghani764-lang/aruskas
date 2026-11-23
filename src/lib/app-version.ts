@@ -38,6 +38,7 @@ export interface ArusKasNativeBridge {
   getInstalledAppsJson?: () => string;
   setSelectedAppsJson?: (selectedMapJson: string) => boolean;
   resetSelectedAppsDefault?: () => boolean;
+  setDarkThemeStatusBar?: (isDark: boolean) => boolean;
 }
 
 declare global {
@@ -55,14 +56,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.8",
-  versionCode: 9,
+  versionName: "1.0.9",
+  versionCode: 10,
   apkUrl: "/downloads/ArusKas.apk",
   sizeLabel: "218 KB",
   highlights: [
-    "Pemilih Aplikasi HP: centang langsung aplikasi bank/e-wallet yang terpasang di HP Anda",
-    "Filter anti-promo pintar: memblokir notifikasi promo/voucher palsu seperti 'cuma Rp 1' dari Gojek/Shopee",
-    "Otomatis mendeteksi 15+ bank & e-wallet + antrean offline & pengamanan sidik jari/PIN",
+    "Enkripsi hardware AndroidKeyStore (AES-256-GCM) untuk menyimpan token Auto-Catat di HP",
+    "Sinkronisasi otomatis status bar saat Dark Mode aktif + arsitektur native modular",
+    "Pemilih Aplikasi HP + filter anti-promo Rp 1 Gojek/Shopee tetap aktif & ringan",
   ],
 };
 

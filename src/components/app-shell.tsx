@@ -17,11 +17,15 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Moon,
   PiggyBank,
   Plus,
   ReceiptText,
+  RefreshCw,
   Settings,
+  Sun,
   Wallet,
+  WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppVersionMenuFooter } from "@/components/app-version-info";
@@ -33,8 +37,14 @@ import {
   QuickAddModal,
   type QuickAddType,
 } from "@/components/quick-add-modal";
+import { useTheme } from "@/components/theme-provider";
 import { Badge, Button, cn } from "@/components/ui/primitives";
 import type { SafeUser } from "@/lib/auth";
+import {
+  flushOfflineTransactionQueue,
+  getOfflineTransactionQueue,
+  OFFLINE_QUEUE_EVENT,
+} from "@/lib/offline-queue";
 
 interface QuickAddContextValue {
   openQuickAdd: (
@@ -102,6 +112,7 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const profileRef = useRef<HTMLDivElement | null>(null);
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -111,10 +122,66 @@ export function AppShell({
     walletId?: string;
   }>({ type: "expense" });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+  const [syncingOffline, setSyncingOffline] = useState(false);
 
   const triggerRefresh = useCallback(() => {
     setRefreshTrigger((prev) => prev + 1);
   }, []);
+
+  const syncOfflineNow = useCallback(async () => {
+    if (syncingOffline) return;
+    const queued = getOfflineTransactionQueue();
+    if (queued.length === 0) {
+      setOfflineQueueCount(0);
+      return;
+    }
+    setSyncingOffline(true);
+    try {
+      const result = await flushOfflineTransactionQueue();
+      setOfflineQueueCount(result.remaining);
+      if (result.synced > 0) {
+        toast.success(
+          `${result.synced} transaksi dari antrean offline berhasil disinkronkan!`
+        );
+        triggerRefresh();
+        router.refresh();
+      }
+      if (result.failed > 0) {
+        toast.warning(
+          `${result.failed} transaksi antrean dilewati karena sesi/data tidak valid.`
+        );
+      }
+    } finally {
+      setSyncingOffline(false);
+    }
+  }, [syncingOffline, triggerRefresh, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const updateStatus = () => {
+      setIsOnline(window.navigator.onLine);
+      setOfflineQueueCount(getOfflineTransactionQueue().length);
+    };
+    const handleOnline = () => {
+      updateStatus();
+      void syncOfflineNow();
+    };
+    updateStatus();
+    if (window.navigator.onLine && getOfflineTransactionQueue().length > 0) {
+      void syncOfflineNow();
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", updateStatus);
+    window.addEventListener(OFFLINE_QUEUE_EVENT, updateStatus);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", updateStatus);
+      window.removeEventListener(OFFLINE_QUEUE_EVENT, updateStatus);
+    };
+  }, [syncOfflineNow]);
 
   const openQuickAdd = useCallback(
     (defaultType: QuickAddType = "expense", defaultWalletId?: string) => {
@@ -284,6 +351,28 @@ export function AppShell({
                 <span>Bank</span>
               </Link>
 
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={
+                  resolvedTheme === "dark"
+                    ? "Ubah ke Mode Terang"
+                    : "Ubah ke Mode Gelap"
+                }
+                title={
+                  resolvedTheme === "dark"
+                    ? "Mode Terang"
+                    : "Mode Gelap (Dark Mode)"
+                }
+                className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full border border-[#E7E2D8] bg-[#FFFFFF] text-[#57534E] transition-colors hover:bg-[#EFECE4] hover:text-[#14532D] cursor-pointer"
+              >
+                {resolvedTheme === "dark" ? (
+                  <Sun className="h-4 w-4 text-[#E5B869]" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </button>
+
               <Button
                 variant="primary"
                 size="sm"
@@ -390,6 +479,31 @@ export function AppShell({
 
         {/* Main Content Container */}
         <main className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-24 sm:px-6 md:py-8 md:pb-12 print:max-w-none print:p-0">
+          {(!isOnline || offlineQueueCount > 0) && (
+            <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[#FDE68A] bg-[#FEF3C7]/85 px-4 py-2.5 text-xs text-[#92400E]">
+              <div className="flex items-center gap-2 min-w-0">
+                <WifiOff className="h-4 w-4 shrink-0" />
+                <span>
+                  {!isOnline
+                    ? "Anda sedang offline — transaksi baru tetap bisa dicatat dan masuk antrean otomatis."
+                    : `${offlineQueueCount} transaksi menunggu sinkronisasi dari mode offline.`}
+                </span>
+              </div>
+              {isOnline && offlineQueueCount > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  loading={syncingOffline}
+                  onClick={() => void syncOfflineNow()}
+                  className="h-7 px-3 text-[11px]"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  <span>Kirim Sekarang</span>
+                </Button>
+              )}
+            </div>
+          )}
           <PwaInstallBanner />
           {children}
         </main>

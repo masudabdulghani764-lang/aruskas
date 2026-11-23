@@ -12,9 +12,12 @@ import {
   Info,
   KeyRound,
   LogOut,
+  Monitor,
+  Moon,
   Pencil,
   Plus,
   RotateCcw,
+  Sun,
   Tags,
   Trash2,
   Upload,
@@ -24,6 +27,7 @@ import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
 import { AdvancedSecurityPanel } from "@/components/advanced-security-panel";
 import { AppVersionCard } from "@/components/app-version-info";
+import { useTheme, type ThemePreference } from "@/components/theme-provider";
 import {
   Badge,
   Button,
@@ -70,6 +74,7 @@ export function SettingsClient({
 }: SettingsClientProps) {
   const router = useRouter();
   const { refreshTrigger } = useQuickAdd();
+  const { preference, setPreference } = useTheme();
 
   // User & Profile state
   const [user, setUser] = useState<SafeUser>(initialUser);
@@ -527,6 +532,56 @@ export function SettingsClient({
           serta pencadangan data Anda.
         </p>
       </div>
+
+      {/* Theme Preference Card */}
+      <Card padding="md">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-medium text-[#1C1917]">
+              Tema Tampilan Aplikasi
+            </h2>
+            <p className="text-xs text-[#78716C] mt-0.5">
+              Pilih mode kertas ivory hangat, mode gelap nyaman di malam hari,
+              atau ikuti pengaturan perangkat Anda.
+            </p>
+          </div>
+          <div className="inline-flex rounded-xl border border-[#E7E2D8] bg-[#F7F5F0] p-1 gap-1 self-start">
+            {(
+              [
+                { value: "light", label: "Terang", icon: Sun },
+                { value: "dark", label: "Gelap", icon: Moon },
+                { value: "system", label: "Sistem", icon: Monitor },
+              ] as Array<{
+                value: ThemePreference;
+                label: string;
+                icon: React.ComponentType<{ className?: string }>;
+              }>
+            ).map((opt) => {
+              const Icon = opt.icon;
+              const active = preference === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    setPreference(opt.value);
+                    toast.success(`Tema diubah ke mode ${opt.label}.`);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
+                    active
+                      ? "bg-[#14532D] text-[#FFFFFF] shadow-2xs"
+                      : "text-[#57534E] hover:text-[#1C1917]"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
 
       {/* Row 1: Profile & Security */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

@@ -20,6 +20,124 @@
   --transfer: #44403C;
 }
 
+html.dark {
+  color-scheme: dark;
+  --bg-canvas: #0D1510;
+  --bg-sheet: #142019;
+  --bg-subtle: #1B2B22;
+  --border-warm: #273B2F;
+
+  --ink-primary: #F4EFE6;
+  --ink-secondary: #C6C1B8;
+  --ink-muted: #939088;
+
+  --accent-forest: #1E7A45;
+  --accent-forest-hover: #248F52;
+  --accent-forest-soft: #133923;
+}
+
+html.dark body,
+html.dark .bg-cream-canvas {
+  background-color: #0D1510 !important;
+  background-image: linear-gradient(
+    165deg,
+    #0F1914 0%,
+    #122019 52%,
+    #0C140F 100%
+  ) !important;
+  color: #F4EFE6;
+}
+
+html.dark header,
+html.dark nav[aria-label="Navigasi seluler"] {
+  background-color: #121E18 !important;
+  background-image: linear-gradient(
+    90deg,
+    #121D17 0%,
+    #15231B 60%,
+    #111C16 100%
+  ) !important;
+  border-color: #26392D !important;
+}
+
+html.dark .bg-\[\#FFFFFF\],
+html.dark .bg-\[\#FFFDF9\] {
+  background-color: #142019 !important;
+}
+
+html.dark .bg-\[\#FAF8F4\],
+html.dark .bg-\[\#F7F5F0\],
+html.dark .bg-\[\#EFECE4\],
+html.dark .bg-\[\#FAF1E0\],
+html.dark .bg-\[\#FDF8EE\],
+html.dark .bg-\[\#FAF0DD\] {
+  background-color: #1A2920 !important;
+}
+
+html.dark .bg-\[\#EFF6F1\],
+html.dark .bg-\[\#F2FAF5\],
+html.dark .bg-\[\#DCFCE7\] {
+  background-color: #132C1E !important;
+}
+
+html.dark .text-\[\#1C1917\],
+html.dark .text-\[\#44403C\] {
+  color: #F4EFE6 !important;
+}
+
+html.dark .text-\[\#57534E\] {
+  color: #C6C1B8 !important;
+}
+
+html.dark .text-\[\#78716C\] {
+  color: #9A958C !important;
+}
+
+html.dark .text-\[\#14532D\],
+html.dark .text-\[\#166534\],
+html.dark .text-\[\#15803D\] {
+  color: #6EE7B7 !important;
+}
+
+html.dark .border-\[\#E7E2D8\],
+html.dark .border-\[\#E3D4BA\],
+html.dark .border-\[\#EFECE4\],
+html.dark .border-\[\#EADBC0\],
+html.dark .border-\[\#DDD5C7\],
+html.dark .border-\[\#D6CFC2\] {
+  border-color: #273B2F !important;
+}
+
+html.dark .border-\[\#CBE0D2\],
+html.dark .border-\[\#BBF7D0\],
+html.dark .border-\[\#D6E6DC\] {
+  border-color: #254D37 !important;
+}
+
+html.dark .divide-\[\#EFECE4\] > :not(:last-child) {
+  border-color: #24362B !important;
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #101A14 !important;
+  color: #F4EFE6 !important;
+  border-color: #2B4033 !important;
+}
+
+/* Preserve high contrast on solid forest-green CTA buttons/badges in Dark Mode */
+html.dark .bg-\[\#14532D\] {
+  background-color: #166534 !important;
+  color: #FFFFFF !important;
+}
+
+html.dark .recharts-default-tooltip {
+  background-color: #142019 !important;
+  border-color: #273B2F !important;
+  color: #F4EFE6 !important;
+}
+
 @layer base {
   html {
     background-color: var(--bg-canvas);

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/primitives";
 import { compressReceiptImageIfNeeded } from "@/lib/client-image";
 import { formatIDR, getTodayISO } from "@/lib/format";
+import { enqueueOfflineTransaction } from "@/lib/offline-queue";
 import { parseSmartTransactionText } from "@/lib/smart-paste";
 
 export type QuickAddType = "income" | "expense" | "transfer";
@@ -470,6 +471,40 @@ export function QuickAddModal({
     }
 
     setSubmitting(true);
+    const jsonPayload = {
+      walletId,
+      targetWalletId: txType === "transfer" ? targetWalletId : null,
+      categoryId: txType === "transfer" ? null : categoryId,
+      type: txType,
+      amount: parsedAmount,
+      title: trimmedTitle,
+      paymentMethod: paymentMethod.trim() || null,
+      notes: notes.trim() || null,
+      occurredAt,
+    };
+
+    // Immediate offline queue fallback when offline (without binary attachment)
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      if (attachment) {
+        setSubmitting(false);
+        const offlineAttachMsg =
+          "Lampiran foto/PDF membutuhkan koneksi internet. Hapus lampiran jika ingin simpan ke antrean offline.";
+        setErrorMsg(offlineAttachMsg);
+        toast.error(offlineAttachMsg);
+        return;
+      }
+      enqueueOfflineTransaction(
+        jsonPayload,
+        selectedWallet?.name ?? "Dompet Pilihan"
+      );
+      toast.warning(
+        "Sedang offline — transaksi disimpan di antrean dan akan otomatis dikirim saat internet aktif."
+      );
+      setSubmitting(false);
+      onClose();
+      return;
+    }
+
     try {
       let res: Response;
 
@@ -501,17 +536,7 @@ export function QuickAddModal({
         res = await fetch("/api/transactions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            walletId,
-            targetWalletId: txType === "transfer" ? targetWalletId : null,
-            categoryId: txType === "transfer" ? null : categoryId,
-            type: txType,
-            amount: parsedAmount,
-            title: trimmedTitle,
-            paymentMethod: paymentMethod.trim() || null,
-            notes: notes.trim() || null,
-            occurredAt,
-          }),
+          body: JSON.stringify(jsonPayload),
         });
       }
 
@@ -535,9 +560,20 @@ export function QuickAddModal({
       onClose();
       router.refresh();
     } catch {
-      const msg = "Terjadi gangguan jaringan saat menyimpan transaksi.";
-      setErrorMsg(msg);
-      toast.error(msg);
+      if (!attachment) {
+        enqueueOfflineTransaction(
+          jsonPayload,
+          selectedWallet?.name ?? "Dompet Pilihan"
+        );
+        toast.warning(
+          "Koneksi terputus — transaksi masuk antrean offline dan otomatis tersinkron saat terhubung kembali."
+        );
+        onClose();
+      } else {
+        const msg = "Terjadi gangguan jaringan saat mengunggah lampiran transaksi.";
+        setErrorMsg(msg);
+        toast.error(msg);
+      }
     } finally {
       setSubmitting(false);
     }

@@ -3,49 +3,44 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle,
-  BellRing,
   Check,
   CheckCircle2,
   Copy,
-  Download,
   FileSpreadsheet,
   History,
   KeyRound,
   Landmark,
-  ListChecks,
   Mail,
   RefreshCw,
-  Search,
   Send,
-  Settings,
   ShieldCheck,
   Smartphone,
   Sparkles,
-  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuickAdd } from "@/components/app-shell";
+import { CsvImportPanel } from "@/components/integration/csv-import-panel";
+import { NativeAutoCatatCard } from "@/components/integration/native-auto-catat-card";
+import {
+  buildGmailAppsScript,
+  PROVIDER_META,
+  SAMPLE_NOTIFICATIONS,
+} from "@/components/integration/provider-meta";
+import { SyncLogsPanel } from "@/components/integration/sync-logs-panel";
 import {
   Badge,
   Button,
   Card,
-  EmptyState,
-  Input,
-  Modal,
   Select,
   Textarea,
   cn,
 } from "@/components/ui/primitives";
 import {
   checkAndroidAppUpdate,
-  LATEST_ANDROID_APP_RELEASE,
   type AndroidAutoCatatStatus,
-  type AndroidInstalledApp,
 } from "@/lib/app-version";
 import { SUPPORTED_BANK_PROVIDERS } from "@/lib/bank-notification-parser";
 import type {
-  BcaCsvPreviewRow,
   BcaIntegrationView,
   BcaSyncLogView,
 } from "@/lib/bca-integration";
@@ -55,202 +50,11 @@ import type { WalletWithRole } from "@/lib/wallets";
 type ActiveTab = "webhook" | "csv" | "logs";
 type GuideTab = "gmail" | "android" | "ios";
 
-const PROVIDER_META: Record<
-  string,
-  {
-    appName: string;
-    gmailFrom: string;
-    sampleSubject: string;
-    sampleText: string;
-  }
-> = {
-  bca: {
-    appName: "myBCA / BCA mobile",
-    gmailFrom: "bca.co.id",
-    sampleSubject: "Notifikasi Transfer Masuk myBCA",
-    sampleText:
-      "Anda menerima transfer sebesar Rp 2.500.000,00 dari PT NUSANTARA DIGITAL ke rekening BCA Anda pada tanggal 21/11/2026. No. Ref: BCA2026112101",
-  },
-  mandiri: {
-    appName: "Livin' by Mandiri",
-    gmailFrom: "bankmandiri.co.id",
-    sampleSubject: "Livin' by Mandiri - Transaksi QRIS Berhasil",
-    sampleText:
-      "Pembayaran QRIS Livin' by Mandiri di KOPI KENANGAN SUDIRMAN sebesar Rp 42.000 pada 21/11/2026 berhasil. Ref: MDR2026112102",
-  },
-  bri: {
-    appName: "BRImo BRI",
-    gmailFrom: "bri.co.id",
-    sampleSubject: "Transaksi BRImo Berhasil",
-    sampleText:
-      "Pembayaran BRIVA TOKOPEDIA melalui BRImo sebesar Rp 275.000,00 pada 21/11/2026 berhasil. Ref: BRI2026112105",
-  },
-  bni: {
-    appName: "wondr by BNI / BNI Mobile",
-    gmailFrom: "bni.co.id",
-    sampleSubject: "Notifikasi Transaksi wondr by BNI",
-    sampleText:
-      "Transfer ke BUDI SANTOSO melalui wondr BNI sebesar Rp 185.000 pada 21/11/2026 berhasil. Ref: BNI2026112106",
-  },
-  blu: {
-    appName: "blu by BCA Digital",
-    gmailFrom: "bcadigital.co.id",
-    sampleSubject: "Notifikasi Transaksi blu by BCA",
-    sampleText:
-      "Pembayaran QRIS blu by BCA di ALFAMART KEMANG sebesar Rp 54.000 pada 21/11/2026 berhasil. Ref: BLU2026112107",
-  },
-  jago: {
-    appName: "Bank Jago",
-    gmailFrom: "jago.com",
-    sampleSubject: "Bank Jago - Transaksi Berhasil",
-    sampleText:
-      "Kamu bayar QRIS Bank Jago di FORE COFFEE sebesar Rp 39.000 pada 21/11/2026 berhasil. Ref: JGO2026112108",
-  },
-  seabank: {
-    appName: "SeaBank",
-    gmailFrom: "seabank.co.id",
-    sampleSubject: "SeaBank - Dana Masuk",
-    sampleText:
-      "Transfer masuk SeaBank sebesar Rp 750.000 dari ANDI PRATAMA pada 21/11/2026 berhasil. No. Ref: SEA2026112104",
-  },
-  bsi: {
-    appName: "BYOND by BSI",
-    gmailFrom: "bankbsi.co.id",
-    sampleSubject: "Notifikasi BYOND by BSI",
-    sampleText:
-      "Pembayaran QRIS BYOND BSI di WARUNG SATE KHAS sebesar Rp 88.000 pada 21/11/2026 berhasil. Ref: BSI2026112109",
-  },
-  gopay: {
-    appName: "GoPay / Gojek",
-    gmailFrom: "gopay OR gojek.com",
-    sampleSubject: "Notifikasi GoPay",
-    sampleText:
-      "Kamu bayar Rp 68.500 pakai GoPay QRIS di WARUNG PADANG SEDERHANA pada 21/11/2026 berhasil. Ref: GPY2026112103",
-  },
-  shopeepay: {
-    appName: "ShopeePay / Shopee",
-    gmailFrom: "shopee.co.id OR shopeepay",
-    sampleSubject: "Pembayaran ShopeePay Berhasil",
-    sampleText:
-      "Pembayaran ShopeePay di INDOMARET SUDIRMAN sebesar Rp 31.500 pada 21/11/2026 berhasil. Ref: SPY2026112110",
-  },
-  ovo: {
-    appName: "OVO",
-    gmailFrom: "ovo.id",
-    sampleSubject: "Notifikasi Transaksi OVO",
-    sampleText:
-      "Pembayaran OVO QRIS di BAKMI GM sebesar Rp 74.000 pada 21/11/2026 berhasil. Ref: OVO2026112111",
-  },
-  dana: {
-    appName: "DANA",
-    gmailFrom: "dana.id",
-    sampleSubject: "Notifikasi DANA",
-    sampleText:
-      "Bayar pakai DANA QRIS di MIXUE sebesar Rp 28.000 pada 21/11/2026 berhasil. Ref: DNA2026112112",
-  },
-};
-
-const SAMPLE_NOTIFICATIONS = [
-  {
-    label: "Livin' Mandiri · QRIS",
-    subject: PROVIDER_META.mandiri.sampleSubject,
-    text: PROVIDER_META.mandiri.sampleText,
-  },
-  {
-    label: "GoPay · QRIS",
-    subject: PROVIDER_META.gopay.sampleSubject,
-    text: PROVIDER_META.gopay.sampleText,
-  },
-  {
-    label: "SeaBank · Masuk",
-    subject: PROVIDER_META.seabank.sampleSubject,
-    text: PROVIDER_META.seabank.sampleText,
-  },
-  {
-    label: "BRImo · VA",
-    subject: PROVIDER_META.bri.sampleSubject,
-    text: PROVIDER_META.bri.sampleText,
-  },
-  {
-    label: "DANA · QRIS",
-    subject: PROVIDER_META.dana.sampleSubject,
-    text: PROVIDER_META.dana.sampleText,
-  },
-  {
-    label: "BCA · Transfer Masuk",
-    subject: PROVIDER_META.bca.sampleSubject,
-    text: PROVIDER_META.bca.sampleText,
-  },
-] as const;
-
-const SAMPLE_BCA_CSV = [
-  "Informasi Rekening",
-  "No. Rekening,=,8821004921",
-  "Nama,=,PEMILIK REKENING BCA",
-  "Periode,=,01/11/2026 - 30/11/2026",
-  "",
-  "Tanggal,Keterangan,Cabang,Jumlah,Saldo",
-  "'02/11,TRSF E-BANKING CR 11/02 PT NUSANTARA GAJI BULANAN,0000,\"14,500,000.00 CR\",\"28,500,000.00\"",
-  "'04/11,QR 004 KOPI KENANGAN SUDIRMAN,0000,\"38,000.00 DB\",\"28,462,000.00\"",
-  "'07/11,TRSF E-BANKING DB BCA VA PLN LISTRIK,0000,\"625,000.00 DB\",\"27,837,000.00\"",
-  "'11/11,TRSF E-BANKING DB TOKOPEDIA BELANJA RUMAH,0000,\"340,000.00 DB\",\"27,497,000.00\"",
-  "'15/11,BI-FAST CR 11/15 KLIEN PROYEK WEBSITE,0000,\"3,500,000.00 CR\",\"30,997,000.00\"",
-  "'PEND,QR 004 TRANSAKSI BELUM SETTLED,0000,\"19,000.00 DB\",\"30,978,000.00\"",
-  "Saldo Awal,=,14,000,000.00",
-].join("\n");
-
-function buildGmailAppsScript(
-  webhookUrl: string,
-  tokenPlaceholder: string,
-  selectedProviderId: string
-): string {
-  const meta = PROVIDER_META[selectedProviderId];
-  const fromFilter = meta
-    ? meta.gmailFrom
-    : "bca.co.id OR bankmandiri.co.id OR bri.co.id OR bni.co.id OR bcadigital.co.id OR jago.com OR seabank.co.id OR bankbsi.co.id OR gopay OR gojek.com OR ovo.id OR dana.id OR shopeepay OR shopee.co.id";
-  const commentLabel = meta
-    ? `email notifikasi dari ${meta.appName}`
-    : "email notifikasi dari seluruh Bank & E-Wallet Indonesia";
-
-  return `// Tempel ke https://script.google.com lalu pasang Trigger "Time-driven" tiap 5 menit
-const ARUSKAS_WEBHOOK_URL = "${webhookUrl}";
-const ARUSKAS_TOKEN = "${tokenPlaceholder}";
-
-function syncNotifikasiKeuangan() {
-  const labelName = "ArusKas-Synced";
-  let label = GmailApp.getUserLabelByName(labelName);
-  if (!label) label = GmailApp.createLabel(labelName);
-
-  // Cari ${commentLabel}
-  const query = 'from:(${fromFilter}) -label:' + labelName + ' newer_than:7d';
-  const threads = GmailApp.search(query, 0, 20);
-
-  for (const thread of threads) {
-    for (const msg of thread.getMessages()) {
-      const payload = {
-        subject: msg.getSubject(),
-        text: msg.getPlainBody().slice(0, 4000),
-        source: "webhook_email",
-        externalId: msg.getId(),
-      };
-
-      const res = UrlFetchApp.fetch(ARUSKAS_WEBHOOK_URL, {
-        method: "post",
-        contentType: "application/json",
-        headers: { Authorization: "Bearer " + ARUSKAS_TOKEN },
-        payload: JSON.stringify(payload),
-        muteHttpExceptions: true,
-      });
-
-      const code = res.getResponseCode();
-      if (code === 200 || code === 201) {
-        thread.addLabel(label);
-      }
-    }
-  }
-}`;
-}
-
+/**
+ * Modular Bank & E-Wallet Auto-Catat hub with 3-step onboarding indicator,
+ * per-provider wallet routing, native Android APK listener bridge,
+ * Gmail/Shortcuts webhooks, CSV import, and live notification simulator.
+ */
 export function BcaIntegrationClient({
   initialIntegration,
   initialLogs,
@@ -301,7 +105,7 @@ export function BcaIntegrationClient({
   const [freshRawToken, setFreshRawToken] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Native Android APK Built-in Auto-Catat state
+  // Native Android APK Auto-Catat state
   const [isAndroidApk, setIsAndroidApk] = useState(false);
   const [apkNeedsUpdate, setApkNeedsUpdate] = useState(false);
   const [nativeStatus, setNativeStatus] = useState<AndroidAutoCatatStatus | null>(
@@ -309,9 +113,6 @@ export function BcaIntegrationClient({
   );
   const [nativeBusy, setNativeBusy] = useState(false);
   const [canPickInstalledApps, setCanPickInstalledApps] = useState(false);
-  const [appPickerOpen, setAppPickerOpen] = useState(false);
-  const [installedApps, setInstalledApps] = useState<AndroidInstalledApp[]>([]);
-  const [appSearch, setAppSearch] = useState("");
 
   // Simulator state
   const [simSubject, setSimSubject] = useState<string>(
@@ -329,26 +130,6 @@ export function BcaIntegrationClient({
     providerName?: string;
   } | null>(null);
 
-  // CSV import state
-  const [csvWalletId, setCsvWalletId] = useState(defaultWalletId);
-  const [csvText, setCsvText] = useState("");
-  const [csvPreviewRows, setCsvPreviewRows] = useState<BcaCsvPreviewRow[]>([]);
-  const [csvCategories, setCsvCategories] = useState<
-    Array<{ id: string; name: string; type: "income" | "expense" }>
-  >([]);
-  const [csvSelectedHashes, setCsvSelectedHashes] = useState<Set<string>>(
-    new Set()
-  );
-  const [csvCategoryOverrides, setCsvCategoryOverrides] = useState<
-    Record<string, string>
-  >({});
-  const [csvMeta, setCsvMeta] = useState<{
-    skippedPending: number;
-    skippedInvalid: number;
-    detectedPeriod: string | null;
-  } | null>(null);
-  const [csvBusy, setCsvBusy] = useState(false);
-
   const refreshNativeStatus = useCallback(() => {
     try {
       const bridge = window.ArusKasNative;
@@ -362,14 +143,17 @@ export function BcaIntegrationClient({
         }
       }
     } catch {
-      // ignore if outside native shell
+      // ignore outside native shell
     }
   }, []);
 
   useEffect(() => {
     setOrigin(window.location.origin);
     const uaInfo = checkAndroidAppUpdate(window.navigator.userAgent ?? "");
-    if (uaInfo.isAndroidApk || /Android/i.test(window.navigator.userAgent ?? "")) {
+    if (
+      uaInfo.isAndroidApk ||
+      /Android/i.test(window.navigator.userAgent ?? "")
+    ) {
       setGuideTab("android");
     }
     setIsAndroidApk(uaInfo.isAndroidApk);
@@ -567,7 +351,8 @@ export function BcaIntegrationClient({
         const rotData = await rotRes.json().catch(() => ({}));
         if (!rotRes.ok || !rotData.rawToken) {
           toast.error(
-            rotData.error ?? "Gagal membuat token otomatis untuk aplikasi Android."
+            rotData.error ??
+              "Gagal membuat token otomatis untuk aplikasi Android."
           );
           return;
         }
@@ -629,103 +414,6 @@ export function BcaIntegrationClient({
     );
   }
 
-  function handleOpenAppPicker() {
-    const bridge = window.ArusKasNative;
-    if (!bridge?.getInstalledAppsJson) {
-      toast.error(
-        `Update APK ke v${LATEST_ANDROID_APP_RELEASE.versionName} untuk memilih aplikasi langsung dari HP Anda.`
-      );
-      return;
-    }
-    try {
-      const parsed = JSON.parse(bridge.getInstalledAppsJson()) as {
-        apps?: AndroidInstalledApp[];
-      };
-      const list = Array.isArray(parsed.apps) ? parsed.apps : [];
-      setInstalledApps(list);
-      setAppSearch("");
-      setAppPickerOpen(true);
-    } catch {
-      toast.error("Gagal membaca daftar aplikasi terpasang di HP.");
-    }
-  }
-
-  function handleToggleAppInPicker(packageName: string) {
-    setInstalledApps((prev) =>
-      prev.map((app) =>
-        app.packageName === packageName
-          ? { ...app, selected: !app.selected }
-          : app
-      )
-    );
-  }
-
-  function handleSelectRecommendedAppsOnly() {
-    setInstalledApps((prev) =>
-      prev.map((app) => ({
-        ...app,
-        selected: app.isRecommended,
-      }))
-    );
-    toast.success("Menandai aplikasi bank & e-wallet yang direkomendasikan.");
-  }
-
-  function handleSaveAppPicker() {
-    const bridge = window.ArusKasNative;
-    if (!bridge?.setSelectedAppsJson) return;
-
-    const selectedMap: Record<string, string> = {};
-    for (const app of installedApps) {
-      if (app.selected) {
-        selectedMap[app.packageName] = app.label;
-      }
-    }
-
-    const count = Object.keys(selectedMap).length;
-    if (count === 0) {
-      toast.error("Pilih minimal 1 aplikasi untuk dipantau notifikasinya.");
-      return;
-    }
-
-    const ok = bridge.setSelectedAppsJson(JSON.stringify(selectedMap));
-    if (ok) {
-      refreshNativeStatus();
-      setAppPickerOpen(false);
-      toast.success(
-        `Berhasil! Hanya notifikasi dari ${count} aplikasi pilihan Anda yang dipantau.`
-      );
-    } else {
-      toast.error("Gagal menyimpan daftar aplikasi pilihan.");
-    }
-  }
-
-  function handleResetAppsDefault() {
-    const bridge = window.ArusKasNative;
-    if (!bridge?.resetSelectedAppsDefault) return;
-    if (bridge.resetSelectedAppsDefault()) {
-      refreshNativeStatus();
-      setAppPickerOpen(false);
-      toast.success(
-        "Dikembalikan ke daftar default Bank & E-Wallet Indonesia (tanpa promo super-app)."
-      );
-    }
-  }
-
-  const filteredInstalledApps = useMemo(() => {
-    const q = appSearch.trim().toLowerCase();
-    if (!q) return installedApps;
-    return installedApps.filter(
-      (app) =>
-        app.label.toLowerCase().includes(q) ||
-        app.packageName.toLowerCase().includes(q)
-    );
-  }, [installedApps, appSearch]);
-
-  const selectedPickerCount = useMemo(
-    () => installedApps.filter((app) => app.selected).length,
-    [installedApps]
-  );
-
   async function runSimulator(commit: boolean) {
     if (!selectedWalletId) {
       toast.error("Pilih dompet tujuan terlebih dahulu.");
@@ -783,126 +471,15 @@ export function BcaIntegrationClient({
     }
   }
 
-  async function handleCsvFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Ukuran file CSV maksimal 2MB.");
-      return;
-    }
-    const content = await file.text();
-    setCsvText(content);
-    await handlePreviewCsv(content);
-  }
-
-  async function handlePreviewCsv(overrideText?: string) {
-    const content = overrideText ?? csvText;
-    if (!csvWalletId) {
-      toast.error("Pilih dompet tujuan impor terlebih dahulu.");
-      return;
-    }
-    if (!content.trim()) {
-      toast.error("Upload file CSV mutasi bank atau muat contoh terlebih dahulu.");
-      return;
-    }
-
-    setCsvBusy(true);
-    try {
-      const res = await fetch("/api/integrations/bca/import-csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "preview",
-          walletId: csvWalletId,
-          csvText: content,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error ?? "Gagal membaca file CSV mutasi.");
-        return;
-      }
-
-      const rows = (data.rows ?? []) as BcaCsvPreviewRow[];
-      setCsvPreviewRows(rows);
-      setCsvCategories(data.categories ?? []);
-      setCsvMeta({
-        skippedPending: data.skippedPending ?? 0,
-        skippedInvalid: data.skippedInvalid ?? 0,
-        detectedPeriod: data.detectedPeriod ?? null,
-      });
-
-      const initialSelected = new Set<string>();
-      const overrides: Record<string, string> = {};
-      for (const r of rows) {
-        overrides[r.dedupeHash] = r.suggestedCategoryId;
-        if (!r.isDuplicate) {
-          initialSelected.add(r.dedupeHash);
-        }
-      }
-      setCsvSelectedHashes(initialSelected);
-      setCsvCategoryOverrides(overrides);
-      toast.success(
-        `${rows.length} baris mutasi terbaca (${initialSelected.size} baru siap diimpor).`
-      );
-    } catch {
-      toast.error("Terjadi gangguan jaringan.");
-    } finally {
-      setCsvBusy(false);
-    }
-  }
-
-  async function handleCommitCsv() {
-    const chosen = csvPreviewRows.filter((r) =>
-      csvSelectedHashes.has(r.dedupeHash)
-    );
-    if (chosen.length === 0) {
-      toast.error("Pilih minimal satu transaksi baru untuk diimpor.");
-      return;
-    }
-
-    setCsvBusy(true);
-    try {
-      const res = await fetch("/api/integrations/bca/import-csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "commit",
-          walletId: csvWalletId,
-          rows: chosen.map((r) => ({
-            type: r.type,
-            amount: r.amount,
-            title: r.title,
-            occurredAt: r.occurredAt,
-            paymentMethod: r.paymentMethod,
-            notes: r.notes,
-            dedupeKey: r.dedupeKey,
-            categoryId:
-              csvCategoryOverrides[r.dedupeHash] ?? r.suggestedCategoryId,
-          })),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error ?? "Gagal mengimpor mutasi CSV.");
-        return;
-      }
-
-      toast.success(
-        `${data.importedCount} transaksi berhasil diimpor${
-          data.duplicateCount > 0
-            ? ` (${data.duplicateCount} duplikat dilewati)`
-            : ""
-        }!`
-      );
-      triggerRefresh();
-      await Promise.all([refreshIntegrationState(), handlePreviewCsv(csvText)]);
-    } catch {
-      toast.error("Terjadi gangguan jaringan.");
-    } finally {
-      setCsvBusy(false);
-    }
-  }
+  const step1Done = Boolean(integration?.isActive);
+  const step2Done = Boolean(
+    (nativeStatus?.supported &&
+      nativeStatus.enabled &&
+      nativeStatus.notificationAccess &&
+      nativeStatus.hasToken) ||
+      logs.some((l) => l.source === "webhook_email" || l.source === "webhook_push")
+  );
+  const step3Done = logs.some((l) => l.status === "imported");
 
   return (
     <div className="space-y-6">
@@ -911,7 +488,9 @@ export function BcaIntegrationClient({
         <div>
           <div className="inline-flex items-center gap-1.5 rounded-full border border-[#EADBC0] bg-[#FDF8EE] px-2.5 py-0.5 text-xs font-semibold text-[#92400E]">
             <Landmark className="h-3.5 w-3.5" />
-            <span>Otomatisasi 12 Bank &amp; E-Wallet Indonesia · Tanpa Password/PIN</span>
+            <span>
+              Otomatisasi 12 Bank &amp; E-Wallet Indonesia · Tanpa Password/PIN
+            </span>
           </div>
           <h1 className="font-display mt-2 text-3xl font-medium tracking-tight text-[#1C1917]">
             {activeProvider
@@ -981,14 +560,71 @@ export function BcaIntegrationClient({
         </Link>
       </div>
 
+      {/* Onboarding Progress Stepper */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        {[
+          {
+            step: 1,
+            title: "Hubungkan Dompet",
+            desc: step1Done
+              ? `Aktif → ${integration?.walletName ?? "Siap"}`
+              : "Pilih dompet default & simpan",
+            done: step1Done,
+          },
+          {
+            step: 2,
+            title: "Aktifkan Jalur Notifikasi",
+            desc: step2Done
+              ? "Izin HP / webhook terhubung"
+              : "Pakai APK Android 1-klik atau Gmail",
+            done: step2Done,
+          },
+          {
+            step: 3,
+            title: "Transaksi Masuk Otomatis",
+            desc: step3Done
+              ? `${logs.filter((l) => l.status === "imported").length} transaksi berhasil tercatat`
+              : "Coba tes di Simulator atau tunggu notif",
+            done: step3Done,
+          },
+        ].map((item) => (
+          <div
+            key={item.step}
+            className={cn(
+              "flex items-center gap-3 rounded-2xl border px-3.5 py-2.5 text-xs transition-colors",
+              item.done
+                ? "border-[#BBF7D0] bg-[#EFF6F1]"
+                : "border-[#E7E2D8] bg-[#FFFFFF]"
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
+                item.done
+                  ? "bg-[#14532D] text-[#FFFFFF]"
+                  : "bg-[#EFECE4] text-[#57534E]"
+              )}
+            >
+              {item.done ? "✓" : item.step}
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold text-[#1C1917] truncate">
+                {item.title}
+              </p>
+              <p className="text-[11px] text-[#78716C] truncate">{item.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Security Trust Callout */}
       <div className="flex items-start gap-3 rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1] px-4 py-3.5 text-xs text-[#14532D]">
         <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
         <p className="leading-relaxed">
           <strong>100% Aman:</strong> ArusKas tidak pernah meminta Username,
           PIN, atau Password mobile banking / e-wallet Anda. Pencatatan otomatis
-          bekerja dengan membaca teks notifikasi dari aplikasi bank/e-wallet atau
-          file mutasi CSV yang Anda kirimkan sendiri.
+          bekerja dengan membaca teks notifikasi dari aplikasi bank/e-wallet
+          pilihan Anda atau file mutasi CSV yang Anda kirimkan sendiri.
         </p>
       </div>
 
@@ -1037,7 +673,7 @@ export function BcaIntegrationClient({
       {/* TAB 1: REAL-TIME WEBHOOK + SIMULATOR */}
       {tab === "webhook" && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Left: Configuration & Token */}
+          {/* Left: Configuration & Guides */}
           <div className="lg:col-span-6 space-y-6">
             <Card className="p-5 sm:p-6">
               <div className="flex items-center justify-between gap-2 pb-4 border-b border-[#E7E2D8]">
@@ -1046,8 +682,8 @@ export function BcaIntegrationClient({
                     1. Hubungkan Dompet Tujuan &amp; Token Webhook
                   </h2>
                   <p className="text-xs text-[#78716C] mt-0.5">
-                    Pilih dompet default dan (opsional) petakan dompet khusus per
-                    bank atau e-wallet.
+                    Pilih dompet default dan (opsional) petakan dompet khusus
+                    per bank atau e-wallet.
                   </p>
                 </div>
                 {integration ? (
@@ -1059,7 +695,11 @@ export function BcaIntegrationClient({
                 )}
               </div>
 
-              <form onSubmit={handleSaveConfig} noValidate className="mt-4 space-y-4">
+              <form
+                onSubmit={handleSaveConfig}
+                noValidate
+                className="mt-4 space-y-4"
+              >
                 {activeProvider && (
                   <div className="rounded-xl border border-[#CBE0D2] bg-[#EFF6F1] p-3.5 space-y-2">
                     <Select
@@ -1083,8 +723,9 @@ export function BcaIntegrationClient({
                       ))}
                     </Select>
                     <p className="text-[11px] text-[#14532D]">
-                      Setiap notifikasi dari <strong>{activeProvider.label}</strong>{" "}
-                      akan otomatis dicatat ke dompet ini setelah Anda klik Simpan.
+                      Setiap notifikasi dari{" "}
+                      <strong>{activeProvider.label}</strong> akan otomatis
+                      dicatat ke dompet ini setelah Anda klik Simpan.
                     </p>
                   </div>
                 )}
@@ -1261,7 +902,8 @@ export function BcaIntegrationClient({
                       <p className="mt-1 rounded-lg border border-[#E7E2D8] bg-[#FAF8F4] px-3 py-2 font-mono text-xs text-[#57534E]">
                         {integration.tokenPrefix}{" "}
                         <span className="font-sans text-[#78716C]">
-                          (klik &quot;Buat Ulang Token&quot; jika perlu token baru)
+                          (klik &quot;Buat Ulang Token&quot; jika perlu token
+                          baru)
                         </span>
                       </p>
                     )}
@@ -1359,315 +1001,17 @@ export function BcaIntegrationClient({
 
               {guideTab === "android" && (
                 <div className="mt-4 space-y-4">
-                  {nativeStatus?.supported ? (
-                    <div className="rounded-2xl border border-[#245A3E]/30 bg-gradient-to-br from-[#EFF6F1] via-[#F7FAF8] to-[#FAF1E0]/70 p-4 space-y-3.5">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="flex items-start gap-2.5">
-                          <div className="rounded-xl bg-[#14532D] p-2 text-[#FAF0DD] shrink-0">
-                            <BellRing className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-[#14532D]">
-                              Auto-Catat Bawaan ArusKas (Tanpa MacroDroid)
-                            </p>
-                            <p className="text-[11px] text-[#57534E] leading-relaxed mt-0.5">
-                              Membaca notifikasi uang masuk &amp; keluar dari 15+
-                              aplikasi Bank &amp; E-Wallet Indonesia secara
-                              langsung di HP Anda.
-                            </p>
-                          </div>
-                        </div>
-                        <Badge
-                          variant={
-                            nativeStatus.enabled &&
-                            nativeStatus.notificationAccess &&
-                            nativeStatus.hasToken
-                              ? "inflow"
-                              : "warning"
-                          }
-                        >
-                          {nativeStatus.enabled &&
-                          nativeStatus.notificationAccess &&
-                          nativeStatus.hasToken
-                            ? "Aktif"
-                            : "Perlu Aktivasi"}
-                        </Badge>
-                      </div>
-
-                      {/* Step Status Pills */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                        <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] p-3 flex flex-col justify-between gap-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-[#1C1917]">
-                              1. Izin Notifikasi HP
-                            </span>
-                            <Badge
-                              variant={
-                                nativeStatus.notificationAccess
-                                  ? "inflow"
-                                  : "warning"
-                              }
-                            >
-                              {nativeStatus.notificationAccess
-                                ? "Diizinkan"
-                                : "Belum Izin"}
-                            </Badge>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={
-                                nativeStatus.notificationAccess
-                                  ? "secondary"
-                                  : "primary"
-                              }
-                              onClick={() =>
-                                window.ArusKasNative?.openNotificationAccessSettings?.()
-                              }
-                              className="h-8 text-[11px]"
-                            >
-                              <Settings className="h-3.5 w-3.5" />
-                              <span>
-                                {nativeStatus.notificationAccess
-                                  ? "Kelola Izin"
-                                  : "Buka Izin Notifikasi"}
-                              </span>
-                            </Button>
-                            {!nativeStatus.notificationAccess && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                onClick={() =>
-                                  window.ArusKasNative?.openAppInfoSettings?.()
-                                }
-                                className="h-8 text-[11px]"
-                              >
-                                <span>Info Aplikasi</span>
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] p-3 flex flex-col justify-between gap-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold text-[#1C1917]">
-                              2. Layanan Auto-Catat
-                            </span>
-                            <Badge
-                              variant={
-                                nativeStatus.enabled && nativeStatus.hasToken
-                                  ? "inflow"
-                                  : "neutral"
-                              }
-                            >
-                              {nativeStatus.enabled && nativeStatus.hasToken
-                                ? "Berjalan"
-                                : nativeStatus.hasToken
-                                  ? "Dijeda"
-                                  : "Belum Terhubung"}
-                            </Badge>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {!nativeStatus.hasToken ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                loading={nativeBusy}
-                                onClick={() => void handleConnectNativeAutoCatat()}
-                                className="h-8 text-[11px]"
-                              >
-                                <Sparkles className="h-3.5 w-3.5" />
-                                <span>Hubungkan &amp; Aktifkan</span>
-                              </Button>
-                            ) : (
-                              <>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={
-                                    nativeStatus.enabled
-                                      ? "secondary"
-                                      : "primary"
-                                  }
-                                  onClick={() =>
-                                    handleToggleNativeAutoCatat(
-                                      !nativeStatus.enabled
-                                    )
-                                  }
-                                  className="h-8 text-[11px]"
-                                >
-                                  <span>
-                                    {nativeStatus.enabled
-                                      ? "Jeda Sementara"
-                                      : "Aktifkan Lagi"}
-                                  </span>
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="secondary"
-                                  loading={nativeBusy}
-                                  onClick={() =>
-                                    void handleConnectNativeAutoCatat()
-                                  }
-                                  className="h-8 text-[11px]"
-                                  title="Buat token baru & sinkronkan ulang ke aplikasi Android"
-                                >
-                                  <RefreshCw className="h-3 w-3" />
-                                  <span>Sinkron Ulang</span>
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {!nativeStatus.notificationAccess && (
-                        <p className="rounded-xl border border-[#FDE68A] bg-[#FEF3C7]/70 px-3 py-2 text-[11px] text-[#92400E] leading-relaxed">
-                          <strong>Tip Android 13–15:</strong> Jika sakelar{" "}
-                          <em>Auto-Catat ArusKas</em> di Akses Notifikasi
-                          berwarna abu-abu / tidak bisa digeser, ketuk{" "}
-                          <strong>Info Aplikasi</strong> → ikon{" "}
-                          <strong>titik tiga (⋮) di pojok kanan atas</strong> →{" "}
-                          <strong>Izinkan Pengaturan Terbatas</strong>, lalu
-                          buka Izin Notifikasi lagi.
-                        </p>
-                      )}
-
-                      <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[#1C1917]">
-                              3. Aplikasi HP yang Dipantau
-                            </span>
-                            <Badge variant={nativeStatus.customAppsMode ? "inflow" : "neutral"}>
-                              {nativeStatus.customAppsMode
-                                ? `${nativeStatus.selectedAppsCount ?? 0} Aplikasi Dipilih`
-                                : "Bank & E-Wallet Default"}
-                            </Badge>
-                          </div>
-                          <p className="text-[11px] text-[#78716C] mt-0.5">
-                            Pilih sendiri aplikasi bank / e-wallet dari HP Anda
-                            supaya notif promo aplikasi lain tidak ikut tercatat.
-                          </p>
-                        </div>
-
-                        {canPickInstalledApps ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={handleOpenAppPicker}
-                            className="h-8 text-[11px] shrink-0"
-                          >
-                            <ListChecks className="h-3.5 w-3.5 text-[#14532D]" />
-                            <span>Pilih Aplikasi HP</span>
-                          </Button>
-                        ) : (
-                          <a
-                            href={LATEST_ANDROID_APP_RELEASE.apkUrl}
-                            download="ArusKas.apk"
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#D4A045] bg-[#FEF3C7] px-2.5 text-[11px] font-semibold text-[#92400E] hover:bg-[#FDE68A] shrink-0"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>Update ke v{LATEST_ANDROID_APP_RELEASE.versionName}</span>
-                          </a>
-                        )}
-                      </div>
-
-                      <label className="flex items-start gap-2 rounded-xl border border-[#E7E2D8] bg-[#FFFFFF]/80 px-3 py-2 text-[11px] text-[#44403C] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={nativeStatus.includeExtraApps}
-                          onChange={(e) =>
-                            handleToggleIncludeExtraApps(e.target.checked)
-                          }
-                          className="mt-0.5 h-3.5 w-3.5 accent-[#14532D]"
-                        />
-                        <span>
-                          <strong>Juga baca Gmail, SMS &amp; WhatsApp</strong>{" "}
-                          (opsional — otomatis menyaring pesan yang berisi
-                          nominal Rupiah &amp; kata transaksi bank; cocok untuk
-                          uji cepat via WhatsApp atau SMS banking).
-                        </span>
-                      </label>
-
-                      {(nativeStatus.capturedCount > 0 ||
-                        nativeStatus.lastStatus ||
-                        nativeStatus.pendingCount > 0) && (
-                        <div className="rounded-xl border border-[#D6E6DC] bg-[#FFFFFF] px-3 py-2 text-[11px] text-[#57534E] space-y-0.5">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span>
-                              Tercatat otomatis dari HP:{" "}
-                              <strong className="text-[#14532D]">
-                                {nativeStatus.capturedCount} transaksi
-                              </strong>
-                            </span>
-                            {nativeStatus.pendingCount > 0 && (
-                              <span className="text-[#B45309] font-medium">
-                                Antre offline: {nativeStatus.pendingCount}
-                              </span>
-                            )}
-                          </div>
-                          {nativeStatus.lastStatus && (
-                            <p className="text-[11px] text-[#78716C]">
-                              Status terakhir: {nativeStatus.lastStatus}
-                              {nativeStatus.lastAt
-                                ? ` · ${nativeStatus.lastAt}`
-                                : ""}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : isAndroidApk && apkNeedsUpdate ? (
-                    <div className="rounded-2xl border border-[#FDE68A] bg-[#FEF3C7]/60 p-4 space-y-2.5 text-xs">
-                      <p className="font-semibold text-[#92400E]">
-                        Update APK ke v{LATEST_ANDROID_APP_RELEASE.versionName}{" "}
-                        untuk Auto-Catat Tanpa MacroDroid!
-                      </p>
-                      <p className="text-[#78350F] leading-relaxed">
-                        Versi terbaru APK ArusKas ({LATEST_ANDROID_APP_RELEASE.sizeLabel})
-                        kini membawa layanan pembaca notifikasi bank &amp;
-                        e-wallet bawaan — cukup 1 sakelar aktif tanpa perlu
-                        install MacroDroid lagi.
-                      </p>
-                      <a
-                        href={LATEST_ANDROID_APP_RELEASE.apkUrl}
-                        download="ArusKas.apk"
-                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#14532D] px-3.5 text-xs font-semibold text-[#FFFFFF] hover:bg-[#166534]"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>
-                          Download Update APK v{LATEST_ANDROID_APP_RELEASE.versionName}
-                        </span>
-                      </a>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-[#CBE0D2] bg-[#EFF6F1] p-4 space-y-2.5 text-xs">
-                      <p className="font-semibold text-[#14532D]">
-                        Cara Termudah di Android: Pakai APK ArusKas v
-                        {LATEST_ANDROID_APP_RELEASE.versionName} (Auto-Catat Bawaan)
-                      </p>
-                      <p className="text-[#166534] leading-relaxed">
-                        Pasang <strong>ArusKas.apk</strong> ({LATEST_ANDROID_APP_RELEASE.sizeLabel}),
-                        lalu buka halaman <strong>Integrasi Bank</strong> dari
-                        dalam aplikasi ArusKas untuk mengaktifkan pembaca
-                        notifikasi bank &amp; e-wallet bawaan{" "}
-                        <strong>tanpa perlu MacroDroid</strong>.
-                      </p>
-                      <a
-                        href={LATEST_ANDROID_APP_RELEASE.apkUrl}
-                        download="ArusKas.apk"
-                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#14532D] px-3.5 text-xs font-semibold text-[#FFFFFF] hover:bg-[#166534]"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>Download ArusKas.apk (Android)</span>
-                      </a>
-                    </div>
-                  )}
+                  <NativeAutoCatatCard
+                    nativeStatus={nativeStatus}
+                    nativeBusy={nativeBusy}
+                    isAndroidApk={isAndroidApk}
+                    apkNeedsUpdate={apkNeedsUpdate}
+                    canPickInstalledApps={canPickInstalledApps}
+                    onConnect={handleConnectNativeAutoCatat}
+                    onToggleEnabled={handleToggleNativeAutoCatat}
+                    onToggleIncludeExtra={handleToggleIncludeExtraApps}
+                    onRefreshNativeStatus={refreshNativeStatus}
+                  />
 
                   <details className="rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] px-3.5 py-2.5 text-xs text-[#57534E]">
                     <summary className="font-semibold text-[#44403C] cursor-pointer">
@@ -1685,21 +1029,21 @@ export function BcaIntegrationClient({
                         <strong>
                           {activeProviderMeta
                             ? activeProviderMeta.appName
-                            : "bank/e-wallet yang Anda pakai (Livin' Mandiri, BRImo, Wondr BNI, Bank Jago, SeaBank, GoPay, OVO, DANA, ShopeePay, myBCA, dll.)"}
+                            : "bank/e-wallet yang Anda pakai"}
                         </strong>
                         .
                       </li>
                       <li>
                         <strong>Action:</strong> <em>HTTP Request (POST)</em> ke{" "}
                         <code className="text-[#14532D]">{webhookUrl}</code>{" "}
-                        dengan Header <code>Authorization: Bearer [TOKEN]</code>{" "}
-                        (atau <code>X-ArusKas-Token</code>).
+                        dengan Header <code>Authorization: Bearer [TOKEN]</code>.
                       </li>
                       <li>
                         <strong>Content Body:</strong> pilih Content Type{" "}
                         <code>text/plain</code> lalu gunakan tombol Magic Text (
-                        <code>...</code>) → pilih <strong>Judul Notifikasi</strong>{" "}
-                        dan <strong>Teks Notifikasi</strong>.
+                        <code>...</code>) → pilih{" "}
+                        <strong>Judul Notifikasi</strong> dan{" "}
+                        <strong>Teks Notifikasi</strong>.
                       </li>
                     </ol>
                   </details>
@@ -1713,17 +1057,19 @@ export function BcaIntegrationClient({
                     <strong>Automation</strong> → buat automasi saat menerima{" "}
                     <strong>
                       Email dari{" "}
-                      {activeProvider ? activeProvider.label : "Bank / E-Wallet Anda"}
+                      {activeProvider
+                        ? activeProvider.label
+                        : "Bank / E-Wallet Anda"}
                     </strong>{" "}
-                    (atau pakai jalur Gmail Apps
-                    Script agar berjalan 100% di latar belakang tanpa konfirmasi
-                    iOS).
+                    (atau pakai jalur Gmail Apps Script agar berjalan 100% di
+                    latar belakang tanpa konfirmasi iOS).
                   </li>
                   <li>
                     Tambahkan aksi <strong>Get Contents of URL</strong> (Method{" "}
                     <code>POST</code>, Header{" "}
                     <code>Authorization: Bearer [TOKEN]</code>, JSON body berisi{" "}
-                    <code>text</code> dan <code>source: &quot;webhook_email&quot;</code>).
+                    <code>text</code> dan{" "}
+                    <code>source: &quot;webhook_email&quot;</code>).
                   </li>
                 </ol>
               )}
@@ -1815,7 +1161,9 @@ export function BcaIntegrationClient({
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#14532D]">
                       <CheckCircle2 className="h-4 w-4" />
                       Hasil Pembacaan Otomatis
-                      {simPreview.providerName ? ` · ${simPreview.providerName}` : ""}
+                      {simPreview.providerName
+                        ? ` · ${simPreview.providerName}`
+                        : ""}
                     </span>
                     <Badge
                       variant={
@@ -1880,377 +1228,20 @@ export function BcaIntegrationClient({
 
       {/* TAB 2: CSV IMPORT MUTASI BANK */}
       {tab === "csv" && (
-        <div className="space-y-6">
-          <Card className="p-5 sm:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="flex-1 max-w-md">
-                <Select
-                  label="Pilih Dompet Tujuan Impor CSV"
-                  value={csvWalletId}
-                  onChange={(e) => setCsvWalletId(e.target.value)}
-                >
-                  {wallets.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({formatIDR(w.balance)})
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2.5">
-                <label className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#14532D] px-4 text-sm font-medium text-[#FFFFFF] hover:bg-[#166534] transition-colors cursor-pointer">
-                  <Upload className="h-4 w-4" />
-                  <span>Upload CSV Mutasi Bank</span>
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={handleCsvFileUpload}
-                    className="hidden"
-                  />
-                </label>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  loading={csvBusy}
-                  onClick={() => {
-                    setCsvText(SAMPLE_BCA_CSV);
-                    void handlePreviewCsv(SAMPLE_BCA_CSV);
-                  }}
-                >
-                  <span>Muat Contoh Mutasi CSV</span>
-                </Button>
-              </div>
-            </div>
-
-            {csvMeta && (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#E7E2D8] bg-[#FAF8F4] px-4 py-2.5 text-xs text-[#57534E]">
-                {csvMeta.detectedPeriod && (
-                  <span>
-                    Periode: <strong className="text-[#1C1917]">{csvMeta.detectedPeriod}</strong>
-                  </span>
-                )}
-                <span>
-                  Terbaca: <strong className="tnum text-[#1C1917]">{csvPreviewRows.length}</strong> baris
-                </span>
-                {csvMeta.skippedPending > 0 && (
-                  <span className="text-[#B45309]">
-                    {csvMeta.skippedPending} baris PEND dilewati otomatis
-                  </span>
-                )}
-              </div>
-            )}
-
-            {csvPreviewRows.length > 0 && (
-              <div className="mt-5 space-y-4">
-                <div className="overflow-x-auto rounded-xl border border-[#E7E2D8]">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-[#FAF8F4] border-b border-[#E7E2D8] text-[#78716C]">
-                      <tr>
-                        <th className="px-3 py-2.5 w-9">Pilih</th>
-                        <th className="px-3 py-2.5">Tanggal</th>
-                        <th className="px-3 py-2.5">Keterangan</th>
-                        <th className="px-3 py-2.5">Kategori</th>
-                        <th className="px-3 py-2.5 text-right">Nominal</th>
-                        <th className="px-3 py-2.5 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#EFECE4]">
-                      {csvPreviewRows.map((row) => {
-                        const checked = csvSelectedHashes.has(row.dedupeHash);
-                        const matchingCats = csvCategories.filter(
-                          (c) => c.type === row.type
-                        );
-                        return (
-                          <tr
-                            key={row.dedupeHash}
-                            className={row.isDuplicate ? "bg-[#FAF8F4]/70 opacity-70" : "bg-[#FFFFFF]"}
-                          >
-                            <td className="px-3 py-2.5">
-                              <input
-                                type="checkbox"
-                                disabled={row.isDuplicate}
-                                checked={checked}
-                                onChange={(e) => {
-                                  const next = new Set(csvSelectedHashes);
-                                  if (e.target.checked) next.add(row.dedupeHash);
-                                  else next.delete(row.dedupeHash);
-                                  setCsvSelectedHashes(next);
-                                }}
-                                className="h-4 w-4 accent-[#14532D]"
-                              />
-                            </td>
-                            <td className="px-3 py-2.5 whitespace-nowrap tnum text-[#57534E]">
-                              {formatDateID(row.occurredAt)}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <p className="font-medium text-[#1C1917]">
-                                {row.title}
-                              </p>
-                              <p className="text-[11px] text-[#78716C]">
-                                {row.paymentMethod}
-                              </p>
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <select
-                                disabled={row.isDuplicate}
-                                value={
-                                  csvCategoryOverrides[row.dedupeHash] ??
-                                  row.suggestedCategoryId
-                                }
-                                onChange={(e) =>
-                                  setCsvCategoryOverrides((prev) => ({
-                                    ...prev,
-                                    [row.dedupeHash]: e.target.value,
-                                  }))
-                                }
-                                className="h-8 rounded-lg border border-[#E7E2D8] bg-[#FFFFFF] px-2 text-xs text-[#1C1917]"
-                              >
-                                {matchingCats.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td
-                              className={cn(
-                                "px-3 py-2.5 text-right whitespace-nowrap font-semibold tnum",
-                                row.type === "income"
-                                  ? "text-[#15803D]"
-                                  : "text-[#B91C1C]"
-                              )}
-                            >
-                              {formatIDR(
-                                row.type === "income"
-                                  ? row.amount
-                                  : -row.amount,
-                                { signed: true }
-                              )}
-                            </td>
-                            <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                              {row.isDuplicate ? (
-                                <Badge variant="warning">Duplikat</Badge>
-                              ) : (
-                                <Badge variant="inflow">Baru</Badge>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-[#57534E]">
-                    <strong className="tnum text-[#1C1917]">
-                      {csvSelectedHashes.size}
-                    </strong>{" "}
-                    transaksi baru siap diimpor ke dompet tujuan.
-                  </p>
-                  <Button
-                    type="button"
-                    loading={csvBusy}
-                    disabled={csvSelectedHashes.size === 0}
-                    onClick={handleCommitCsv}
-                  >
-                    <span>Impor {csvSelectedHashes.size} Transaksi Terpilih</span>
-                  </Button>
-                </div>
-              </div>
-            )}
-          </Card>
-        </div>
+        <CsvImportPanel
+          wallets={wallets}
+          defaultWalletId={defaultWalletId}
+          onImported={async () => {
+            triggerRefresh();
+            await refreshIntegrationState();
+          }}
+        />
       )}
 
       {/* TAB 3: SYNC LOGS */}
       {tab === "logs" && (
-        <Card className="p-5 sm:p-6">
-          <div className="flex items-center justify-between pb-4 border-b border-[#E7E2D8]">
-            <div>
-              <h2 className="text-base font-semibold text-[#1C1917]">
-                Riwayat Sinkronisasi Otomatis &amp; Impor CSV
-              </h2>
-              <p className="text-xs text-[#78716C] mt-0.5">
-                Menampilkan 25 aktivitas terakhir dari Webhook Email, Push HP,
-                Simulator, dan Impor CSV.
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={refreshIntegrationState}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Segarkan</span>
-            </Button>
-          </div>
-
-          {logs.length === 0 ? (
-            <div className="py-8">
-              <EmptyState
-                icon={<History className="h-5 w-5" />}
-                title="Belum ada riwayat sinkronisasi otomatis"
-                description="Coba jalankan Simulator Notifikasi atau Impor CSV Mutasi Bank untuk melihat catatan otomatis muncul di sini."
-              />
-            </div>
-          ) : (
-            <ul className="mt-4 divide-y divide-[#EFECE4]">
-              {logs.map((log) => (
-                <li
-                  key={log.id}
-                  className="flex flex-col gap-1.5 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          log.status === "imported"
-                            ? "inflow"
-                            : log.status === "duplicate"
-                              ? "warning"
-                              : "outflow"
-                        }
-                      >
-                        {log.status === "imported"
-                          ? "Tercatat"
-                          : log.status === "duplicate"
-                            ? "Duplikat Dilewati"
-                            : "Gagal"}
-                      </Badge>
-                      <span className="text-xs font-medium text-[#1C1917]">
-                        {log.walletName}
-                      </span>
-                      <span className="text-[11px] text-[#78716C]">
-                        ·{" "}
-                        {log.source === "webhook_email"
-                          ? "Webhook Email"
-                          : log.source === "webhook_push"
-                            ? "Webhook HP"
-                            : log.source === "csv_import"
-                              ? "Impor CSV"
-                              : "Simulator"}
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-[#57534E]">
-                      {log.rawSnippet}
-                    </p>
-                    {log.errorMessage && (
-                      <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#B91C1C]">
-                        <AlertCircle className="h-3 w-3 shrink-0" />
-                        <span>{log.errorMessage}</span>
-                      </p>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-[11px] text-[#78716C] tnum">
-                    {formatDateID(log.createdAt.slice(0, 10))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <SyncLogsPanel logs={logs} onRefresh={refreshIntegrationState} />
       )}
-
-      {/* Android Installed Apps Picker Modal */}
-      <Modal
-        open={appPickerOpen}
-        onClose={() => setAppPickerOpen(false)}
-        title="Pilih Aplikasi HP untuk Auto-Catat"
-        description="Hanya notifikasi transaksi dari aplikasi yang Anda centang di sini yang akan dibaca oleh ArusKas."
-        size="md"
-      >
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#78716C]" />
-            <Input
-              value={appSearch}
-              onChange={(e) => setAppSearch(e.target.value)}
-              placeholder="Cari aplikasi (misal: myBCA, GoPay, SeaBank, DANA)..."
-              className="pl-9"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={handleSelectRecommendedAppsOnly}
-                className="rounded-lg border border-[#CBE0D2] bg-[#EFF6F1] px-2.5 py-1 text-[11px] font-semibold text-[#14532D] hover:bg-[#DCFCE7] cursor-pointer"
-              >
-                Pilih Rekomendasi Bank/E-Wallet
-              </button>
-              <button
-                type="button"
-                onClick={handleResetAppsDefault}
-                className="rounded-lg border border-[#E7E2D8] bg-[#FAF8F4] px-2.5 py-1 text-[11px] font-medium text-[#57534E] hover:bg-[#EFECE4] cursor-pointer"
-              >
-                Reset ke Default
-              </button>
-            </div>
-            <span className="text-[11px] font-medium text-[#14532D]">
-              Terpilih: {selectedPickerCount}
-            </span>
-          </div>
-
-          <div className="max-h-72 overflow-y-auto divide-y divide-[#EFECE4] rounded-xl border border-[#E7E2D8] bg-[#FFFFFF]">
-            {filteredInstalledApps.length === 0 ? (
-              <p className="p-6 text-center text-xs text-[#78716C]">
-                Tidak ada aplikasi yang cocok dengan pencarian Anda.
-              </p>
-            ) : (
-              filteredInstalledApps.map((app) => (
-                <label
-                  key={app.packageName}
-                  className="flex items-center justify-between gap-3 px-3.5 py-2.5 hover:bg-[#FAF8F4] cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <input
-                      type="checkbox"
-                      checked={app.selected}
-                      onChange={() => handleToggleAppInPicker(app.packageName)}
-                      className="h-4 w-4 shrink-0 accent-[#14532D]"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs sm:text-sm font-medium text-[#1C1917]">
-                        {app.label}
-                      </p>
-                      <p className="truncate font-mono text-[10px] text-[#78716C]">
-                        {app.packageName}
-                      </p>
-                    </div>
-                  </div>
-                  {app.isRecommended && (
-                    <Badge variant="inflow" className="shrink-0 text-[10px]">
-                      Rekomendasi
-                    </Badge>
-                  )}
-                </label>
-              ))
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-[#E7E2D8]">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setAppPickerOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSaveAppPicker}
-            >
-              Simpan Pilihan ({selectedPickerCount})
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

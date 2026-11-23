@@ -28,6 +28,14 @@ const securityHeaders = [
     value: "none",
   },
   {
+    key: "X-DNS-Prefetch-Control",
+    value: "off",
+  },
+  {
+    key: "Cross-Origin-Resource-Policy",
+    value: "same-origin",
+  },
+  {
     key: "Accept-CH",
     value: "Sec-CH-UA-Model, Sec-CH-UA-Platform-Version",
   },
@@ -95,6 +103,10 @@ const nextConfig: NextConfig = {
             key: "Cache-Control",
             value: "public, max-age=3600",
           },
+          {
+            key: "Cross-Origin-Resource-Policy",
+            value: "cross-origin",
+          },
         ],
       },
       {
@@ -107,6 +119,10 @@ const nextConfig: NextConfig = {
           {
             key: "Content-Disposition",
             value: 'attachment; filename="ArusKas.apk"',
+          },
+          {
+            key: "Cross-Origin-Resource-Policy",
+            value: "cross-origin",
           },
         ],
       },
@@ -124,6 +140,10 @@ const nextConfig: NextConfig = {
           {
             key: "Cache-Control",
             value: "public, max-age=3600",
+          },
+          {
+            key: "Cross-Origin-Resource-Policy",
+            value: "cross-origin",
           },
         ],
       },

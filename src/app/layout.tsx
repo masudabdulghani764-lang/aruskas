@@ -3,6 +3,7 @@ import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppUpdateChecker } from "@/components/app-update-checker";
 import { PwaRegistrar } from "@/components/pwa-install-button";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -67,30 +68,33 @@ export default function RootLayout({
   return (
     <html
       lang="id"
+      suppressHydrationWarning
       className={`${newsreader.variable} ${plusJakartaSans.variable}`}
     >
       <body className="min-h-screen bg-cream-canvas text-[#1C1917] antialiased selection:bg-[#DCFCE7] selection:text-[#14532D]">
-        <PwaRegistrar />
-        <AppUpdateChecker />
-        {children}
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: "#FFFFFF",
-              border: "1px solid #E7E2D8",
-              color: "#1C1917",
-              borderRadius: "12px",
-              fontSize: "13px",
-              boxShadow: "0 4px 16px rgba(28, 25, 23, 0.06)",
-            },
-            classNames: {
-              success: "!border-[#BBF7D0] !text-[#14532D]",
-              error: "!border-[#FECACA] !text-[#B91C1C]",
-              warning: "!border-[#FDE68A] !text-[#B45309]",
-            },
-          }}
-        />
+        <ThemeProvider>
+          <PwaRegistrar />
+          <AppUpdateChecker />
+          {children}
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: "#FFFFFF",
+                border: "1px solid #E7E2D8",
+                color: "#1C1917",
+                borderRadius: "12px",
+                fontSize: "13px",
+                boxShadow: "0 4px 16px rgba(28, 25, 23, 0.06)",
+              },
+              classNames: {
+                success: "!border-[#BBF7D0] !text-[#14532D]",
+                error: "!border-[#FECACA] !text-[#B91C1C]",
+                warning: "!border-[#FDE68A] !text-[#B45309]",
+              },
+            }}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );
