@@ -314,18 +314,6 @@ export function AppShell({
                   );
                 })}
                 <Link
-                  href="/tagihan"
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150",
-                    pathname === "/tagihan" || pathname.startsWith("/tagihan/")
-                      ? "bg-[#EFECE4] text-[#14532D] font-semibold"
-                      : "text-[#57534E] hover:bg-[#EFECE4]/65 hover:text-[#1C1917]"
-                  )}
-                >
-                  <CalendarClock className="h-3.5 w-3.5 text-[#B45309]" />
-                  <span>Tagihan</span>
-                </Link>
-                <Link
                   href="/auto-bank"
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150",
@@ -348,34 +336,6 @@ export function AppShell({
                 label="Unduh APK"
                 className="hidden lg:inline-flex"
               />
-
-              <Link
-                href="/tagihan"
-                className={cn(
-                  "md:hidden inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors",
-                  pathname === "/tagihan" || pathname.startsWith("/tagihan/")
-                    ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF]"
-                    : "border-[#E3D4BA] bg-[#FAF0DD] text-[#14532D] hover:bg-[#EFECE4]"
-                )}
-              >
-                <CalendarClock className="h-3.5 w-3.5 text-[#B45309]" />
-                <span>Tagihan</span>
-              </Link>
-
-              <Link
-                href="/auto-bank"
-                className={cn(
-                  "md:hidden inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-colors",
-                  pathname === "/auto-bank" ||
-                    pathname.startsWith("/auto-bank/") ||
-                    pathname === "/integrasi-bca"
-                    ? "border-[#14532D] bg-[#14532D] text-[#FFFFFF]"
-                    : "border-[#E3D4BA] bg-[#FAF0DD] text-[#14532D] hover:bg-[#EFECE4]"
-                )}
-              >
-                <Landmark className="h-3.5 w-3.5 text-[#B45309]" />
-                <span>Bank</span>
-              </Link>
 
               <button
                 type="button"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeftRight,
   Calendar,
+  CalendarClock,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -681,7 +682,7 @@ export function BudgetsGoalsClient({
   return (
     <div className="space-y-10">
       {/* Page Title */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-[#78716C]">
             Perencanaan Keuangan
@@ -694,6 +695,26 @@ export function BudgetsGoalsClient({
             keluarga secara terukur.
           </p>
         </div>
+
+        <Link
+          href="/tagihan"
+          className="inline-flex items-center justify-between gap-3 rounded-xl border border-[#CBE0D2] bg-[#EFF6F1] px-4 py-2.5 text-sm transition-colors hover:bg-[#E2EFE6] sm:self-end"
+        >
+          <span className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14532D] text-[#FFFFFF]">
+              <CalendarClock className="h-4 w-4" />
+            </span>
+            <span>
+              <span className="block text-xs font-semibold text-[#14532D]">
+                Tagihan Bulanan
+              </span>
+              <span className="block text-[11px] text-[#57534E]">
+                Jadwal rutin, cicilan &amp; bayar 1 klik
+              </span>
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-[#14532D]" />
+        </Link>
       </div>
 
       {/* BAGIAN 1 — ANGGARAN BULANAN */}
