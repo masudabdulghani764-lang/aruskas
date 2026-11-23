@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 export {
   SUPPORTED_BANK_PROVIDERS,
   extractBcaDate,
+  extractTransactionReference,
   parseBcaAmount,
   parseBcaCsv,
   parseBcaNotification,

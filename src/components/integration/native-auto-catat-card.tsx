@@ -364,7 +364,10 @@ export function NativeAutoCatatCard({
             </div>
             <p className="text-[11px] text-[#78716C] mt-0.5">
               Pilih sendiri aplikasi bank / e-wallet dari HP Anda supaya notif
-              promo aplikasi lain tidak ikut tercatat.
+              promo tidak ikut tercatat. Jika memakai{" "}
+              <strong>myBCA &amp; BCA mobile</strong> sekaligus, cukup centang
+              salah satu (anti-duplikat lintas aplikasi juga aktif otomatis di
+              server).
             </p>
           </div>
 

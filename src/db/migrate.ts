@@ -163,6 +163,9 @@ export const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_bank_sync_logs_user_created
     ON bank_sync_logs(user_id, created_at DESC);
 
+  CREATE INDEX IF NOT EXISTS idx_bank_sync_logs_wallet_recent
+    ON bank_sync_logs(wallet_id, status, created_at DESC);
+
   CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_members_unique
     ON wallet_members(wallet_id, user_id);
 

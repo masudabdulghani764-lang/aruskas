@@ -10,7 +10,20 @@ export type ParsedBcaEntry = {
   dedupeKey: string;
   providerId?: string;
   providerName?: string;
+  referenceCode?: string | null;
+  counterparty?: string | null;
 };
+
+const REF_CODE_REGEX =
+  /(?:no\.?\s*ref(?:erensi)?|ref(?:erence)?|id\s*transaksi|trx\s*id)\s*[:#\-]?\s*([A-Za-z0-9_-]{5,40})/i;
+
+/**
+ * Extracts a normalized bank/e-wallet transaction reference code if present.
+ */
+export function extractTransactionReference(text: string): string | null {
+  const match = REF_CODE_REGEX.exec(text);
+  return match ? match[1].toUpperCase() : null;
+}
 
 export const SUPPORTED_BANK_PROVIDERS = [
   { id: "bca", label: "BCA / myBCA", kind: "bank" },
@@ -33,10 +46,13 @@ type DetectedProvider = {
   isEwallet: boolean;
 };
 
-function detectBankOrEwalletProvider(text: string): DetectedProvider {
+function matchBankOrEwalletProvider(text: string): DetectedProvider | null {
   const lower = text.toLowerCase();
   if (/\b(?:blu\s*by\s*bca|blubca|bluaccount)\b/i.test(lower)) {
     return { id: "blu", label: "blu", isEwallet: false };
+  }
+  if (/\b(?:mybca|bca\s*mobile|m-?bca|klikbca|bank\s*bca|\bbca\b)\b/i.test(lower)) {
+    return { id: "bca", label: "BCA", isEwallet: false };
   }
   if (/\b(?:livin|mandiri)\b/i.test(lower)) {
     return { id: "mandiri", label: "Mandiri", isEwallet: false };
@@ -68,7 +84,26 @@ function detectBankOrEwalletProvider(text: string): DetectedProvider {
   if (/\b(?:dana\s*id|saldo\s*dana|kirim\s*dana|bayar\s*(?:pakai|dengan|via)\s*dana|notifikasi\s*dana|\bdana\b(?=\s+(?:berhasil|qris|saldo|transfer)))\b/i.test(lower)) {
     return { id: "dana", label: "DANA", isEwallet: true };
   }
-  return { id: "bca", label: "BCA", isEwallet: false };
+  return null;
+}
+
+function detectBankOrEwalletProvider(
+  combinedText: string,
+  subject?: string
+): DetectedProvider {
+  if (subject?.trim()) {
+    const fromSubject = matchBankOrEwalletProvider(subject);
+    if (fromSubject) {
+      return fromSubject;
+    }
+  }
+  return (
+    matchBankOrEwalletProvider(combinedText) ?? {
+      id: "bca",
+      label: "BCA",
+      isEwallet: false,
+    }
+  );
 }
 
 export type ParsedBcaCsvResult = {
@@ -296,7 +331,7 @@ export function parseBcaNotification(
     return null;
   }
 
-  const provider = detectBankOrEwalletProvider(combined);
+  const provider = detectBankOrEwalletProvider(combined, opts?.subject);
 
   const incomePatterns = [
     /\b(?:menerima\s+transfer|transfer\s+masuk|dana\s+masuk|uang\s+masuk|saldo\s+masuk|bi-?fast\s+masuk|kredit|setoran\s+masuk|pemasukan|credit|kamu\s+terima|berhasil\s+masuk|terima\s+uang|transfer\s+diterima|diterima\s+dari|cashback|isi\s+saldo\s+berhasil|top\s*up\s+(?:saldo\s+)?berhasil(?:\s+masuk|\s+sebesar)?)\b/i,
@@ -404,13 +439,13 @@ export function parseBcaNotification(
 
   const occurredAt = extractBcaDate(combined, opts?.fallbackDate);
 
-  const refMatch = /(?:no\.?\s*ref(?:erensi)?|ref(?:erence)?|id\s*transaksi)\s*[:#\-]?\s*([A-Za-z0-9_-]{5,40})/i.exec(
-    combined
-  );
-  const dedupeKey = opts?.externalId?.trim()
-    ? `ext:${opts.externalId.trim()}`
-    : refMatch
-      ? `ref:${refMatch[1]}`
+  const referenceCode = extractTransactionReference(combined);
+  // Prioritize genuine bank reference codes over per-device externalId so
+  // sibling apps (e.g., myBCA + BCA mobile) with the same Ref always collapse.
+  const dedupeKey = referenceCode
+    ? `ref:${referenceCode}`
+    : opts?.externalId?.trim()
+      ? `ext:${opts.externalId.trim()}`
       : `notif:${provider.id}:${title}|${paymentMethod}`;
 
   const notes = `Otomatis dari notifikasi ${pLabel} — ${combined
@@ -427,6 +462,8 @@ export function parseBcaNotification(
     dedupeKey,
     providerId: provider.id,
     providerName: pLabel,
+    referenceCode,
+    counterparty: counterparty || null,
   };
 }
 

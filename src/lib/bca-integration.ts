@@ -1,14 +1,16 @@
 import crypto from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import type { AppDb } from "@/db";
 import {
   bankIntegrations,
   bankSyncLogs,
   categories,
+  transactions,
   wallets,
 } from "@/db/schema";
 import {
   buildBcaDedupeHash,
+  extractTransactionReference,
   parseBcaCsv,
   parseBcaNotification,
   suggestBcaCategoryId,
@@ -323,6 +325,159 @@ export async function rotateBcaWebhookToken(
   };
 }
 
+const REALTIME_DEDUPE_WINDOW_MS = 3 * 60 * 1000;
+
+const COUNTERPARTY_STOP_WORDS = new Set([
+  "pt",
+  "cv",
+  "tbk",
+  "ud",
+  "di",
+  "ke",
+  "dari",
+  "via",
+  "qris",
+  "bca",
+  "bri",
+  "bni",
+  "mandiri",
+  "bsi",
+  "id",
+  "indonesia",
+  "merchant",
+  "pembayaran",
+  "transfer",
+  "transaksi",
+  "keluar",
+  "masuk",
+  "dana",
+  "virtual",
+  "account",
+]);
+
+function detectNotificationOriginApp(
+  rawText: string,
+  source: "webhook_email" | "webhook_push" | "csv_import" | "simulator"
+): string | null {
+  if (source === "webhook_email") {
+    return "email";
+  }
+  const lower = rawText.toLowerCase();
+  if (/\bmybca\b/.test(lower)) return "mybca";
+  if (/\b(?:bca\s*mobile|m-?bca|mbca)\b/.test(lower)) return "bca_mobile";
+  if (/\b(?:blu\s*by\s*bca|blubca)\b/.test(lower)) return "blu";
+  if (/\blivin\b/.test(lower)) return "livin";
+  if (/\bwondr\b/.test(lower)) return "wondr";
+  if (/\bbni\s*mobile\b/.test(lower)) return "bni_mobile";
+  if (/\bbyond\b/.test(lower)) return "byond";
+  if (/\bbsi\s*mobile\b/.test(lower)) return "bsi_mobile";
+  if (/\bbrimo\b/.test(lower)) return "brimo";
+  if (/\bemail\s+notifikasi\b/.test(lower)) return "email";
+  if (/\bsms\s+notifikasi\b/.test(lower)) return "sms";
+  if (/\bwhatsapp\b/.test(lower)) return "whatsapp";
+  return null;
+}
+
+function extractComparableCounterparty(title: string): string | null {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+
+  // Generic titles without an extracted merchant/counterparty name
+  if (
+    /^(?:dana\s+masuk|pembayaran\s+qris|pembayaran\s+virtual\s+account|tarik\s+tunai\s*\/\s*debit|pembayaran\s+(?:gopay|shopeepay|ovo|dana)|transaksi\s+keluar)\b/i.test(
+      trimmed
+    )
+  ) {
+    return null;
+  }
+
+  const stripped = trimmed
+    .replace(
+      /^(?:transfer\s+masuk|qris|va|atm\/debit|gopay|shopeepay|ovo|dana)\s*[·:\-]\s*/i,
+      ""
+    )
+    .replace(/^transfer\s+ke\s+/i, "")
+    .trim();
+
+  return stripped.length >= 2 ? stripped : null;
+}
+
+function tokenizeCounterparty(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((tok) => tok.length >= 2 && !COUNTERPARTY_STOP_WORDS.has(tok));
+}
+
+function areCounterpartiesConflicting(
+  a: string | null,
+  b: string | null
+): boolean {
+  if (!a || !b) return false;
+  const normA = a.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const normB = b.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (!normA || !normB) return false;
+  if (normA === normB || normA.includes(normB) || normB.includes(normA)) {
+    return false;
+  }
+  const tokensA = tokenizeCounterparty(a);
+  const tokensB = tokenizeCounterparty(b);
+  if (tokensA.length === 0 || tokensB.length === 0) {
+    return false;
+  }
+  const setB = new Set(tokensB);
+  const hasOverlap = tokensA.some((t) => setB.has(t));
+  return !hasOverlap;
+}
+
+function isRealtimeCrossAppDuplicate(
+  incoming: {
+    source: "webhook_email" | "webhook_push";
+    rawSnippet: string;
+    referenceCode: string | null;
+    counterparty: string | null;
+  },
+  existing: {
+    source: "webhook_email" | "webhook_push" | "csv_import" | "simulator";
+    rawSnippet: string;
+    title: string;
+  }
+): boolean {
+  const existingRef = extractTransactionReference(existing.rawSnippet);
+  if (incoming.referenceCode && existingRef) {
+    // Same bank reference -> guaranteed duplicate; different bank references -> guaranteed distinct transactions
+    return incoming.referenceCode === existingRef;
+  }
+
+  const incomingOrigin = detectNotificationOriginApp(
+    incoming.rawSnippet,
+    incoming.source
+  );
+  const existingOrigin = detectNotificationOriginApp(
+    existing.rawSnippet,
+    existing.source
+  );
+  const isDifferentChannelOrSiblingApp =
+    incoming.source !== existing.source ||
+    (incomingOrigin !== null &&
+      existingOrigin !== null &&
+      incomingOrigin !== existingOrigin);
+
+  // Two sibling apps (e.g. myBCA + BCA mobile) or Push + Email reporting the exact
+  // same wallet + amount + type + date within 3 minutes without conflicting Ref codes
+  if (isDifferentChannelOrSiblingApp) {
+    return true;
+  }
+
+  // Same app within 3 minutes: deduplicate unless both explicitly name two unrelated counterparties
+  const existingCounterparty = extractComparableCounterparty(existing.title);
+  return !areCounterpartiesConflicting(
+    incoming.counterparty,
+    existingCounterparty
+  );
+}
+
 function isDedupeUniqueError(err: unknown): boolean {
   return (
     isPgUniqueViolation(err, "idx_bank_sync_dedupe") ||
@@ -386,10 +541,22 @@ async function recordParsedEntryForWallet(
   }
 
   const dedupeHash = buildBcaDedupeHash(params.walletId, params.entry);
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
   const snippet = params.rawSnippet.replace(/\s+/g, " ").trim().slice(0, 220);
+  const isRealtimeWebhook =
+    params.source === "webhook_push" || params.source === "webhook_email";
 
   return db.transaction(async (tx) => {
+    // Serialize concurrent webhook deliveries for the same wallet (e.g., myBCA + BCA mobile firing simultaneously)
+    if (isRealtimeWebhook) {
+      await tx
+        .select({ id: wallets.id })
+        .from(wallets)
+        .where(eq(wallets.id, params.walletId))
+        .for("update");
+    }
+
     const [existingDup] = await tx
       .select({ id: bankSyncLogs.id })
       .from(bankSyncLogs)
@@ -420,6 +587,80 @@ async function recordParsedEntryForWallet(
         status: "duplicate" as const,
         message: "Transaksi serupa sudah pernah tercatat sebelumnya.",
       };
+    }
+
+    // Cross-app & cross-channel semantic deduplication for real-time webhooks
+    // Prevents double-recording when e.g. myBCA + BCA mobile (or Push + Email) both alert for one transaction
+    if (isRealtimeWebhook) {
+      const cutoffIso = new Date(
+        nowDate.getTime() - REALTIME_DEDUPE_WINDOW_MS
+      ).toISOString();
+      const recentCandidates = await tx
+        .select({
+          logId: bankSyncLogs.id,
+          source: bankSyncLogs.source,
+          rawSnippet: bankSyncLogs.rawSnippet,
+          txTitle: transactions.title,
+        })
+        .from(bankSyncLogs)
+        .innerJoin(transactions, eq(transactions.id, bankSyncLogs.transactionId))
+        .where(
+          and(
+            eq(bankSyncLogs.walletId, params.walletId),
+            eq(bankSyncLogs.status, "imported"),
+            inArray(bankSyncLogs.source, ["webhook_push", "webhook_email"]),
+            gte(bankSyncLogs.createdAt, cutoffIso),
+            eq(transactions.type, params.entry.type),
+            eq(transactions.amount, params.entry.amount),
+            eq(transactions.occurredAt, params.entry.occurredAt)
+          )
+        )
+        .orderBy(desc(bankSyncLogs.createdAt))
+        .limit(5);
+
+      const incomingRef =
+        params.entry.referenceCode ??
+        extractTransactionReference(params.rawSnippet);
+      const incomingCounterparty =
+        params.entry.counterparty ??
+        extractComparableCounterparty(params.entry.title);
+
+      const matchedRecent = recentCandidates.find((candidate) =>
+        isRealtimeCrossAppDuplicate(
+          {
+            source: params.source as "webhook_email" | "webhook_push",
+            rawSnippet: params.rawSnippet,
+            referenceCode: incomingRef,
+            counterparty: incomingCounterparty,
+          },
+          {
+            source: candidate.source,
+            rawSnippet: candidate.rawSnippet,
+            title: candidate.txTitle,
+          }
+        )
+      );
+
+      if (matchedRecent) {
+        const formattedAmt = params.entry.amount.toLocaleString("id-ID");
+        await tx.insert(bankSyncLogs).values({
+          id: crypto.randomUUID(),
+          userId: params.userId,
+          integrationId: params.integrationId,
+          walletId: params.walletId,
+          source: params.source,
+          dedupeHash,
+          transactionId: null,
+          status: "duplicate",
+          rawSnippet: snippet,
+          errorMessage: `Duplikat lintas-aplikasi/notifikasi dilewati (transaksi Rp ${formattedAmt} baru saja tercatat).`,
+          createdAt: now,
+        });
+        return {
+          status: "duplicate" as const,
+          message: `Notifikasi duplikat lintas-aplikasi dilewati (transaksi Rp ${formattedAmt} sudah tercatat).`,
+        };
+      }
     }
 
     const createdTx = await insertTransactionInExecutor(

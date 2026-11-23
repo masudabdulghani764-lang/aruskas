@@ -396,4 +396,141 @@ describe("BCA Webhook Auto-Record & CSV Import Service", () => {
       }
     }
   });
+
+  test("deduplicates sibling bank app notifications (myBCA + BCA mobile, concurrent & push+email) while allowing genuinely distinct Ref IDs or recipients", async () => {
+    const { db, close } = await createDb(":memory:");
+    try {
+      const { user } = await registerUser(db, {
+        name: "Raka",
+        email: "raka-dedupe@aruskas.test",
+        password: "Password123!",
+      });
+      const bcaWallet = await createWallet(db, user.id, {
+        name: "BCA Utama",
+        type: "bank",
+        initialBalance: 1_000_000,
+      });
+      const gopayWallet = await createWallet(db, user.id, {
+        name: "GoPay",
+        type: "ewallet",
+        initialBalance: 200_000,
+      });
+
+      const setup = await upsertBcaIntegration(db, user.id, {
+        walletId: bcaWallet.id,
+        isActive: true,
+        autoCategorize: true,
+        providerWalletMap: {
+          bca: bcaWallet.id,
+          gopay: gopayWallet.id,
+        },
+      });
+      const token = setup.rawToken!;
+
+      // 1. Exact reported bug: Rp 17.000 transaction triggers BOTH myBCA & BCA mobile with different wording and different Android externalIds
+      const myBcaRes = await ingestBcaNotificationByToken(db, token, {
+        subject: "myBCA - Transaksi Berhasil",
+        text: "Pembayaran QRIS di WARUNG MAKAN BU ANI sebesar Rp 17.000,00 pada 23/11/2026 berhasil.",
+        source: "webhook_push",
+        externalId: "and_mybca_17k_001",
+      });
+      expect(myBcaRes.status).toBe("imported");
+
+      const bcaMobileRes = await ingestBcaNotificationByToken(db, token, {
+        subject: "BCA mobile - m-BCA",
+        text: "Transaksi QRIS BCA sebesar IDR 17,000.00 pada 23/11/2026 telah berhasil diproses.",
+        source: "webhook_push",
+        externalId: "and_bcamobile_17k_002",
+      });
+      expect(bcaMobileRes.status).toBe("duplicate");
+
+      // 2. Email alert arriving for the same Rp 17.000 transaction is also deduplicated
+      const emailRes = await ingestBcaNotificationByToken(db, token, {
+        subject: "Notifikasi Transaksi BCA",
+        text: "Pembayaran QRIS sebesar Rp 17.000,00 pada 23/11/2026 berhasil.",
+        source: "webhook_email",
+      });
+      expect(emailRes.status).toBe("duplicate");
+
+      // 3. Simultaneous race condition (Promise.all): myBCA + BCA mobile hit server at the exact same instant for Rp 25.000
+      const [race1, race2] = await Promise.all([
+        ingestBcaNotificationByToken(db, token, {
+          subject: "myBCA - Transaksi Berhasil",
+          text: "Top Up GoPay sebesar Rp 25.000,00 pada 23/11/2026 berhasil.",
+          source: "webhook_push",
+          externalId: "and_race_mybca_25k",
+        }),
+        ingestBcaNotificationByToken(db, token, {
+          subject: "BCA mobile - m-BCA",
+          text: "Pembayaran BCA Virtual Account 7000108123 sebesar IDR 25,000.00 pada 23/11/2026 berhasil.",
+          source: "webhook_push",
+          externalId: "and_race_mbca_25k",
+        }),
+      ]);
+      const raceStatuses = [race1.status, race2.status].sort();
+      expect(raceStatuses).toEqual(["duplicate", "imported"]);
+
+      // Both Top Up GoPay from myBCA & BCA VA must route to BCA wallet (not GoPay!)
+      const gopayAfter = (await listUserWallets(db, user.id)).find(
+        (w) => w.id === gopayWallet.id
+      )!;
+      expect(gopayAfter.balance).toBe(200_000);
+
+      // 4. Same Ref ID across different externalIds always deduplicates
+      const sameRef1 = await ingestBcaNotificationByToken(db, token, {
+        subject: "myBCA",
+        text: "Pembayaran QRIS di ALFAMART Rp 30.000 pada 23/11/2026 No. Ref: BCA998877",
+        source: "webhook_push",
+        externalId: "and_ref_a",
+      });
+      const sameRef2 = await ingestBcaNotificationByToken(db, token, {
+        subject: "BCA mobile",
+        text: "Pembayaran berhasil Rp 30.000 pada 23/11/2026 Ref: bca998877",
+        source: "webhook_push",
+        externalId: "and_ref_b",
+      });
+      expect(sameRef1.status).toBe("imported");
+      expect(sameRef2.status).toBe("duplicate");
+
+      // 5. Two genuinely distinct transactions with DIFFERENT explicit Ref IDs are BOTH recorded
+      const distinctRef1 = await ingestBcaNotificationByToken(db, token, {
+        subject: "myBCA",
+        text: "Pembayaran QRIS di INDOMARET Rp 12.000 pada 23/11/2026 Ref: TRX11111",
+        source: "webhook_push",
+        externalId: "and_dist_1",
+      });
+      const distinctRef2 = await ingestBcaNotificationByToken(db, token, {
+        subject: "myBCA",
+        text: "Pembayaran QRIS di INDOMARET Rp 12.000 pada 23/11/2026 Ref: TRX22222",
+        source: "webhook_push",
+        externalId: "and_dist_2",
+      });
+      expect(distinctRef1.status).toBe("imported");
+      expect(distinctRef2.status).toBe("imported");
+
+      // 6. Two genuinely distinct transfers from the SAME app to two different recipients without Ref are BOTH recorded
+      const diffRecip1 = await ingestBcaNotificationByToken(db, token, {
+        subject: "myBCA",
+        text: "Transfer ke BUDI SANTOSO sebesar Rp 50.000 pada 23/11/2026 berhasil.",
+        source: "webhook_push",
+        externalId: "and_recip_1",
+      });
+      const diffRecip2 = await ingestBcaNotificationByToken(db, token, {
+        subject: "myBCA",
+        text: "Transfer ke SITI RAHMA sebesar Rp 50.000 pada 23/11/2026 berhasil.",
+        source: "webhook_push",
+        externalId: "and_recip_2",
+      });
+      expect(diffRecip1.status).toBe("imported");
+      expect(diffRecip2.status).toBe("imported");
+
+      // Final exact balance: 1_000_000 - 17_000 - 25_000 - 30_000 - 12_000 - 12_000 - 50_000 - 50_000 = 804_000
+      const bcaAfter = (await listUserWallets(db, user.id)).find(
+        (w) => w.id === bcaWallet.id
+      )!;
+      expect(bcaAfter.balance).toBe(804_000);
+    } finally {
+      await close();
+    }
+  });
 });
