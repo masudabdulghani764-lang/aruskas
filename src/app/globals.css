@@ -203,12 +203,14 @@ html.dark .aruskas-splash--exit .aruskas-splash-wave-2 {
   );
 }
 
-.bg-\[\#F7F5F0\] {
-  background-color: #F6EAD4;
-}
+@layer utilities {
+  .bg-\[\#F7F5F0\] {
+    background-color: #F6EAD4;
+  }
 
-.bg-\[\#FAF8F4\] {
-  background-color: #FAF1E0;
+  .bg-\[\#FAF8F4\] {
+    background-color: #FAF1E0;
+  }
 }
 
 .tnum {
@@ -257,20 +259,20 @@ html.dark .bg-\[\#FFFFFF\]\/95 {
   background-color: #131F18 !important;
 }
 
-html.dark .bg-\[\#FAF8F4\],
-html.dark .bg-\[\#FAF8F4\]\/70,
-html.dark .bg-\[\#F7F5F0\],
+html.dark .bg-\[\#FAF8F4\]:not(:hover),
+html.dark .bg-\[\#FAF8F4\]\/70:not(:hover),
+html.dark .bg-\[\#F7F5F0\]:not(:hover),
 html.dark .bg-\[\#F7F5F0\]\/50,
 html.dark .bg-\[\#F7F5F0\]\/60,
 html.dark .bg-\[\#F7F5F0\]\/70,
-html.dark .bg-\[\#EFECE4\],
+html.dark .bg-\[\#EFECE4\]:not(:hover),
 html.dark .bg-\[\#EFECE4\]\/40,
 html.dark .bg-\[\#EFECE4\]\/65,
 html.dark .bg-\[\#EFECE4\]\/70,
-html.dark .bg-\[\#FAF1E0\],
+html.dark .bg-\[\#FAF1E0\]:not(:hover),
 html.dark .bg-\[\#FAF1E0\]\/55,
-html.dark .bg-\[\#FDF8EE\],
-html.dark .bg-\[\#FAF0DD\],
+html.dark .bg-\[\#FDF8EE\]:not(:hover),
+html.dark .bg-\[\#FAF0DD\]:not(:hover),
 html.dark .bg-\[\#E3D4BA\]\/70,
 html.dark .bg-\[\#E3D4BA\]\/80 {
   background-color: #19281F !important;

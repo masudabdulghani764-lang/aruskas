@@ -706,7 +706,7 @@ export default async function LandingPage() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Instagram @_ud_ag"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#D4CBB9] bg-[#FAF8F4] px-3 py-1.5 text-xs font-semibold text-[#1C1917] transition-colors hover:border-[#14532D] hover:bg-[#14532D] hover:text-[#FFFFFF]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#D4CBB9] bg-[#FAF8F4] px-3 py-1.5 text-xs font-semibold text-[#1C1917] transition-colors hover:border-[#14532D] hover:bg-[#14532D] hover:text-[#FFFFFF] dark:hover:border-[#1E7A45] dark:hover:bg-[#1E7A45] dark:hover:text-[#FFFFFF]"
             >
               <Instagram className="h-3.5 w-3.5" />
               <span>@_ud_ag</span>
