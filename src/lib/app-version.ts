@@ -56,14 +56,14 @@ export interface AndroidAppRelease {
 }
 
 export const LATEST_ANDROID_APP_RELEASE: AndroidAppRelease = {
-  versionName: "1.0.9",
-  versionCode: 10,
+  versionName: "1.0.10",
+  versionCode: 11,
   apkUrl: "/downloads/ArusKas.apk",
-  sizeLabel: "218 KB",
+  sizeLabel: "222 KB",
   highlights: [
-    "Enkripsi hardware AndroidKeyStore (AES-256-GCM) untuk menyimpan token Auto-Catat di HP",
-    "Sinkronisasi otomatis status bar saat Dark Mode aktif + arsitektur native modular",
-    "Pemilih Aplikasi HP + filter anti-promo Rp 1 Gojek/Shopee tetap aktif & ringan",
+    "Animasi masuk baru: garis logo murni tanpa teks & tanpa kotak — latar hijau menyatu ke garis lalu keluar satu per satu",
+    "Anti-duplikat lintas aplikasi bank (myBCA + BCA mobile tidak lagi dobel catat) + penghitung notifikasi akurat",
+    "Enkripsi hardware AndroidKeyStore (AES-256-GCM) & sinkronisasi status bar Dark Mode tetap aktif",
   ],
 };
 

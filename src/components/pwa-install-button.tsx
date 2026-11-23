@@ -248,7 +248,7 @@ function InstallGuideModal({
           <span>Android (File APK Resmi)</span>
         </p>
         <span className="rounded-full bg-[#14532D] px-2 py-0.5 text-[10px] font-semibold text-[#FAF0DD]">
-          218 KB
+          222 KB
         </span>
       </div>
       <p className="text-xs text-[#166534] leading-relaxed">
@@ -259,7 +259,7 @@ function InstallGuideModal({
       <a
         href={APK_DOWNLOAD_PATH}
         download="ArusKas.apk"
-        onClick={() => toast.success("Mengunduh ArusKas.apk (218 KB)...")}
+        onClick={() => toast.success("Mengunduh ArusKas.apk (222 KB)...")}
         className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#14532D] px-4 text-xs sm:text-sm font-semibold text-[#FFFFFF] transition-colors hover:bg-[#166534]"
       >
         <Download className="h-4 w-4" />
@@ -361,7 +361,7 @@ export function PwaInstallButton({
             download="ArusKas.apk"
             onClick={() => {
               onAfterClick?.();
-              toast.success("Mengunduh ArusKas.apk (218 KB)...");
+              toast.success("Mengunduh ArusKas.apk (222 KB)...");
             }}
             className={cn(
               "inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#D4A045] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3 text-xs font-bold text-[#0D2E1D] shadow-2xs transition-colors hover:from-[#F9DF9F] hover:to-[#ECC57C] cursor-pointer",
@@ -398,7 +398,7 @@ export function PwaInstallButton({
           download="ArusKas.apk"
           onClick={() => {
             onAfterClick?.();
-            toast.success("Mengunduh ArusKas.apk (218 KB)...");
+            toast.success("Mengunduh ArusKas.apk (222 KB)...");
           }}
           className={cn(
             "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors cursor-pointer",
@@ -461,7 +461,7 @@ export function PwaInstallShowcaseCard() {
                   <span>Aplikasi Android (.APK) &amp; iPhone</span>
                 </div>
                 <h2 className="font-display text-xl sm:text-2xl font-medium text-[#FFFFFF] leading-snug">
-                  Download Aplikasi ArusKas — Android (218 KB) &amp; iPhone (34 KB)
+                  Download Aplikasi ArusKas — Android (222 KB) &amp; iPhone (34 KB)
                 </h2>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#D6EAE0]">
                   <span className="inline-flex items-center gap-1">
@@ -486,7 +486,7 @@ export function PwaInstallShowcaseCard() {
                 download="ArusKas.apk"
                 onClick={() =>
                   toast.success(
-                    "Mengunduh ArusKas.apk (218 KB) — ketuk file selesai unduh untuk menginstal!"
+                    "Mengunduh ArusKas.apk (222 KB) — ketuk file selesai unduh untuk menginstal!"
                   )
                 }
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] via-[#E9BC66] to-[#DDA444] px-6 text-sm font-bold text-[#0D2E1D] shadow-sm transition-colors hover:from-[#FAE3A6] hover:to-[#E8B85C] cursor-pointer"
@@ -561,7 +561,7 @@ export function PwaInstallBanner() {
                   : "Download Aplikasi Android ArusKas (.APK)"}
               </span>
               <span className="hidden sm:inline-flex rounded-full bg-[#E5B869]/20 px-2 py-0.5 text-[10px] font-semibold text-[#F5D284]">
-                {isIos ? "34 KB" : "218 KB"}
+                {isIos ? "34 KB" : "222 KB"}
               </span>
             </p>
             <p className="text-[11px] sm:text-xs text-[#C6DDD0]">
@@ -585,7 +585,7 @@ export function PwaInstallBanner() {
             <a
               href={APK_DOWNLOAD_PATH}
               download="ArusKas.apk"
-              onClick={() => toast.success("Mengunduh ArusKas.apk (218 KB)...")}
+              onClick={() => toast.success("Mengunduh ArusKas.apk (222 KB)...")}
               className="inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 rounded-full border border-[#F5D284] bg-gradient-to-r from-[#F6D58E] to-[#E5B869] px-3.5 text-xs font-bold text-[#0D2E1D] transition-colors hover:from-[#FAE3A6] hover:to-[#ECC57C] cursor-pointer"
             >
               <Download className="h-3.5 w-3.5" />
