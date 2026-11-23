@@ -7,7 +7,9 @@ type SplashPhase = "hidden" | "loading" | "absorb" | "exit";
 const SPLASH_SESSION_KEY = "aruskas_splash_seen_v2";
 
 /**
- * Pure logo-only launch splash for Web & iPhone PWA:
+ * Pure logo-only launch splash for installed iPhone / PWA standalone apps:
+ * - Skipped on regular desktop/mobile web browsers (instant page load)
+ * - Skipped inside Android APK (uses native hardware-accelerated splash)
  * 1. Continuous liquid wave flow (no text, no box)
  * 2. Full emerald backdrop absorbs radially into the two wave lines
  * 3. Staggered 1-by-1 exit: upper emerald wave glides out first, lower gold wave second
@@ -21,6 +23,21 @@ export function AppSplashScreen() {
     // Android APK runs its own synchronized hardware-accelerated native splash
     const ua = window.navigator.userAgent || "";
     if (ua.includes("ArusKasApp/")) {
+      return;
+    }
+
+    // Only show launch splash when opened as an installed Home Screen app (iPhone/PWA standalone)
+    let isStandaloneApp = false;
+    try {
+      isStandaloneApp =
+        (window.navigator as Navigator & { standalone?: boolean }).standalone ===
+          true ||
+        (typeof window.matchMedia === "function" &&
+          window.matchMedia("(display-mode: standalone)").matches);
+    } catch {
+      isStandaloneApp = false;
+    }
+    if (!isStandaloneApp) {
       return;
     }
 
