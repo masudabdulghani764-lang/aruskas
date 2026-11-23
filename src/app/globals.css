@@ -70,6 +70,127 @@ html.dark {
   }
 }
 
+/* ============================================================================
+ * ARUSKAS PURE WAVE-LINE LAUNCH SPLASH (Zero Text, Zero Box, 1-by-1 Exit)
+ * ============================================================================ */
+@keyframes aruskasWaveLiquidFlow {
+  0% {
+    stroke-dashoffset: 760;
+  }
+  44% {
+    stroke-dashoffset: 0;
+  }
+  66% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -760;
+  }
+}
+
+.aruskas-splash-backdrop {
+  background:
+    radial-gradient(
+      circle at 26% 24%,
+      rgba(34, 122, 72, 0.48) 0%,
+      rgba(34, 122, 72, 0) 64%
+    ),
+    linear-gradient(145deg, #165b33 0%, #104225 52%, #0b2919 100%);
+  clip-path: circle(120% at 50% 50%);
+  will-change: clip-path, opacity;
+}
+
+.aruskas-splash-wave {
+  stroke-dasharray: 760;
+  stroke-dashoffset: 0;
+  transition: stroke 380ms ease;
+}
+
+.aruskas-splash-wave-1 {
+  stroke: #faf6ee;
+}
+
+.aruskas-splash-wave-2 {
+  stroke: #e8bc68;
+}
+
+.aruskas-splash-group-1,
+.aruskas-splash-group-2 {
+  will-change: transform, opacity;
+}
+
+/* Phase 1: Loading continuous liquid wave flow */
+.aruskas-splash--loading .aruskas-splash-wave-1 {
+  animation: aruskasWaveLiquidFlow 1.45s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+
+.aruskas-splash--loading .aruskas-splash-wave-2 {
+  animation: aruskasWaveLiquidFlow 1.45s cubic-bezier(0.45, 0, 0.25, 1) 0.18s infinite;
+}
+
+/* Phase 2: Full green screen absorbs radially straight into the two wave lines */
+.aruskas-splash--absorb .aruskas-splash-backdrop,
+.aruskas-splash--exit .aruskas-splash-backdrop {
+  clip-path: circle(0% at 50% 50%);
+  opacity: 0;
+  transition:
+    clip-path 460ms cubic-bezier(0.32, 0, 0.18, 1),
+    opacity 400ms ease 60ms;
+}
+
+.aruskas-splash--absorb .aruskas-splash-wave-1,
+.aruskas-splash--exit .aruskas-splash-wave-1 {
+  stroke: #14532d;
+}
+
+html.dark .aruskas-splash--absorb .aruskas-splash-wave-1,
+html.dark .aruskas-splash--exit .aruskas-splash-wave-1 {
+  stroke: #34d399;
+}
+
+.aruskas-splash--absorb .aruskas-splash-wave-2,
+.aruskas-splash--exit .aruskas-splash-wave-2 {
+  stroke: #d4a045;
+}
+
+html.dark .aruskas-splash--absorb .aruskas-splash-wave-2,
+html.dark .aruskas-splash--exit .aruskas-splash-wave-2 {
+  stroke: #e8bc68;
+}
+
+.aruskas-splash--absorb .aruskas-splash-svg {
+  transform: scale(1.06);
+  filter: drop-shadow(0 8px 18px rgba(20, 83, 45, 0.2));
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), filter 380ms ease;
+}
+
+/* Phase 3: Staggered 1-by-1 exit (Wave 1 first, then Wave 2) */
+.aruskas-splash--exit .aruskas-splash-group-1 {
+  transform: translateX(260px);
+  opacity: 0;
+  transition:
+    transform 340ms cubic-bezier(0.55, 0.02, 0.22, 1) 0ms,
+    opacity 260ms ease 80ms;
+}
+
+.aruskas-splash--exit .aruskas-splash-wave-1 {
+  stroke-dashoffset: -760;
+  transition: stroke-dashoffset 340ms cubic-bezier(0.55, 0.02, 0.22, 1) 0ms;
+}
+
+.aruskas-splash--exit .aruskas-splash-group-2 {
+  transform: translateX(260px);
+  opacity: 0;
+  transition:
+    transform 360ms cubic-bezier(0.55, 0.02, 0.22, 1) 200ms,
+    opacity 260ms ease 280ms;
+}
+
+.aruskas-splash--exit .aruskas-splash-wave-2 {
+  stroke-dashoffset: -760;
+  transition: stroke-dashoffset 360ms cubic-bezier(0.55, 0.02, 0.22, 1) 200ms;
+}
+
 /* GPU-friendly single-layer warm Cream-to-White canvas */
 .bg-cream-canvas {
   background-color: #F5E9D3;

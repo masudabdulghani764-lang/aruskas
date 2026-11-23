@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
+import { AppSplashScreen } from "@/components/app-splash-screen";
 import { AppUpdateChecker } from "@/components/app-update-checker";
 import { PwaRegistrar } from "@/components/pwa-install-button";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -74,6 +75,7 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-cream-canvas text-[#1C1917] antialiased selection:bg-[#DCFCE7] selection:text-[#14532D]">
         <ThemeProvider>
+          <AppSplashScreen />
           <PwaRegistrar />
           <AppUpdateChecker />
           {children}
