@@ -443,73 +443,105 @@ export async function getDashboardSummary(
   const monthStartIso = `${month}-01`;
   const monthEndIso = `${month}-31`;
 
-  const [
-    monthlyRows,
-    priorMovement,
-    currentMonthRows,
-    monthlyBudgets,
-    recentTxRes,
-    dueRecurring,
-    allRecurringRules,
-    pendingInvites,
-  ] = await Promise.all([
+  type MonthlyAggRow = { month: string; income: number; expense: number };
+  type WalletMovementRow = {
+    type: "income" | "expense" | "transfer";
+    walletId: string;
+    targetWalletId: string | null;
+    amount: number;
+  };
+
+  const monthlyRowsPromise: Promise<MonthlyAggRow[]> =
     activeWalletIds.length > 0
       ? db
-          .select({
-            month: sql<string>`substr(${transactions.occurredAt}, 1, 7)`,
-            income: sql<number>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
-            expense: sql<number>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
-          })
-          .from(transactions)
-          .where(
-            and(
-              inArray(transactions.walletId, activeWalletIds),
-              inArray(transactions.type, ["income", "expense"]),
-              gte(transactions.occurredAt, `${oldestMonth}-01`),
-              lte(transactions.occurredAt, monthEndIso)
-            )
+        .select({
+          month: sql<string>`substr(${transactions.occurredAt}, 1, 7)`,
+          income: sql<number>`coalesce(sum(case when ${transactions.type} = 'income' then ${transactions.amount} else 0 end), 0)`,
+          expense: sql<number>`coalesce(sum(case when ${transactions.type} = 'expense' then ${transactions.amount} else 0 end), 0)`,
+        })
+        .from(transactions)
+        .where(
+          and(
+            inArray(transactions.walletId, activeWalletIds),
+            inArray(transactions.type, ["income", "expense"]),
+            gte(transactions.occurredAt, `${oldestMonth}-01`),
+            lte(transactions.occurredAt, monthEndIso)
           )
-          .groupBy(sql`substr(${transactions.occurredAt}, 1, 7)`)
-      : Promise.resolve([]),
+        )
+        .groupBy(sql`substr(${transactions.occurredAt}, 1, 7)`)
+          .then((rows) =>
+            rows.map((r) => ({
+              month: r.month,
+              income: Number(r.income),
+              expense: Number(r.expense),
+            }))
+          )
+      : Promise.resolve<MonthlyAggRow[]>([]);
+
+  const priorMovementPromise: Promise<number> =
     activeWalletIds.length > 0
       ? getPriorMovementForWalletSet(
-          db,
-          activeWalletIds,
-          activeSet,
-          monthStartIso
-        )
-      : Promise.resolve(0),
+        db,
+        activeWalletIds,
+        activeSet,
+        monthStartIso
+      )
+      : Promise.resolve(0);
+
+  const currentMonthRowsPromise: Promise<WalletMovementRow[]> =
     activeWalletIds.length > 0
       ? db
-          .select({
-            type: transactions.type,
-            walletId: transactions.walletId,
-            targetWalletId: transactions.targetWalletId,
-            amount: transactions.amount,
-          })
-          .from(transactions)
-          .where(
-            and(
-              gte(transactions.occurredAt, monthStartIso),
-              lte(transactions.occurredAt, monthEndIso),
-              or(
-                inArray(transactions.walletId, activeWalletIds),
-                inArray(transactions.targetWalletId, activeWalletIds)
-              )
+        .select({
+          type: transactions.type,
+          walletId: transactions.walletId,
+          targetWalletId: transactions.targetWalletId,
+          amount: transactions.amount,
+        })
+        .from(transactions)
+        .where(
+          and(
+            gte(transactions.occurredAt, monthStartIso),
+            lte(transactions.occurredAt, monthEndIso),
+            or(
+              inArray(transactions.walletId, activeWalletIds),
+              inArray(transactions.targetWalletId, activeWalletIds)
             )
           )
-      : Promise.resolve([]),
-    listMonthlyBudgets(db, userId, month),
+        )
+          .then((rows) => rows)
+      : Promise.resolve<WalletMovementRow[]>([]);
+
+  const monthlyBudgetsPromise = listMonthlyBudgets(db, userId, month);
+  const recentTxPromise =
     activeWalletIds.length > 0
       ? listTransactions(db, userId, { limit: 16 })
       : Promise.resolve({
           items: [] as TransactionView[],
           summary: { income: 0, expense: 0, net: 0, count: 0 },
-        }),
-    listDueRecurringRules(db, userId, todayIso),
-    listRecurringRules(db, userId),
-    listPendingInvitesForEmail(db, userEmail),
+        });
+  const dueRecurringPromise = listDueRecurringRules(db, userId, todayIso);
+  const allRecurringPromise = listRecurringRules(db, userId);
+  const pendingInvitesPromise = listPendingInvitesForEmail(db, userEmail);
+
+  await Promise.all([
+    monthlyRowsPromise,
+    priorMovementPromise,
+    currentMonthRowsPromise,
+    monthlyBudgetsPromise,
+    recentTxPromise,
+    dueRecurringPromise,
+    allRecurringPromise,
+    pendingInvitesPromise,
   ]);
+
+  const monthlyRows: MonthlyAggRow[] = await monthlyRowsPromise;
+  const priorMovement: number = await priorMovementPromise;
+  const currentMonthRows: WalletMovementRow[] = await currentMonthRowsPromise;
+  const monthlyBudgets = await monthlyBudgetsPromise;
+  const recentTxRes = await recentTxPromise;
+  const dueRecurring = await dueRecurringPromise;
+  const allRecurringRules = await allRecurringPromise;
+  const pendingInvites = await pendingInvitesPromise;
 
   const monthlyMap = new Map<string, { income: number; expense: number }>();
   for (const row of monthlyRows) {
@@ -556,7 +588,7 @@ export async function getDashboardSummary(
       balanceGrowthPct =
         Math.round(
           ((endOfMonthBalance - startOfMonthBalance) / startOfMonthBalance) *
-            1000
+          1000
         ) / 10;
     }
   }
@@ -733,15 +765,15 @@ export async function getFinancialReport(
     getPriorMovementForWalletSet(db, selectedWalletIds, selectedSet, from),
     selectedWalletIds.length === 0
       ? Promise.resolve({
-          items: [] as TransactionView[],
-          summary: { income: 0, expense: 0, net: 0, count: 0 },
-        })
+        items: [] as TransactionView[],
+        summary: { income: 0, expense: 0, net: 0, count: 0 },
+      })
       : isSingleWallet
         ? listTransactions(db, userId, {
-            from,
-            to,
-            walletId: resolvedWalletId!,
-          })
+          from,
+          to,
+          walletId: resolvedWalletId!,
+        })
         : listTransactions(db, userId, { from, to }),
   ]);
 
@@ -749,10 +781,10 @@ export async function getFinancialReport(
   const reportTransactions: TransactionView[] = isSingleWallet
     ? rawTxRes.items
     : rawTxRes.items.filter(
-        (tx) =>
-          selectedSet.has(tx.walletId) ||
-          (tx.targetWalletId !== null && selectedSet.has(tx.targetWalletId))
-      );
+      (tx) =>
+        selectedSet.has(tx.walletId) ||
+        (tx.targetWalletId !== null && selectedSet.has(tx.targetWalletId))
+    );
 
   let totalIncome = 0;
   let totalExpense = 0;
